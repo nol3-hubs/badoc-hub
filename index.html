@@ -11,13 +11,13 @@
 .nav button{width:100%;text-align:left;background:none;border:0;color:#aaa;padding:11px 12px;border-radius:9px;cursor:pointer;margin:2px 0}.nav button.active,.nav button:hover{background:#101f2f;color:#fff;box-shadow:inset 2px 0 0 var(--blue)}.nav .ico{display:inline-block;width:23px}
 .main{margin-left:225px;width:calc(100% - 225px);padding:26px 30px 45px;max-width:1500px}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}.title h1{margin:0;font-size:25px}.title p{margin:5px 0 0;color:var(--muted);font-size:12px}.userbox{color:#aaa;font-size:12px}.userbox b{color:#fff}
 .page{display:none}.page.active{display:block}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
-.parcel-main-kpis{grid-template-columns:repeat(5,minmax(0,1fr))}
+.parcel-main-kpis{grid-template-columns:repeat(7,minmax(0,1fr))}
 .fleet-productivity-input{display:block;width:100%;margin:0;padding:0;background:transparent!important;background-image:none!important;border:0;outline:0;color:#19C2FF!important;-webkit-text-fill-color:#19C2FF!important;font-size:38px;line-height:1;font-weight:800;letter-spacing:-1px;-webkit-background-clip:initial!important;background-clip:initial!important;text-shadow:0 0 14px rgba(0,168,255,.22)}
 .fleet-productivity-input::-webkit-inner-spin-button,.fleet-productivity-input::-webkit-outer-spin-button{opacity:.65}
 @media(max-width:900px){.parcel-main-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:550px){.parcel-main-kpis{grid-template-columns:1fr 1fr}.fleet-productivity-input{font-size:29px}}.kpi{background:linear-gradient(145deg,#131820,#0d1015);border:1px solid var(--line);border-radius:13px;padding:20px 21px;box-shadow:inset 0 1px 0 #ffffff08}.kpi .num{font-size:38px;line-height:1;font-weight:800;letter-spacing:-1px}.kpi .lab{margin-top:10px;font-weight:700;font-size:11px;letter-spacing:.08em}.kpi .desc{color:var(--muted);font-size:11px;margin-top:4px}
 /* Keep Fleet Productivity beside the other KPI cards on wider screens. */
-@media(min-width:901px){.parcel-main-kpis{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(min-width:901px){.parcel-main-kpis{grid-template-columns:repeat(7,minmax(0,1fr))}}
 
 .section{background:#0d0d0d;border:1px solid var(--line);border-radius:13px;padding:16px;margin-bottom:15px}.section h2{font-size:14px;margin:0 0 13px}.section h2:before{content:"";display:inline-block;width:4px;height:14px;background:var(--blue);border-radius:3px;margin-right:8px;vertical-align:-2px}.section h2 span{color:var(--muted);font-weight:500}
 .area-head{font-size:15px;font-weight:800;margin:3px 0 10px}.town-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}.town-column{display:flex;flex-direction:column;gap:14px}.town-card{overflow:hidden}.town-card{background:#131313;border:1px solid #222;border-radius:10px;padding:10px 12px}.town-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:12px}.town-row.blank{height:10px;padding:0}.town-row .count{font-weight:800;font-variant-numeric:tabular-nums}.town-row .town{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.town-card-header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 7px;padding:0 0 7px;margin-bottom:4px;border-bottom:1px solid #222}.town-rider-picker{flex:1 1 100%;min-width:0;order:-1}.town-rider-input{height:27px;padding:3px 28px 3px 8px;font-size:11px;font-weight:600;opacity:.9}.town-rider-arrow{right:8px;font-size:10px}.town-card-total,.town-card-success-rate,.town-card-fleet-productivity{margin-top:0}.town-row .town{font-size:13px;font-weight:600}.town-row{gap:8px}.town-card-title{display:none;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;opacity:.7;flex:0 0 auto}.town-card-note{flex:1 1 auto;min-width:0;height:22px;padding:2px 4px;border:1px solid transparent;border-radius:4px;background:transparent;color:#9eb2bd;font:inherit;font-size:9px;outline:none;box-sizing:border-box;opacity:.55}.town-card-note::placeholder{color:#6d7d86;opacity:.5}.town-card-note:hover{opacity:.8}.town-card-note:focus{opacity:1;border-color:#234353;background:rgba(0,170,255,.025);box-shadow:none}.town-rider-picker{position:relative;flex:1 1 auto;min-width:0}.town-card:has(.town-rider-picker.open){overflow:visible}.town-rider-input{width:100%;height:22px;padding:2px 24px 2px 7px;border:1px solid transparent;border-radius:5px;background:transparent;color:#d8e5ec;font:inherit;font-size:9px;outline:none;box-sizing:border-box;opacity:.72;cursor:pointer}.town-rider-input::placeholder{color:#6d7d86;opacity:.7}.town-rider-input:hover,.town-rider-input:focus{opacity:1;border-color:#234353;background:rgba(0,170,255,.045)}.town-rider-arrow{position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:9px;color:#6d7d86;pointer-events:none}.town-rider-dropdown{position:absolute;z-index:1000;left:0;right:0;top:calc(100% + 4px);max-height:220px;overflow:auto;background:#0e141a;border:1px solid #2d566b;border-radius:7px;box-shadow:0 10px 28px rgba(0,0,0,.45);padding:4px;display:none}.town-rider-picker.open .town-rider-dropdown{display:block}.town-rider-option{display:block;width:100%;text-align:left;border:0;background:transparent;color:#dce8ee;padding:7px 8px;border-radius:5px;font-size:10px;cursor:pointer}.town-rider-option:hover,.town-rider-option:focus{background:rgba(0,170,255,.14);outline:none}.town-rider-option small{display:block;color:#738893;font-size:8px;margin-top:2px}.town-rider-empty{padding:8px;color:#738893;font-size:9px}.town-card-total{font-size:13px;font-weight:1000;font-variant-numeric:tabular-nums;flex:0 0 auto;color:#00d9ff;background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.35);border-radius:5px;padding:2px 7px;min-width:32px;text-align:center;line-height:1.2;box-shadow:0 0 8px rgba(0,170,255,.10)}.town-card-success-rate{font-size:10px;font-weight:900;font-variant-numeric:tabular-nums;flex:0 0 auto;color:#69e6a1;background:rgba(20,180,100,.09);border:1px solid rgba(20,180,100,.28);border-radius:5px;padding:3px 6px;min-width:45px;text-align:center;line-height:1.2;white-space:nowrap}.town-row[draggable="true"]{cursor:grab}.town-row.dragging{opacity:.45}.town-row.drag-over{outline:1px dashed #00aaff;outline-offset:-2px;background:rgba(0,170,255,.08)}.town-drag-handle{font-size:10px;opacity:.45;margin-right:6px;cursor:grab;flex:0 0 auto}.town-row .town{display:flex;align-items:center;min-width:0}.town-layout-toolbar{display:flex;justify-content:flex-end;margin:-4px 0 10px}.town-layout-toolbar .btn{font-size:10px;padding:7px 10px} .town-card.town-group-selected{outline:1px solid #00aaff;box-shadow:0 0 0 2px rgba(0,170,255,.12),0 0 14px rgba(0,170,255,.10)}.town-move-status{display:none;margin:-4px 0 10px;padding:8px 10px;border:1px solid #00aaff;border-radius:8px;background:rgba(0,170,255,.10);color:#dff7ff;font-size:11px;font-weight:800;line-height:1.3}.town-move-status.active{display:block}.town-move-status .move-cancel{float:right;border:0;background:transparent;color:#8fd8ff;font-weight:800;cursor:pointer;padding:0 0 0 10px;font-size:11px}
@@ -262,7 +262,8 @@ body{background:#05070a;color:#f5f8fc}
 #linehaul .lh-task-chevron{width:14px;font-size:10px}
 #linehaul .lh-task-block.collapsed .lh-task-block-header{margin-bottom:0;border-radius:10px}
 #linehaul .lh-task-block.collapsed .lh-task-kpis,
-#linehaul .lh-task-block.collapsed .lh-task-town-section{display:none}
+#linehaul .lh-task-block.collapsed .lh-task-town-section,
+#linehaul .lh-task-block.collapsed .lh-task-mis-panel{display:none}
 
 
 body{font-size:15px}
@@ -3873,7 +3874,7 @@ html{
 }
 .town-card-header{
   display:grid!important;
-  grid-template-columns:minmax(0,1fr) auto auto auto!important;
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
   grid-template-rows:auto auto!important;
   align-items:center!important;
   column-gap:7px!important;
@@ -3898,9 +3899,9 @@ html{
 }
 .town-rider-input::placeholder{font-size:12px!important;color:#8da7b5!important;opacity:1!important}
 .town-rider-arrow{font-size:11px!important;right:10px!important}
-.town-card-fleet-productivity{grid-column:2;grid-row:2!important}
-.town-card-success-rate{grid-column:3;grid-row:2!important}
-.town-card-total{grid-column:4;grid-row:2!important}
+.town-card-fleet-productivity{grid-column:1;grid-row:2!important}
+.town-card-success-rate{grid-column:2;grid-row:2!important}
+.town-card-total{grid-column:5;grid-row:2!important}
 .town-rider-option{font-size:13px!important;padding:8px 9px!important}
 .town-rider-option small{font-size:9px!important}
 .town-row .town{font-size:13px!important;font-weight:650!important}
@@ -4424,6 +4425,410 @@ html{
   }
 }
 </style>
+<!-- BADOC HUB: permanent 80% default scale -->
+<style id="badoc-permanent-80-zoom">
+/* BADOC HUB: permanent 80% default scale */
+html{zoom:80%;}
+</style>
+
+<style id="v11-linehaul-compact-one-line-cards">
+/* Compact Linehaul Task dropdown cards: keep KPI cards and town-group cards on one line. */
+#linehaul .lh-task-kpis{
+  display:grid!important;
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  gap:6px!important;
+  margin:0 0 8px!important;
+}
+#linehaul .lh-task-kpi{
+  min-height:58px!important;
+  padding:8px 9px!important;
+  border-radius:8px!important;
+}
+#linehaul .lh-task-kpi-value{font-size:21px!important;line-height:1.05!important}
+#linehaul .lh-task-kpi-label{font-size:8px!important;margin-top:5px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+#linehaul .lh-task-town-section{
+  padding:9px 10px!important;
+  margin-bottom:7px!important;
+}
+#linehaul .lh-task-town-section .lh-section-title{
+  font-size:12px!important;
+  margin:0 0 7px!important;
+  padding-left:7px!important;
+  border-left-width:3px!important;
+}
+#linehaul .lh-task-town-section .lh-town-grid{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  gap:6px!important;
+  overflow-x:auto!important;
+  align-items:stretch!important;
+  padding-bottom:2px;
+}
+#linehaul .lh-task-town-section .lh-town-card{
+  flex:1 1 0!important;
+  min-width:0!important;
+  padding:6px 7px!important;
+  border-radius:7px!important;
+}
+#linehaul .lh-task-town-section .lh-town-row{
+  min-height:19px!important;
+  gap:5px!important;
+  font-size:10px!important;
+}
+#linehaul .lh-task-town-section .lh-town-row b{font-size:10px!important;min-width:22px!important}
+@media(max-width:900px){
+  #linehaul .lh-task-kpis{grid-template-columns:repeat(5,minmax(0,1fr))!important;min-width:680px!important}
+}
+@media(max-width:700px){
+  #linehaul .lh-task-kpis{overflow-x:auto!important;display:flex!important;flex-wrap:nowrap!important;gap:6px!important;min-width:0!important;padding-bottom:3px}
+  #linehaul .lh-task-kpi{flex:0 0 128px!important}
+  #linehaul .lh-task-town-section .lh-town-card{flex:0 0 105px!important}
+}
+</style>
+
+<style id="lh-task-header-total-style">
+#linehaul .lh-task-header-total{
+  margin-left:auto;
+  flex:0 0 auto;
+  font-size:11px;
+  font-weight:900;
+  color:#00d9ff;
+  background:rgba(0,217,255,.09);
+  border:1px solid rgba(0,217,255,.28);
+  border-radius:6px;
+  padding:3px 7px;
+  white-space:nowrap;
+}
+@media(max-width:700px){
+  #linehaul .lh-task-header-total{font-size:9px;padding:3px 5px;}
+}
+</style>
+
+<style id="lh-task-collapsed-hard-hide">
+/* Collapsed Linehaul Task: show ONLY the task header and its total. */
+#linehaul .lh-task-block.collapsed > :not(.lh-task-block-header){
+  display:none!important;
+}
+#linehaul .lh-task-block.collapsed .lh-task-block-header{
+  display:flex!important;
+}
+#linehaul .lh-task-block.collapsed .lh-task-header-total{
+  margin-left:auto!important;
+}
+</style>
+
+<style id="v-bulky-highvalue-linehaul-fix">
+/* Seven compact KPI cards on one line. */
+#linehaul .lh-task-kpis{
+  display:grid!important;
+  grid-template-columns:repeat(7,minmax(0,1fr))!important;
+  gap:6px!important;
+  width:100%;
+  margin:0 0 10px;
+}
+#linehaul .lh-task-kpi{
+  min-height:64px!important;
+  padding:9px 10px!important;
+  border-radius:8px!important;
+}
+#linehaul .lh-task-kpi-value{
+  font-size:23px!important;
+  line-height:1!important;
+}
+#linehaul .lh-task-kpi-label{
+  font-size:8px!important;
+  margin-top:6px!important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* On narrow screens keep the seven cards in one horizontal row. */
+@media(max-width:1000px){
+  #linehaul .lh-task-kpis{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    scrollbar-width:thin;
+  }
+  #linehaul .lh-task-kpi{
+    flex:0 0 128px!important;
+  }
+}
+/* When collapsed, show only the task header. */
+#linehaul .lh-task-block.collapsed > :not(.lh-task-block-header){
+  display:none!important;
+}
+#linehaul .lh-task-block.collapsed > .lh-task-block-header{
+  display:flex!important;
+}
+</style>
+
+
+<style id="v-linehaul-kpi-center">
+/* Center each Linehaul Task KPI card's number and label. */
+#linehaul .lh-task-kpi{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+}
+#linehaul .lh-task-kpi-value{
+  width:100%!important;
+  text-align:center!important;
+  display:block!important;
+}
+#linehaul .lh-task-kpi-label{
+  width:100%!important;
+  text-align:center!important;
+}
+</style>
+
+
+<style id="v-parcel-bulky-highvalue">
+.parcel-main-kpis .kpi{min-width:0}
+.parcel-main-kpis .kpi .desc{min-height:14px}
+.town-status.bulky{color:#ffb45c;background:rgba(255,160,55,.09)}
+.town-status.high-value{color:#ff78c8;background:rgba(255,75,175,.08)}
+@media(max-width:900px){
+  .parcel-main-kpis{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+}
+@media(max-width:550px){
+  .parcel-main-kpis{grid-template-columns:1fr 1fr!important}
+}
+</style>
+
+
+<style id="v-grouped-town-bulky-highvalue">
+/* Compact grouped-town Bulky / High Value totals. */
+.town-card-bulky,
+.town-card-high-value{
+  font-size:10px;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+  flex:0 0 auto;
+  border-radius:5px;
+  padding:2px 7px;
+  min-width:32px;
+  text-align:center;
+  line-height:1.2;
+  white-space:nowrap;
+}
+.town-card-bulky{
+  color:#ffb45c;
+  background:rgba(255,160,55,.09);
+  border:1px solid rgba(255,160,55,.22);
+}
+.town-card-high-value{
+  color:#ff78c8;
+  background:rgba(255,75,175,.08);
+  border:1px solid rgba(255,75,175,.22);
+}
+@media(max-width:700px){
+  .town-card-bulky,
+  .town-card-high-value{
+    font-size:9px!important;
+    padding:3px 5px!important;
+    min-width:42px!important;
+  }
+}
+</style>
+
+
+<style id="v-grouped-town-bulky-highvalue-grid-fix">
+/* Keep grouped-town B / HV badges on the same compact row as FP / SR / Total. */
+.town-card-header .town-card-bulky{
+  grid-column:3!important;
+  grid-row:2!important;
+  justify-self:stretch!important;
+  width:auto!important;
+}
+.town-card-header .town-card-high-value{
+  grid-column:4!important;
+  grid-row:2!important;
+  justify-self:stretch!important;
+  width:auto!important;
+}
+.town-card-header .town-card-bulky,
+.town-card-header .town-card-high-value{
+  min-width:0!important;
+  padding:3px 5px!important;
+  font-size:10px!important;
+  line-height:1.2!important;
+  box-sizing:border-box!important;
+  text-align:center!important;
+}
+@media(max-width:700px){
+  .town-card-header .town-card-bulky,
+  .town-card-header .town-card-high-value{
+    font-size:9px!important;
+    padding:3px 4px!important;
+  }
+}
+</style>
+
+
+<style id="v-grouped-town-hv-b-sr-fp-total-order">
+/* Grouped town metric order: HV → B → SR → FP → TOTAL */
+.town-card-header .town-card-high-value{
+  grid-column:1!important;
+  grid-row:2!important;
+}
+.town-card-header .town-card-bulky{
+  grid-column:2!important;
+  grid-row:2!important;
+}
+.town-card-header .town-card-success-rate{
+  grid-column:3!important;
+  grid-row:2!important;
+}
+.town-card-header .town-card-fleet-productivity{
+  grid-column:4!important;
+  grid-row:2!important;
+}
+.town-card-header .town-card-total{
+  grid-column:5!important;
+  grid-row:2!important;
+}
+</style>
+
+
+<style id="v-grouped-town-badges-centered">
+/* Center the letters and numbers inside their own grouped-town badges. */
+.town-card-header .town-card-high-value,
+.town-card-header .town-card-bulky,
+.town-card-header .town-card-success-rate,
+.town-card-header .town-card-fleet-productivity,
+.town-card-header .town-card-total{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  box-sizing:border-box!important;
+}
+</style>
+
+
+<style id="v-parcel-main-kpi-centered-no-spinner">
+/* Center every Parcel Count KPI's content inside its own card. */
+.parcel-main-kpis .kpi{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  min-width:0!important;
+}
+.parcel-main-kpis .kpi .num{
+  width:100%!important;
+  text-align:center!important;
+  display:block!important;
+}
+.parcel-main-kpis .kpi .lab{
+  width:100%!important;
+  text-align:center!important;
+}
+.parcel-main-kpis .kpi .desc{
+  width:100%!important;
+  text-align:center!important;
+}
+
+/* Fleet Productivity: center the editable value and remove number-input arrows. */
+.parcel-main-kpis .fleet-productivity-kpi{
+  align-items:center!important;
+  justify-content:center!important;
+}
+.parcel-main-kpis .fleet-productivity-input{
+  width:100%!important;
+  text-align:center!important;
+  -webkit-appearance:none!important;
+  appearance:textfield!important;
+  -moz-appearance:textfield!important;
+}
+.parcel-main-kpis .fleet-productivity-input::-webkit-inner-spin-button,
+.parcel-main-kpis .fleet-productivity-input::-webkit-outer-spin-button{
+  -webkit-appearance:none!important;
+  appearance:none!important;
+  margin:0!important;
+  display:none!important;
+}
+</style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style id="v-rider-dropdown-absolute-body-final">
+/* Body portal + absolute coordinates: escapes every town-card overflow while
+   remaining visually attached to the clicked selector. */
+.town-rider-dropdown{
+  display:none!important;
+  position:absolute!important;
+  z-index:2147483647!important;
+  box-sizing:border-box!important;
+  padding:5px!important;
+  background:#0e141a!important;
+  border:1px solid #2d566b!important;
+  border-radius:7px!important;
+  box-shadow:0 10px 28px rgba(0,0,0,.45)!important;
+  overflow-y:auto!important;
+  margin:0!important;
+}
+.town-rider-option{
+  display:block!important;
+  width:100%!important;
+  text-align:left!important;
+  border:0!important;
+  background:transparent!important;
+  color:#dce8ee!important;
+  padding:7px 8px!important;
+  border-radius:5px!important;
+  font-size:10px!important;
+  line-height:1.25!important;
+  cursor:pointer!important;
+}
+.town-rider-option small{
+  display:block!important;
+  color:#738893!important;
+  font-size:8px!important;
+  line-height:1.2!important;
+  margin-top:1px!important;
+}
+.town-rider-empty{
+  padding:8px!important;
+  color:#738893!important;
+  font-size:9px!important;
+}
+</style>
+
 </head>
 <body data-app-version="6.0" data-app-version="5.0">
 
@@ -4618,10 +5023,12 @@ html{
       </div>
     </div>
     <div class="kpis parcel-main-kpis">
-      <div class="kpi"><div class="num" id="total">0</div><div class="lab">TOTAL VOLUME</div><div class="desc"></div></div>
-      <div class="kpi"><div class="num" id="badocTotal">0</div><div class="lab">BADOC <span class="area-total-sr" id="badocSuccessRate">SR 0%</span></div><div class="desc"></div></div>
-      <div class="kpi"><div class="num" id="piniliTotal">0</div><div class="lab">PINILI <span class="area-total-sr" id="piniliSuccessRate">SR 0%</span></div><div class="desc"></div></div>
-      <div class="kpi clickable-kpi" id="misroutedKpi" role="button" tabindex="0" title="Open Misrouted parcels"><div class="num" id="misTotal">0</div><div class="lab">MISROUTED</div><div class="desc"></div></div>
+      <div class="kpi"><div class="num" id="total">0</div><div class="lab">TOTAL VOLUME</div><div class="desc" id="totalMetricDesc"></div></div>
+      <div class="kpi"><div class="num" id="bulkyTotal">0</div><div class="lab">BULKY TOTAL</div><div class="desc"></div></div>
+      <div class="kpi"><div class="num" id="highValueTotal">0</div><div class="lab">HIGH VALUE TOTAL</div><div class="desc"></div></div>
+      <div class="kpi"><div class="num" id="badocTotal">0</div><div class="lab">BADOC <span class="area-total-sr" id="badocSuccessRate">SR 0%</span></div><div class="desc" id="badocMetricDesc"></div></div>
+      <div class="kpi"><div class="num" id="piniliTotal">0</div><div class="lab">PINILI <span class="area-total-sr" id="piniliSuccessRate">SR 0%</span></div><div class="desc" id="piniliMetricDesc"></div></div>
+      <div class="kpi clickable-kpi" id="misroutedKpi" role="button" tabindex="0" title="Open Misrouted parcels"><div class="num" id="misTotal">0</div><div class="lab">MISROUTED</div><div class="desc" id="misMetricDesc"></div></div>
       <div class="kpi fleet-productivity-kpi"><input class="num fleet-productivity-input" id="fleetProductivity" type="number" min="0" step="0.01" value="0" aria-label="Fleet Productivity"><div class="lab">FLEET PRODUCTIVITY</div><div class="desc"></div></div>
     </div>
     <div class="parcel-incoming-toolbar">
@@ -4691,7 +5098,7 @@ html{
       <div id="lhDoidList"></div>
     </div>
     <div class="lh-dashboard">
-      <div id="linehaulTaskTownDashboard"></div><div id="linehaulTownDashboard"></div>
+      <div id="linehaulTaskTownDashboard"></div>
     </div>
 
     <div class="tablewrap" id="linehaulTaskDetails" style="display:none">
@@ -4723,11 +5130,13 @@ html{
       <div><label for="ridersVehicle">Vehicle Type</label><select id="ridersVehicle"><option value="">All</option></select></div>
       <div><label for="ridersStatus">SPX Status</label><select id="ridersStatus"><option value="">All</option></select></div>
       <label class="btn" style="cursor:pointer">Upload Riders CSV<input id="ridersCsvFile" type="file" accept=".csv,text/csv" style="display:none"></label>
+      <button type="button" class="btn" id="clearRidersUpload" title="Clear the uploaded Riders CSV and restore the built-in rider data">Clear Uploaded File</button>
     </div>
     <div id="ridersSummary" class="kpis" style="margin-top:12px"></div>
     <div style="overflow:auto;margin-top:12px">
       <table class="data-table" id="ridersTable"><thead></thead><tbody></tbody></table>
     </div>
+    <div id="ridersPagination" class="riders-pagination" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:12px"></div>
     <div class="hint" id="ridersHint" style="margin-top:8px">Loaded from the uploaded rider data file.</div>
   </div>
 </section>
@@ -5463,7 +5872,41 @@ function badocTownGridSignature(id,list,rows,extraCounts,groups){
   const groupSig=(groups||[]).map(g=>Array.isArray(g)?g.map(norm):[]);
   const countsSig=Object.keys(c).sort().map(k=>[k,Number(c[k]||0)]);
   const statusSig=Object.keys(sc).sort().map(k=>{const x=sc[k]||{};return [k,Number(x.received||0),Number(x.delivered||0),Number(x.delivering||0),Number(x.hold||0),Number(x.receivedTN||0)]});
-  return JSON.stringify([id,(list||[]).map(norm),countsSig,statusSig,extra,zoneSigOut,groupSig,loadTownNotes()?.[id==="badocGrid"?"badoc":"pinili"]||[],selectedGroupMove&&selectedGroupMove.key===id?selectedGroupMove.index:null,selectedTownMove&&selectedTownMove.key===id?selectedTownMove.town:null]);
+  const metricRows=[...(rows||[]),...(Array.isArray(window.__badocParcelIncomingMetricRows)?window.__badocParcelIncomingMetricRows:[])];
+  const metricTown=parcelMetricTownSummary(metricRows);
+  const metricSig=Object.keys(metricTown).sort().map(k=>[k,metricTown[k].bulky,metricTown[k].highValue]);
+  return JSON.stringify([id,(list||[]).map(norm),countsSig,statusSig,extra,metricSig,zoneSigOut,groupSig,loadTownNotes()?.[id==="badocGrid"?"badoc":"pinili"]||[],selectedGroupMove&&selectedGroupMove.key===id?selectedGroupMove.index:null,selectedTownMove&&selectedTownMove.key===id?selectedTownMove.town:null]);
+}
+
+
+function parcelMetricFlags(row){
+  const hv=String(row?.["High Value"]??"").trim().toUpperCase();
+  const bulky=Number(String(row?.["Chargeable Weight"]??"").replace(/,/g,"").trim());
+  return {
+    highValue:["Y","YES","TRUE","1"].includes(hv),
+    bulky:Number.isFinite(bulky)&&bulky>=4
+  };
+}
+function parcelMetricSummary(rows){
+  let bulky=0,highValue=0;
+  (rows||[]).forEach(row=>{
+    const f=parcelMetricFlags(row);
+    if(f.bulky)bulky++;
+    if(f.highValue)highValue++;
+  });
+  return {bulky,highValue};
+}
+function parcelMetricTownSummary(rows){
+  const out={};
+  (rows||[]).forEach(row=>{
+    const town=String(row?.["Town Name"]??row?.["Town"]??row?.["town"]??"").trim().toUpperCase();
+    if(!town)return;
+    if(!out[town])out[town]={bulky:0,highValue:0};
+    const f=parcelMetricFlags(row);
+    if(f.bulky)out[town].bulky++;
+    if(f.highValue)out[town].highValue++;
+  });
+  return out;
 }
 
 function renderTownGrid(id,list,rows,extraCounts={}){
@@ -5563,27 +6006,74 @@ function renderTownGrid(id,list,rows,extraCounts={}){
       })();
       const positionRiderDropdown=()=>{
         if(!note.classList.contains("open"))return;
-        const rect=riderInput.getBoundingClientRect();
-        riderDropdown.style.position="fixed";
-        riderDropdown.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-360))+"px";
-        riderDropdown.style.top=(rect.bottom+4)+"px";
-        riderDropdown.style.width=Math.max(280,Math.min(rect.width,window.innerWidth-16))+"px";
-        riderDropdown.style.maxHeight=Math.max(100,window.innerHeight-rect.bottom-12)+"px";
-        riderDropdown.style.zIndex="2147483647";
+        if(typeof riderDropdown.__place==="function")riderDropdown.__place();
         riderDropdown.style.display="block";
       };
       const openRiderPicker=()=>{
         note.classList.add("open");
-        if(riderDropdown.parentElement!==document.body)document.body.appendChild(riderDropdown);
         renderRiderOptions(false);
-        requestAnimationFrame(positionRiderDropdown);
+
+        if(riderDropdown.parentElement!==document.body){
+          document.body.appendChild(riderDropdown);
+        }
+
+        const place=()=>{
+          if(!note.classList.contains("open"))return;
+
+          const rect=riderInput.getBoundingClientRect();
+          const rootZoomRaw=getComputedStyle(document.documentElement).zoom;
+          const rootZoom=parseFloat(rootZoomRaw);
+          const zoom=(Number.isFinite(rootZoom)&&rootZoom>0)?rootZoom:1;
+
+          // The app uses html{zoom:80%}. The body-ported absolute menu is still
+          // subject to that page zoom, so convert the visual rect back into
+          // document CSS coordinates before assigning left/top/width.
+          const sx=window.scrollX||document.documentElement.scrollLeft||0;
+          const sy=window.scrollY||document.documentElement.scrollTop||0;
+
+          const left=Math.max(0,(rect.left+sx)/zoom);
+          const top=Math.max(0,(rect.bottom+4+sy)/zoom);
+          const width=Math.max(1,rect.width/zoom);
+
+          // Keep the dropdown fully visible below the selector. If the viewport
+          // is shorter than 160px below the selector, it becomes internally
+          // scrollable rather than moving above the field.
+          const visibleBelow=Math.max(120,(window.innerHeight-rect.bottom-8)/zoom);
+
+          riderDropdown.style.setProperty("position","absolute","important");
+          riderDropdown.style.setProperty("left",`${Math.round(left)}px`,"important");
+          riderDropdown.style.setProperty("top",`${Math.round(top)}px`,"important");
+          riderDropdown.style.setProperty("width",`${Math.round(width)}px`,"important");
+          riderDropdown.style.setProperty("max-width",`${Math.round(width)}px`,"important");
+          riderDropdown.style.setProperty("max-height",`${Math.min(300,visibleBelow)}px`,"important");
+          riderDropdown.style.setProperty("right","auto","important");
+          riderDropdown.style.setProperty("display","block","important");
+          riderDropdown.style.setProperty("z-index","2147483647","important");
+        };
+
+        riderDropdown.__place=place;
+        requestAnimationFrame(()=>{
+          place();
+          requestAnimationFrame(place);
+        });
       };
       const closeRiderPicker=()=>{
         note.classList.remove("open");
-        riderDropdown.style.display="none";
-        riderDropdown.style.position="";riderDropdown.style.left="";riderDropdown.style.top="";riderDropdown.style.width="";riderDropdown.style.maxHeight="";riderDropdown.style.zIndex="";
+        riderDropdown.style.removeProperty("left");
+        riderDropdown.style.removeProperty("top");
+        riderDropdown.style.removeProperty("right");
+        riderDropdown.style.removeProperty("width");
+        riderDropdown.style.removeProperty("max-width");
+        riderDropdown.style.removeProperty("max-height");
+        riderDropdown.style.removeProperty("display");
+        riderDropdown.style.removeProperty("position");
+        riderDropdown.style.removeProperty("z-index");
+        riderDropdown.__place=null;
         if(riderDropdown.parentElement!==note)note.appendChild(riderDropdown);
-        if(window.__badocPendingRiderRender){window.__badocPendingRiderRender=false;setTimeout(()=>{if(typeof render==="function")render();},0);}
+        if(window.__badocPendingRiderRender){
+          window.__badocPendingRiderRender=false;
+          setTimeout(()=>{if(typeof render==="function")render();},0);
+        }
       };
       const renderRiderOptions=(search=true)=>{
         const q=search?riderNorm(riderInput.value):"";
@@ -5626,6 +6116,23 @@ function renderTownGrid(id,list,rows,extraCounts={}){
       const groupDelivered=group.reduce((sum,name)=>sum+(sc[norm(name)]?.delivered||0),0);
       const groupDelivering=group.reduce((sum,name)=>sum+(sc[norm(name)]?.delivering||0),0);
       const groupHold=group.reduce((sum,name)=>sum+(sc[norm(name)]?.hold||0),0);
+      const groupMetricRows=[...(rows||[]),...(Array.isArray(window.__badocParcelIncomingMetricRows)?window.__badocParcelIncomingMetricRows:[])];
+      const groupTownKeys=new Set(group.map(name=>norm(name)));
+      let groupBulkyTotal=0,groupHighValueTotal=0;
+      const groupMetricSeen=new Set();
+      groupMetricRows.forEach(row=>{
+        const rowTown=norm(row?.["Town Name"]??row?.["Town"]??row?.["town"]??"");
+        if(!groupTownKeys.has(rowTown))return;
+        const parcelKey=normJoin(
+          row?.["Order ID"]??row?.["SPX TN"]??row?.["SPX Tracking Number"]??row?.["SLS Tracking Number"]??""
+        );
+        const dedupeKey=parcelKey||("ROW:"+groupMetricSeen.size);
+        if(groupMetricSeen.has(dedupeKey))return;
+        groupMetricSeen.add(dedupeKey);
+        const metric=parcelMetricFlags(row);
+        if(metric.bulky)groupBulkyTotal++;
+        if(metric.highValue)groupHighValueTotal++;
+      });
       const groupStatusTotal=groupReceived+groupDelivered+groupDelivering+groupHold;
       const groupSuccessRate=groupStatusTotal?(groupDelivered/groupStatusTotal)*100:0;
       const groupSrText=groupSuccessRate%1===0?groupSuccessRate.toFixed(0):groupSuccessRate.toFixed(1);
@@ -5650,11 +6157,19 @@ function renderTownGrid(id,list,rows,extraCounts={}){
       groupFpEl.className="town-card-fleet-productivity";
       groupFpEl.textContent=`FP ${fpText}%`;
       groupFpEl.title=`Fleet Productivity: ${fpText}% (${total.toLocaleString()} grouped-town volume ÷ editable Fleet Productivity target ${fpTarget} × 100; 2WH/3WC only, Flexi excluded)`;
+      const groupBulkyEl=document.createElement("span");
+      groupBulkyEl.className="town-card-bulky";
+      groupBulkyEl.textContent=`B ${groupBulkyTotal.toLocaleString()}`;
+      groupBulkyEl.title=`Grouped Town Bulky Total: ${groupBulkyTotal.toLocaleString()} parcels with Chargeable Weight ≥ 4.00`;
+      const groupHighValueEl=document.createElement("span");
+      groupHighValueEl.className="town-card-high-value";
+      groupHighValueEl.textContent=`HV ${groupHighValueTotal.toLocaleString()}`;
+      groupHighValueEl.title=`Grouped Town High Value Total: ${groupHighValueTotal.toLocaleString()} parcels with High Value = Y`;
       const groupSrEl=document.createElement("span");
       groupSrEl.className="town-card-success-rate";
       groupSrEl.textContent=`SR ${groupSrText}%`;
       groupSrEl.title=`Group Success Rate: ${groupSrText}%`;
-      header.append(title,note,groupFpEl,groupSrEl,totalEl);
+      header.append(title,note,groupFpEl,groupSrEl,groupBulkyEl,groupHighValueEl,totalEl);
       card.appendChild(header);
       group.forEach(name=>{
         const r=document.createElement("div");
@@ -5751,8 +6266,9 @@ function renderTownGrid(id,list,rows,extraCounts={}){
         r.append(townSpan);
         const statuses=document.createElement("span");
         statuses.className="town-statuses";
-        statuses.setAttribute("aria-label",`Received ${ts.received}, Delivering ${ts.delivering}, Delivered ${ts.delivered}, Hold ${ts.hold}, Success Rate ${srText}%`);
-        statuses.innerHTML=`<span class="town-status received" title="Received">R ${ts.received}</span><span class="town-status delivering" title="Delivering">D ${ts.delivering}</span><span class="town-status delivered" title="Delivered">DV ${ts.delivered}</span><span class="town-status hold" title="On Hold">H ${ts.hold}</span><span class="town-status success-rate" title="Success Rate">SR ${srText}%</span><span class="count" title="Total">${c[townKey]||0}</span>`;
+        const townMetric=parcelMetricTownSummary([...(rows||[]),...(Array.isArray(window.__badocParcelIncomingMetricRows)?window.__badocParcelIncomingMetricRows:[])])[townKey]||{bulky:0,highValue:0};
+        statuses.setAttribute("aria-label",`Received ${ts.received}, Delivering ${ts.delivering}, Delivered ${ts.delivered}, Hold ${ts.hold}, Bulky ${townMetric.bulky}, High Value ${townMetric.highValue}, Success Rate ${srText}%`);
+        statuses.innerHTML=`<span class="town-status received" title="Received">R ${ts.received}</span><span class="town-status delivering" title="Delivering">D ${ts.delivering}</span><span class="town-status delivered" title="Delivered">DV ${ts.delivered}</span><span class="town-status hold" title="On Hold">H ${ts.hold}</span><span class="town-status bulky" title="Bulky (Chargeable Weight ≥ 4.00)">B ${townMetric.bulky}</span><span class="town-status high-value" title="High Value = Y">HV ${townMetric.highValue}</span><span class="town-status success-rate" title="Success Rate">SR ${srText}%</span><span class="count" title="Total">${c[townKey]||0}</span>`;
         r.append(statuses);
 
         r.addEventListener("click",e=>{
@@ -5949,7 +6465,11 @@ function fillStatusFilter(){
 }
 
 function getParcelCountRows(){
-  const all=Array.isArray(current?.valid)?current.valid:[];
+  // Parcel Count includes both correctly routed parcels and MISROUTED parcels
+  // when they are in an active volume status. Misrouted rows remain tagged
+  // _area="Misrouted" so they do not get assigned to BADOC/PINILI town totals.
+  const valid=Array.isArray(current?.valid)?current.valid:[];
+  const mis=Array.isArray(current?.mis)?current.mis:[];
   const statusOf=r=>{
     const keys=["Parcel Status To","Status To","TO Status","To Status","Status To (Current)","Status"];
     for(const k of keys){
@@ -5964,18 +6484,27 @@ function getParcelCountRows(){
     "ONHOLD","ON HOLD","LMHUB ONHOLD","LMHUB ON HOLD",
     "ASSIGNING","ASSIGNED","LMHUB ASSIGNING","LMHUB ASSIGNED"
   ]);
-  const base=all.filter(r=>allowedStatuses.has(statusNorm(statusOf(r))) && !isExceptionRow(r));
-  const rows=[...base];
-
+  const qualifies=r=>allowedStatuses.has(statusNorm(statusOf(r))) && !isExceptionRow(r);
   const keyOf=v=>norm(v).replace(/[\s\-_.]/g,"");
+  const rows=[];
   const seen=new Set();
-  base.forEach(r=>{
+
+  // Keep one record per SPX TN. Valid rows take precedence; a misrouted row is
+  // added only when that TN is not already present in the valid population.
+  valid.forEach(r=>{
+    if(!qualifies(r))return;
     const k=keyOf(spxTN(r));
+    if(k){if(seen.has(k))return;seen.add(k);}
+    rows.push(r);
+  });
+  mis.forEach(r=>{
+    if(!qualifies(r))return;
+    const k=keyOf(spxTN(r));
+    if(k&&seen.has(k))return;
     if(k)seen.add(k);
+    rows.push({...r,_area:"Misrouted"});
   });
 
-  // IMPORTANT: Linehaul Task data is kept completely separate from Parcel Count.
-  // Parcel Count uses ONLY the uploaded Parcel Records (current.valid).
   return rows;
 }
 
@@ -6037,6 +6566,7 @@ function getParcelIncomingLinehaul(){
     :(Array.isArray(current?.valid)?current.valid:[]);
   const seen=new Set();
   const townCounts={};
+  const incomingRows=[];
   const configuredTowns=new Set([
     ...(Array.isArray(towns?.badoc)?towns.badoc:[]),
     ...(Array.isArray(towns?.pinili)?towns.pinili:[])
@@ -6070,13 +6600,14 @@ function getParcelIncomingLinehaul(){
            exceptionSet.has(typeof tnKey==="function"?tnKey(tn):tn)) return;
 
         seen.add(tn);
+        incomingRows.push(parcel);
         total++;
         townCounts[townKey]=(townCounts[townKey]||0)+1;
       });
     });
   });
 
-  return {total,townCounts};
+  return {total,townCounts,rows:incomingRows};
 }
 function updateParcelIncomingButton(){
  const btn=$("parcelIncomingVolumeBtn"),state=$("parcelIncomingVolumeState");
@@ -6091,7 +6622,17 @@ function render(){
  const v=getParcelCountRows(),m=current?.mis||[];
  const badoc=v.filter(x=>x._area==="Badoc");
  const pinili=v.filter(x=>x._area==="Pinili");
- const incoming=parcelIncomingEnabled()?getParcelIncomingLinehaul():{total:0,townCounts:{}};
+ const incoming=parcelIncomingEnabled()?getParcelIncomingLinehaul():{total:0,townCounts:{},rows:[]};
+ window.__badocParcelIncomingMetricRows=Array.isArray(incoming.rows)?incoming.rows:[];
+ const allMetricRows=[...badoc,...pinili,...window.__badocParcelIncomingMetricRows];
+ const metricTotals=parcelMetricSummary(allMetricRows);
+ const badocTownSet=new Set((towns.badoc||[]).map(x=>String(x||"").trim().toUpperCase()));
+ const piniliTownSet=new Set((towns.pinili||[]).map(x=>String(x||"").trim().toUpperCase()));
+ const incomingBadocRows=window.__badocParcelIncomingMetricRows.filter(r=>badocTownSet.has(String(r?.["Town Name"]??r?.["Town"]??"").trim().toUpperCase()));
+ const incomingPiniliRows=window.__badocParcelIncomingMetricRows.filter(r=>piniliTownSet.has(String(r?.["Town Name"]??r?.["Town"]??"").trim().toUpperCase()));
+ const badocMetric=parcelMetricSummary([...badoc,...incomingBadocRows]);
+ const piniliMetric=parcelMetricSummary([...pinili,...incomingPiniliRows]);
+ const misMetric=parcelMetricSummary(m);
  const badocIncoming=Object.entries(incoming.townCounts).reduce((n,[town,c])=>n+((towns.badoc||[]).some(x=>norm(x)===town)?c:0),0);
  const piniliIncoming=Object.entries(incoming.townCounts).reduce((n,[town,c])=>n+((towns.pinili||[]).some(x=>norm(x)===town)?c:0),0);
  $("badocTotal").textContent=(badoc.length+badocIncoming).toLocaleString();
@@ -6102,6 +6643,12 @@ function render(){
  if(br)br.textContent=`SR ${fmtRate(areaRate(badoc))}%`;
  if(pr)pr.textContent=`SR ${fmtRate(areaRate(pinili))}%`;
  $("total").textContent=(badoc.length+pinili.length+incoming.total).toLocaleString();
+ if($("bulkyTotal"))$("bulkyTotal").textContent=metricTotals.bulky.toLocaleString();
+ if($("highValueTotal"))$("highValueTotal").textContent=metricTotals.highValue.toLocaleString();
+ if($("totalMetricDesc"))$("totalMetricDesc").textContent=`Bulky ${metricTotals.bulky.toLocaleString()} • High Value ${metricTotals.highValue.toLocaleString()}`;
+ if($("badocMetricDesc"))$("badocMetricDesc").textContent=`Bulky ${badocMetric.bulky.toLocaleString()} • High Value ${badocMetric.highValue.toLocaleString()}`;
+ if($("piniliMetricDesc"))$("piniliMetricDesc").textContent=`Bulky ${piniliMetric.bulky.toLocaleString()} • High Value ${piniliMetric.highValue.toLocaleString()}`;
+ if($("misMetricDesc"))$("misMetricDesc").textContent=`Bulky ${misMetric.bulky.toLocaleString()} • High Value ${misMetric.highValue.toLocaleString()}`;
  $("misTotal").textContent=m.length;
  const ms=$("misroutedSideCount"); if(ms)ms.textContent=m.length;
  renderTownGrid("badocGrid",towns.badoc,badoc,incoming.townCounts);
@@ -6334,12 +6881,26 @@ function updateDashboardFromParcelFilters(){
   const total=$("total"), badoc=$("badocTotal"), pinili=$("piniliTotal"), mis=$("misTotal");
   const bc=rows.filter(r=>norm(r?._area)==="BADOC").length;
   const pc=rows.filter(r=>norm(r?._area)==="PINILI").length;
-  const incoming=parcelIncomingEnabled()?getParcelIncomingLinehaul():{total:0,townCounts:{}};
+  const incoming=parcelIncomingEnabled()?getParcelIncomingLinehaul():{total:0,townCounts:{},rows:[]};
+  window.__badocParcelIncomingMetricRows=Array.isArray(incoming.rows)?incoming.rows:[];
   const badocIncoming=Object.entries(incoming.townCounts).reduce((n,[town,c])=>n+((towns.badoc||[]).some(x=>norm(x)===town)?c:0),0);
   const piniliIncoming=Object.entries(incoming.townCounts).reduce((n,[town,c])=>n+((towns.pinili||[]).some(x=>norm(x)===town)?c:0),0);
-  if(total) total.textContent=(bc+pc+incoming.total).toLocaleString();
+  // TOTAL VOLUME includes all qualifying Parcel Count records, including
+  // MISROUTED parcels whose status is Delivering, Delivered, or On-Hold.
+  // BADOC/PINILI cards remain limited to their respective routed areas.
+  if(total) total.textContent=(rows.length+incoming.total).toLocaleString();
   if(badoc) badoc.textContent=(bc+badocIncoming).toLocaleString();
   if(pinili) pinili.textContent=(pc+piniliIncoming).toLocaleString();
+  const filterMetricTotals=parcelMetricSummary([...rows,...window.__badocParcelIncomingMetricRows]);
+  const filterBadocSet=new Set((towns.badoc||[]).map(x=>String(x||"").trim().toUpperCase()));
+  const filterPiniliSet=new Set((towns.pinili||[]).map(x=>String(x||"").trim().toUpperCase()));
+  const filterBadocMetric=parcelMetricSummary([...rows.filter(r=>norm(r?._area)==="BADOC"),...window.__badocParcelIncomingMetricRows.filter(r=>filterBadocSet.has(String(r?.["Town Name"]??r?.["Town"]??"").trim().toUpperCase()))]);
+  const filterPiniliMetric=parcelMetricSummary([...rows.filter(r=>norm(r?._area)==="PINILI"),...window.__badocParcelIncomingMetricRows.filter(r=>filterPiniliSet.has(String(r?.["Town Name"]??r?.["Town"]??"").trim().toUpperCase()))]);
+  if($("bulkyTotal"))$("bulkyTotal").textContent=filterMetricTotals.bulky.toLocaleString();
+  if($("highValueTotal"))$("highValueTotal").textContent=filterMetricTotals.highValue.toLocaleString();
+  if($("totalMetricDesc"))$("totalMetricDesc").textContent=`Bulky ${filterMetricTotals.bulky.toLocaleString()} • High Value ${filterMetricTotals.highValue.toLocaleString()}`;
+  if($("badocMetricDesc"))$("badocMetricDesc").textContent=`Bulky ${filterBadocMetric.bulky.toLocaleString()} • High Value ${filterBadocMetric.highValue.toLocaleString()}`;
+  if($("piniliMetricDesc"))$("piniliMetricDesc").textContent=`Bulky ${filterPiniliMetric.bulky.toLocaleString()} • High Value ${filterPiniliMetric.highValue.toLocaleString()}`;
   const calcAreaRate=(areaRows)=>{const sc=townStatusCounts(areaRows);let r=0,d=0,g=0,h=0;Object.values(sc).forEach(x=>{r+=x.received;d+=x.delivered;g+=x.delivering;h+=x.hold});const den=r+d+g+h;return den?d/den*100:0};
   const fmtAreaRate=x=>x%1===0?x.toFixed(0):x.toFixed(1);
   const bsr=$("badocSuccessRate"),psr=$("piniliSuccessRate");
@@ -6350,7 +6911,9 @@ function updateDashboardFromParcelFilters(){
   const key=r=>norm(r?.["SLS Tracking Number"]||r?.["SLS Tracking"]||r?.["Tracking Number"]||r?.["Order ID"]||"");
   const keys=new Set(rows.map(key).filter(Boolean));
   const mc=active?allMis.filter(r=>keys.has(key(r))).length:allMis.length;
+  const filterMisMetric=parcelMetricSummary(active?allMis.filter(r=>keys.has(key(r))):allMis);
   if(mis) mis.textContent=mc.toLocaleString();
+  if($("misMetricDesc"))$("misMetricDesc").textContent=`Bulky ${filterMisMetric.bulky.toLocaleString()} • High Value ${filterMisMetric.highValue.toLocaleString()}`;
 
   [[total,"TOTAL VOLUME","FILTERED TOTAL VOLUME",rows.length],
    [badoc,"BADOC","FILTERED BADOC",bc],
@@ -6359,7 +6922,16 @@ function updateDashboardFromParcelFilters(){
     const k=el?.closest(".kpi"); if(!k)return;
     const l=k.querySelector(".lab"),d=k.querySelector(".desc");
     if(l)l.textContent=active?filteredLabel:normal;
-    if(d)d.textContent=active?`${n.toLocaleString()} matching records`:"";
+    if(d){
+      if(active){
+        const id=el?.id;
+        if(!["total","badocTotal","piniliTotal","misTotal"].includes(id)){
+          d.textContent=`${n.toLocaleString()} matching records`;
+        }
+      }else if(["total","badocTotal","piniliTotal","misTotal"].includes(el?.id)){
+        d.textContent="";
+      }
+    }
   });
 
   // Keep the original three-column structure while allowing the saved custom
@@ -6522,27 +7094,101 @@ function renderRiders(){
     if(!q)return true;
     return [r["Driver ID"],r["Driver Name"],r["Person ID"],r["Plate Number"],r["Agency"],r["Driver Group"],r["Service Point Name"],r["Vehicle Type"]].some(v=>riderNorm(v).includes(q));
   });
-  const meta=$("ridersMeta");if(meta)meta.textContent=`(${filtered.length} of ${ridersData.length})`;
+
+  const PAGE_SIZE=20;
+  const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
+  let page=Number(window.__badocRidersPage||1);
+  if(!Number.isInteger(page)||page<1)page=1;
+  if(page>totalPages)page=totalPages;
+  window.__badocRidersPage=page;
+
+  const meta=$("ridersMeta");
+  if(meta)meta.textContent=`(${filtered.length} of ${ridersData.length})`;
+
   const summary=$("ridersSummary");
   if(summary){
-    const active=ridersData.filter(r=>riderNorm(r["SPX Status"])==='ACTIVE').length;
-    const flexi=ridersData.filter(r=>riderNorm(r["Vehicle Type"])==='FLEXI').length;
-    const two=ridersData.filter(r=>riderNorm(r["Vehicle Type"])==='2W').length;
-    const three=ridersData.filter(r=>riderNorm(r["Vehicle Type"])==='3W').length;
-    summary.innerHTML=`<div class="kpi"><div class="num">${ridersData.length}</div><div class="lab">TOTAL RIDERS</div></div><div class="kpi"><div class="num">${active}</div><div class="lab">ACTIVE</div></div><div class="kpi"><div class="num">${three}</div><div class="lab">3W</div></div><div class="kpi"><div class="num">${two}</div><div class="lab">2W</div></div><div class="kpi"><div class="num">${flexi}</div><div class="lab">FLEXI</div></div>`;
+    const activeRiders=ridersData.filter(r=>riderNorm(r["SPX Status"])==='ACTIVE');
+    const vehicleNorm=v=>riderNorm(v).replace(/[^A-Z0-9]/g,'');
+    const total=activeRiders.length;
+    const flexi=activeRiders.filter(r=>vehicleNorm(r["Vehicle Type"])==='FLEXI').length;
+    const two=activeRiders.filter(r=>vehicleNorm(r["Vehicle Type"])==='2WH' || vehicleNorm(r["Vehicle Type"])==='2W').length;
+    const three=activeRiders.filter(r=>vehicleNorm(r["Vehicle Type"])==='3WC' || vehicleNorm(r["Vehicle Type"])==='3W').length;
+    summary.innerHTML=`<div class="kpi"><div class="num">${total}</div><div class="lab">TOTAL RIDERS</div></div><div class="kpi"><div class="num">${three}</div><div class="lab">3W</div></div><div class="kpi"><div class="num">${two}</div><div class="lab">2W</div></div><div class="kpi"><div class="num">${flexi}</div><div class="lab">FLEXI</div></div>`;
   }
+
   const table=$("ridersTable");if(!table)return;
   const cols=["Driver ID","Driver Name","Vehicle Type","Plate Number","Agency","Driver Group","LSP Status","SPX Status","Service Point Name","Zone","Calculated Rating","Number of Rating Received"];
   table.querySelector("thead").innerHTML=`<tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>`;
-  table.querySelector("tbody").innerHTML=filtered.slice(0,500).map(r=>`<tr>${cols.map(c=>`<td>${String(r[c]??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length}" style="text-align:center;padding:20px">No riders found.</td></tr>`;
+
+  const startIndex=(page-1)*PAGE_SIZE;
+  const pageRows=filtered.slice(startIndex,startIndex+PAGE_SIZE);
+  table.querySelector("tbody").innerHTML=pageRows.map(r=>`<tr>${cols.map(c=>`<td>${String(r[c]??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length}" style="text-align:center;padding:20px">No riders found.</td></tr>`;
+
+  const pag=$("ridersPagination");
+  if(pag){
+    if(!filtered.length || totalPages<=1){
+      pag.innerHTML=filtered.length?`<span class="hint">Showing ${filtered.length} rider${filtered.length===1?'':'s'}</span>`:'';
+    }else{
+      const from=startIndex+1;
+      const to=Math.min(startIndex+PAGE_SIZE,filtered.length);
+      const maxButtons=7;
+      let pages=[];
+      if(totalPages<=maxButtons){
+        pages=Array.from({length:totalPages},(_,i)=>i+1);
+      }else{
+        const candidates=new Set([1,totalPages,page,page-1,page+1]);
+        if(page<=4){[2,3,4,5].forEach(x=>candidates.add(x));}
+        else if(page>=totalPages-3){[totalPages-4,totalPages-3,totalPages-2,totalPages-1].forEach(x=>candidates.add(x));}
+        pages=[...candidates].filter(x=>x>=1&&x<=totalPages).sort((a,b)=>a-b);
+      }
+      let html=`<button type="button" class="btn riders-page-btn" data-riders-page="${page-1}" ${page===1?'disabled':''}>‹ Prev</button>`;
+      let last=0;
+      for(const n of pages){
+        if(last && n-last>1)html+=`<span class="hint" style="padding:0 2px">…</span>`;
+        html+=`<button type="button" class="btn riders-page-btn${n===page?' primary':''}" data-riders-page="${n}">${n}</button>`;
+        last=n;
+      }
+      html+=`<button type="button" class="btn riders-page-btn" data-riders-page="${page+1}" ${page===totalPages?'disabled':''}>Next ›</button>`;
+      html+=`<span class="hint" style="margin-left:6px">Showing ${from}-${to} of ${filtered.length}</span>`;
+      pag.innerHTML=html;
+      pag.querySelectorAll('[data-riders-page]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const target=Number(btn.dataset.ridersPage);
+          if(!Number.isInteger(target)||target<1||target>totalPages||target===page)return;
+          window.__badocRidersPage=target;
+          renderRiders();
+        });
+      });
+    }
+  }
 }
+
 function initRidersData(){
   const vs=$("ridersVehicle"), ss=$("ridersStatus");
   const vals=(field)=>[...new Set(ridersData.map(r=>String(r[field]||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  if(vs){vs.innerHTML='<option value="">All</option>'+vals("Vehicle Type").map(v=>`<option>${v.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');vs.onchange=renderRiders;}
-  if(ss){ss.innerHTML='<option value="">All</option>'+vals("SPX Status").map(v=>`<option>${v.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');ss.onchange=renderRiders;}
-  $("ridersSearch")?.addEventListener('input',renderRiders);
+  if(vs){vs.innerHTML='<option value="">All</option>'+vals("Vehicle Type").map(v=>`<option>${v.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');vs.onchange=()=>{window.__badocRidersPage=1;renderRiders();};}
+  if(ss){ss.innerHTML='<option value="">All</option>'+vals("SPX Status").map(v=>`<option>${v.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');ss.onchange=()=>{window.__badocRidersPage=1;renderRiders();};}
+  $("ridersSearch")?.addEventListener('input',()=>{window.__badocRidersPage=1;renderRiders();});
   $("ridersCsvFile")?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{ridersData=parseCsvText(await f.text());initRidersData();renderRiders();$("ridersHint").textContent=`Loaded ${ridersData.length} riders from ${f.name}.`; }catch(err){$("ridersHint").textContent='Unable to read the rider CSV.';console.error(err)}});
+  $("clearRidersUpload")?.addEventListener('click',async()=>{
+    const btn=$("clearRidersUpload");
+    if(btn)btn.disabled=true;
+    try{
+      const defaults=Array.isArray(EMBEDDED_RIDERS_DATA)?EMBEDDED_RIDERS_DATA.map(r=>({...r})):[];
+      ridersData=defaults;
+      window.__badocRidersPage=1;
+      const input=$("ridersCsvFile"); if(input)input.value="";
+      initRidersData();
+      renderRiders();
+      $("ridersHint").textContent=`Uploaded rider file cleared. Restored ${ridersData.length} built-in riders.`;
+      if(window.__badocClearRidersUploadShared) await window.__badocClearRidersUploadShared();
+    }catch(err){
+      console.error("Clear Riders upload:",err);
+      $("ridersHint").textContent="Unable to clear the uploaded rider file. Current rider data was kept.";
+    }finally{
+      if(btn)btn.disabled=false;
+    }
+  });
   renderRiders();
 }
 initRidersData();
@@ -7620,6 +8266,35 @@ function renderLinehaulCore(){
     const taskMatched=Math.max(0,taskTotal-taskMisrouted.length-taskUnmatched.length);
     const incomingTotal=taskMatched;
 
+    // Attribute cards are calculated from the same valid/matched task population
+    // represented by the task total. High Value uses the Forward Order
+    // "High Value" column (Y = high value). Bulky uses "Chargeable Weight"
+    // and counts parcels at 4.00 or above.
+    const excludedMetricKeys=new Set();
+    const metricKeyOf=v=>normJoin(v);
+    taskMisrouted.forEach(r=>{
+      const k=metricKeyOf(r?.["SLS Tracking Number"]||r?.["Order ID"]||r?.["SPX TN"]||r?.["SPX Tracking Number"]);
+      if(k)excludedMetricKeys.add(k);
+    });
+    taskUnmatched.forEach(r=>{
+      const k=metricKeyOf(r?.spxTN||r?.["SPX TN"]||r?.["SPX Tracking Number"]||r?.["Order ID"]);
+      if(k)excludedMetricKeys.add(k);
+    });
+    let bulkyTotal=0,highValueTotal=0;
+    const metricSeen=new Set();
+    Object.values(task.townBreakdown||{}).forEach(group=>{
+      (group?.items||[]).forEach(item=>{
+        const x=item?.x||{}, r=item?.r||{};
+        const tn=metricKeyOf(x?.spxTN||x?.["SPX TN"]||x?.["SPX Tracking Number"]||x?.orderId||x?.["Order ID"]);
+        if(!tn || metricSeen.has(tn) || excludedMetricKeys.has(tn) || isExceptionRow(r))return;
+        metricSeen.add(tn);
+        const hv=String(r?.["High Value"]??"").trim().toUpperCase();
+        if(hv==="Y") highValueTotal++;
+        const cw=Number(String(r?.["Chargeable Weight"]??"").replace(/,/g,"").trim());
+        if(Number.isFinite(cw) && cw>=4) bulkyTotal++;
+      });
+    });
+
     const cards=`
       <div class="lh-task-kpis">
         <div class="lh-task-kpi"><div class="lh-task-kpi-value">${taskMatched.toLocaleString()} / ${taskTotal.toLocaleString()}</div><div class="lh-task-kpi-label">TOTAL VOLUME FOR THIS LINEHAUL TASK</div></div>
@@ -7627,6 +8302,8 @@ function renderLinehaulCore(){
         <div class="lh-task-kpi"><div class="lh-task-kpi-value">${piniliTotal.toLocaleString()}</div><div class="lh-task-kpi-label">PINILI</div></div>
         <div class="lh-task-kpi lh-task-kpi-mis"><div class="lh-task-kpi-value">${taskMisrouted.length.toLocaleString()}</div><div class="lh-task-kpi-label">MISROUTED</div></div>
         <div class="lh-task-kpi lh-task-kpi-unmatched"><div class="lh-task-kpi-value">${taskUnmatched.length.toLocaleString()}</div><div class="lh-task-kpi-label">UNMATCHED</div></div>
+        <div class="lh-task-kpi lh-task-kpi-bulky"><div class="lh-task-kpi-value">${bulkyTotal.toLocaleString()}</div><div class="lh-task-kpi-label">BULKY TOTAL</div></div>
+        <div class="lh-task-kpi lh-task-kpi-high-value"><div class="lh-task-kpi-value">${highValueTotal.toLocaleString()}</div><div class="lh-task-kpi-label">HIGH VALUE TOTAL</div></div>
       </div>
       <div class="lh-task-mis-panel ${taskMisrouted.length?"":"is-empty"}" data-detail-key="${detailKey}" data-detail-type="mis">
         <button type="button" class="lh-task-mis-toggle" aria-expanded="false">
@@ -7655,7 +8332,7 @@ function renderLinehaulCore(){
       <div class="lh-task-block collapsed">
         <div class="lh-task-block-header lh-task-toggle" role="button" tabindex="0" aria-expanded="false">
           <span class="lh-task-chevron">▶</span><span>LINEHAUL TASK</span><strong>${esc(taskId)}</strong>
-          <em>Click to expand</em>
+          <b class="lh-task-header-total">TOTAL ${taskMatched.toLocaleString()}</b>
         </div>
         ${cards}
         ${makeSection("BADOC",badocGroups)}
@@ -8472,6 +9149,23 @@ window.DASHBOARD_V2_READY = true;
     uploadShared("linehaul",f).catch(err=>{console.error(err);status("Cloud upload failed: "+err.message)});
   },true);
 
+  // Clear the uploaded Riders Data file everywhere, restoring the built-in rider dataset.
+  window.__badocClearRidersUploadShared=async function(){
+    if(!started)return false;
+    const defaults=Array.isArray(EMBEDDED_RIDERS_DATA)?EMBEDDED_RIDERS_DATA.map(r=>({...r})):[];
+    ridersData=defaults;
+    const input=document.getElementById("ridersCsvFile");if(input)input.value="";
+    if(typeof initRidersData==="function")initRidersData();
+    if(typeof renderRiders==="function")renderRiders();
+    const version=Date.now();
+    await put(P.riders,new Blob([JSON.stringify(ridersData)],{type:"application/json"}),"application/json");
+    await setState({settings_version:version});
+    seen.settings=version;
+    await announce("settings","riders-clear");
+    status("Riders upload cleared on all devices");
+    return true;
+  };
+
   // Sync Riders Data to the same shared Supabase storage. This does not affect Clear All Data.
   document.getElementById("ridersCsvFile")?.addEventListener("change",e=>{
     const f=e.target.files?.[0];if(!f||!started)return;
@@ -8971,7 +9665,7 @@ window.updateOperationProgress=function(){
   // CFR1 uses a persistent daily ledger keyed by Order ID.  The ledger is
   // deliberately separate from the normal uploaded-data store so the 2:00 AM
   // operational reset cannot erase CFR1 eligibility/history.
-  const CFR1_KEY="badoc_cfr1_ledger_v3";
+  const CFR1_KEY="badoc_cfr1_ledger_v5_cagayan_lh_total";
   function cfr1IsExempt(r){
     if(!r)return false;
     const set=exceptionTrackingSet();
@@ -9006,6 +9700,8 @@ window.updateOperationProgress=function(){
     return tn?"TN:"+tn:"";
   };
   const cfr1Status=r=>norm(statusTo(r));
+  // SOC_LHTransported is part of the CFR1 TOTAL when it is at CAGAYAN DC;
+  // it is NOT a scanned status.
   const cfr1IsScannedStatus=r=>["DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD"].includes(cfr1Status(r));
 
   let cfr1Ledger=null;
@@ -9016,10 +9712,31 @@ window.updateOperationProgress=function(){
     const o={}; cfr1Ledger.records.forEach(x=>{if(x?.key)o[x.key]=x}); cfr1Ledger.records=o;
   }
 
-  // Read every currently available upload.  A parcel is admitted to CFR1
-  // only when THAT row says Current Station = BADOC HUB and its Current
-  // Station Received Time is <= today's 4:00 AM cutoff.  Once admitted, its
-  // eligibility timestamp is retained permanently for today's CFR1 cycle.
+  // Read every currently available upload.
+  // Standard CFR1 eligibility remains Current Station = BADOC HUB with a
+  // Current Station Received Time at or before today's 4:00 AM cutoff.
+  // Additional CFR1 TOTAL eligibility:
+  //   1) SOC_LHTransported at CAGAYAN DC
+  //   2) SOC TRANSPORTED with Destination Station = BADOC HUB
+  // Standard CFR1 and CAGAYAN DC + SOC_LHTransported remain restricted to
+  // towns configured under BADOC and PINILI.
+  // The SOC TRANSPORTED + CAGAYAN DC + Destination BADOC HUB population
+  // bypasses the town filter and is TOTAL-only, not scanned.
+  // All rules use the same 4:00 AM cutoff.
+  // Once admitted, the eligibility timestamp is retained permanently for
+  // today's CFR1 cycle.
+  const cfr1AllowedTowns=new Set([
+    ...(Array.isArray(towns?.badoc)?towns.badoc:[]),
+    ...(Array.isArray(towns?.pinili)?towns.pinili:[])
+  ].map(v=>norm(v)).filter(Boolean));
+
+  const cfr1TownOf=r=>norm(
+    r?.["Town Name"] ??
+    r?.["Town"] ??
+    r?.["town"] ??
+    ""
+  );
+
   const cfr1Rows=(Array.isArray(batches)?batches:[]).flatMap(b=>
     Array.isArray(b?.rows)?b.rows.map((r,i)=>({r,btime:Number(b?.time||0),ri:i})):[]
   );
@@ -9033,8 +9750,24 @@ window.updateOperationProgress=function(){
   // First pass: discover newly eligible CFR1 parcels from any upload.
   cfr1Rows.forEach(x=>{
     const r=x.r,key=cfr1Key(r); if(!key || cfr1IsExempt(r))return;
-    if(norm(r?.["Current Station"]||"")!=="BADOC HUB")return;
+    const station=norm(r?.["Current Station"]||"");
+    const status=cfr1Status(r);
+    const cfr1Town=cfr1TownOf(r);
+    if(!cfr1Town || !cfr1AllowedTowns.has(cfr1Town))return;
     const rt=cfr1ReceivedTime(r); if(!rt || rt>cfr1Four)return;
+    const standardEligible=station==="BADOC HUB";
+    const lhTransportedTotalEligible=station==="CAGAYAN DC" && status==="SOC LHTRANSPORTED";
+    // Special CFR1 TOTAL eligibility: SOC TRANSPORTED currently at CAGAYAN DC
+    // and destined for BADOC HUB. This special population is NOT restricted
+    // by the Badoc/Pinili town list.
+    const socTransportedToBadocEligible=
+      status==="SOC TRANSPORTED" &&
+      station==="CAGAYAN DC" &&
+      destination(r)==="BADOC HUB";
+    const town= cfr1TownOf(r);
+    const townEligible=cfr1AllowedTowns.has(town);
+    if(!socTransportedToBadocEligible &&
+       ((!standardEligible && !lhTransportedTotalEligible) || !townEligible))return;
     const prev=cfr1Ledger.records[key];
     if(!prev || !Number.isFinite(Number(prev.receivedMs)) || rt.getTime()<Number(prev.receivedMs)){
       cfr1Ledger.records[key]={
@@ -9045,7 +9778,8 @@ window.updateOperationProgress=function(){
         receivedMs:rt.getTime(),
         latestBatchTime:x.btime,
         latestRowTime:x.btime,
-        status:String(statusTo(r)||r?.["Status"]||"").trim()
+        status:String(statusTo(r)||r?.["Status"]||"").trim(),
+        noTownFilter:!!socTransportedToBadocEligible
       };
     }
   });
@@ -9063,6 +9797,13 @@ window.updateOperationProgress=function(){
         rec.tn=String(spxTN(r)??rec.tn??"").trim();
         rec.town=String(r?.["Town Name"]??r?.["Town"]??rec.town??"").trim();
         rec.status=String(statusTo(r)||r?.["Status"]||r?.["Parcel Status"]||r?.["Current Status"]||"").trim();
+        const latestStation=norm(r?.["Current Station"]||"");
+        const latestStatus=cfr1Status(r);
+        rec.noTownFilter=(
+          latestStatus==="SOC TRANSPORTED" &&
+          latestStation==="CAGAYAN DC" &&
+          destination(r)==="BADOC HUB"
+        );
         rec.latestBatchTime=latest.btime;
       }
     }
@@ -9075,13 +9816,16 @@ window.updateOperationProgress=function(){
     const key=rec.key;
     const latest=latestByKey.get(key)?.r;
     if(latest && cfr1IsExempt(latest))return;
+    const latestTown=cfr1TownOf(latest||rec);
+    const specialNoTownFilter=!!rec.noTownFilter;
+    if(!specialNoTownFilter && (!latestTown || !cfr1AllowedTowns.has(latestTown)))return;
     const rawStatus=String(rec.status||"").trim();
     const scanned=cfr1IsScannedStatus({Status:rawStatus});
     cfr1Total++;
     if(scanned){
       cfr1Scanned++;
       cfr1ScannedRows.push({orderId:rec.orderId||rec.tn||"",town:rec.town||"",status:rawStatus});
-    }else if(norm(rawStatus)==="LMHUB RECEIVED"){
+    }else if(norm(rawStatus)==="LMHUB RECEIVED" || norm(rawStatus)==="SOC LHTRANSPORTED"){
       cfr1UnscannedRows.push({orderId:rec.orderId||rec.tn||"",town:rec.town||"",status:rawStatus});
     }
   });
@@ -9089,7 +9833,7 @@ window.updateOperationProgress=function(){
     scanned:cfr1ScannedRows,
     unscanned:cfr1UnscannedRows,
     scannedCount:cfr1ScannedRows.length,
-    totalCount:cfr1ScannedRows.length+cfr1UnscannedRows.length
+    totalCount:cfr1Total
   };
   setText("opCfr1Scanned",window.__badocCfr1Details.scannedCount);
   setText("opCfr1Total",window.__badocCfr1Details.totalCount);
@@ -9609,9 +10353,12 @@ setInterval(()=>window.updateOperationProgress?.(),30000);
         if(typeof window.showPage==="function"){
           window.showPage(btn.getAttribute("data-page"));
         }
-        nav.classList.remove("open");
-        nav.classList.add("flyout-dismissed");
-        toggle.setAttribute("aria-expanded","false");
+        // Keep the Daily Data submenu open while navigating between its pages.
+        // This makes it easy to switch Pickup / Performance / Consolidated / EOD
+        // without reopening the parent menu each time.
+        nav.classList.add("open");
+        nav.classList.remove("flyout-dismissed");
+        toggle.setAttribute("aria-expanded","true");
       });
     });
 
@@ -12267,6 +13014,53 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
 .app.side-collapsed .daily-data-submenu button.active{background:rgba(0,168,255,.12)!important;color:#fff!important;box-shadow:inset 2px 0 #19C2FF!important;}
 .app.side-collapsed .daily-data-submenu .sub-ico{display:inline-block!important;width:14px!important;margin-right:7px!important;color:#19C2FF!important;font-size:11px!important;}
 </style>
+
+<!-- BADOC HUB: Parcel Count volume fix v1.1 -->
+<script id="badoc-parcel-volume-fix-v11">
+(function(){
+  // Re-render the Parcel Count/dashboard after the live parcel dataset changes.
+  // getParcelCountRows() now includes qualifying MISROUTED rows in Total Volume.
+  if(window.__badocParcelVolumeFixV11)return;
+  window.__badocParcelVolumeFixV11=true;
+  const refresh=()=>{
+    try{
+      if(typeof render==="function")render();
+      else if(typeof updateDashboardFromParcelFilters==="function")updateDashboardFromParcelFilters();
+    }catch(e){console.warn("Parcel volume refresh:",e)}
+  };
+  setTimeout(refresh,0);
+  setInterval(()=>{
+    try{
+      if(typeof updateDashboardFromParcelFilters==="function")updateDashboardFromParcelFilters();
+    }catch(e){}
+  },1500);
+})();
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+<script id="v-rider-dropdown-absolute-body-reposition">
+(function(){
+  const reposition=()=>{
+    document.querySelectorAll(".town-rider-picker.open").forEach(p=>{
+      const d=document.body.querySelector(".town-rider-dropdown");
+      if(d && typeof d.__place==="function")d.__place();
+    });
+  };
+  window.addEventListener("resize",reposition,{passive:true});
+  window.addEventListener("scroll",reposition,{passive:true,capture:true});
+})();
+</script>
+
 </body>
 
 <style>
