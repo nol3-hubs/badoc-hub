@@ -4976,6 +4976,16 @@ html[data-theme="light"] .theme-switch-thumb{background:#078cff !important}
 }
 </style>
 
+<style id="mobile-theme-toggle">
+.mobile-theme-toggle{display:none;align-items:center;justify-content:center;gap:5px;min-height:32px;padding:6px 9px;border:1px solid #cbd8e0;border-radius:999px;background:#fff;color:#075985;font:800 10px/1 system-ui,sans-serif;cursor:pointer;white-space:nowrap;touch-action:manipulation;transition:background .15s,border-color .15s,transform .1s;}
+.mobile-theme-toggle:active{transform:scale(.96)}
+.mobile-theme-icon{font-size:14px;line-height:1}
+.mobile-theme-label{letter-spacing:.03em}
+html[data-theme="dark"] .mobile-theme-toggle{background:#0b1820!important;border-color:#1b303c!important;color:#b9c9d5!important;box-shadow:0 3px 12px rgba(0,0,0,.22)!important}
+html[data-theme="light"] .mobile-theme-toggle{background:#fff!important;border-color:#cbd8e0!important;color:#075985!important;box-shadow:0 3px 12px rgba(30,45,65,.10)!important}
+@media(max-width:700px){.mobile-theme-toggle{display:inline-flex!important}.top-header-info{display:flex!important;align-items:center!important;gap:6px!important}}
+@media(min-width:701px){.mobile-theme-toggle{display:none!important}}
+</style>
 </head>
 <body data-app-version="6.0" data-app-version="5.0">
 
@@ -5015,24 +5025,32 @@ html[data-theme="light"] .theme-switch-thumb{background:#078cff !important}
 <script>(function(){
   function applyLabel(theme){
     var btn = document.getElementById('themeToggleBtn');
+    var mobileBtn = document.getElementById('mobileThemeToggle');
     var txt = document.querySelector('.theme-switch-text');
-    if(!btn) return;
     var isDark = theme === 'dark';
-    btn.setAttribute('aria-checked', isDark ? 'true' : 'false');
+    if(btn) btn.setAttribute('aria-checked', isDark ? 'true' : 'false');
     if(txt) txt.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+    if(mobileBtn){
+      mobileBtn.setAttribute('aria-checked', isDark ? 'true' : 'false');
+      mobileBtn.querySelector('.mobile-theme-icon').textContent = isDark ? '☾' : '☀';
+      mobileBtn.querySelector('.mobile-theme-label').textContent = isDark ? 'Dark' : 'Light';
+    }
   }
   document.addEventListener('DOMContentLoaded', function(){
     applyLabel(document.documentElement.getAttribute('data-theme') || 'light');
     var btn = document.getElementById('themeToggleBtn');
     if(!btn) return;
-    btn.addEventListener('click', function(){
+    function toggleTheme(){
       var root = document.documentElement;
       var current = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
       var next = current === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
       try { localStorage.setItem('badochub-theme', next); } catch(e) {}
       applyLabel(next);
-    });
+    }
+    btn.addEventListener('click', toggleTheme);
+    var mobileBtn = document.getElementById('mobileThemeToggle');
+    if(mobileBtn) mobileBtn.addEventListener('click', toggleTheme);
   });
 })();</script>
 
@@ -5053,6 +5071,9 @@ html[data-theme="light"] .theme-switch-thumb{background:#078cff !important}
     <div id="sharedStatus" class="top-sync-status connecting" aria-live="polite">
       <span class="top-sync-dot"></span><span class="top-sync-text">Connecting…</span>
     </div>
+    <button type="button" class="mobile-theme-toggle" id="mobileThemeToggle" role="switch" aria-checked="false" aria-label="Toggle light and dark mode" title="Toggle light and dark mode">
+      <span class="mobile-theme-icon" aria-hidden="true">☀</span><span class="mobile-theme-label">Light</span>
+    </button>
     <button type="button" class="app-refresh-btn" id="appRefreshBtn" title="Refresh BADOC HUB" aria-label="Refresh BADOC HUB">↻ <span style="display:none">Refresh</span></button>
   </div>
 </div>
