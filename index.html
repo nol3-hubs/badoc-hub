@@ -163,10 +163,33 @@ body{background:var(--c-05070a-bg);color:var(--c-f5f8fc-text)}
 .reset-zero span{font-size:19px;margin-right:7px}
 .upload-drop.dragover{border-color:var(--c-238fe2-border);box-shadow:0 0 0 1px var(--c-238fe2-shadow)}
 
+
+#dashboard .parcel-spx-sync{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:center;margin-top:12px;width:100%;box-sizing:border-box;overflow:visible}
+#dashboard .parcel-spx-sync .btn{width:100%;min-width:0;box-sizing:border-box;padding:8px 9px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#dashboard #syncParcelInboundFromSPX,#dashboard #syncParcelDeliveryFromSPX{min-width:0;white-space:nowrap}
+#dashboard #parcelInboundSpxSyncStatus,#dashboard #parcelDeliverySpxSyncStatus{grid-column:1 / -1;width:100%;min-width:0;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere}
+#dashboard #parcelInboundSpxSyncStatus{font-size:11px;min-height:16px}
+#dashboard #parcelInboundSpxSyncStatus.is-working{color:var(--c-19b9ff-text)}
+#dashboard #parcelInboundSpxSyncStatus.is-success{color:#16a34a}
+#dashboard #parcelInboundSpxSyncStatus.is-error{color:#dc2626}
+#dashboard #syncParcelDeliveryFromSPX{white-space:nowrap}
+#dashboard #parcelDeliverySpxSyncStatus{font-size:11px;min-height:16px}
+#dashboard #parcelDeliverySpxSyncStatus.is-working{color:var(--c-19b9ff-text)}
+#dashboard #parcelDeliverySpxSyncStatus.is-success{color:#16a34a}
+#dashboard #parcelDeliverySpxSyncStatus.is-error{color:#dc2626}
+@media(max-width:650px){#dashboard .parcel-spx-sync{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}#dashboard .parcel-spx-sync .btn{font-size:12px;padding:7px 6px}}
 #linehaul .linehaul-tools{display:flex;gap:8px;align-items:center;margin:10px 0 12px}
 #linehaul .lh-upload{display:inline-flex;align-items:center;gap:7px;background:var(--c-0b69b7-bg);border:1px solid var(--c-168cff-border);color:var(--c-ffffff-text);padding:9px 12px;border-radius:8px;cursor:pointer;font-weight:700}
 #linehaul .lh-upload input{display:none}
 #linehaul .lh-upload span{font-size:17px}
+#linehaul .linehaul-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#linehaul #syncLinehaulFromSPX{white-space:nowrap}
+#linehaul #linehaulSpxSyncStatus{font-size:11px;min-height:16px}
+#linehaul #linehaulSpxSyncStatus.is-working{color:var(--c-19b9ff-text)}
+#linehaul #linehaulSpxSyncStatus.is-success{color:#16a34a}
+#linehaul #linehaulSpxSyncStatus.is-error{color:#dc2626}
+@media(max-width:650px){#linehaul #syncLinehaulFromSPX{width:100%}#linehaul #linehaulSpxSyncStatus{width:100%}}
+
 #linehaul .lh-summary{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--line);margin-bottom:12px}
 #linehaul .lh-summary>div{padding:10px 12px;border-right:1px solid var(--line);background:var(--c-0b0f14-bg)}
 #linehaul .lh-summary>div:last-child{border-right:0}
@@ -5186,6 +5209,12 @@ html[data-theme="light"] .mobile-theme-toggle{background:#fff!important;border-c
         <div class="toolbar upload-actions">
           <button class="btn" id="undoUpload">Undo last upload</button>
         </div>
+        <div class="parcel-spx-sync">
+          <button class="btn" id="syncParcelInboundFromSPX" type="button" title="Automatically export the selected inbound SPX statuses and load them into BADOC HUB">↻ Sync Inbound from SPX</button>
+          <button class="btn" id="syncParcelDeliveryFromSPX" type="button" title="Export Delivering, Delivered and OnHold using Filtered Assigned for today, 00:00:00–23:59:59, then load into BADOC HUB">↻ Sync Delivering / Delivered / On-Hold</button>
+          <span id="parcelInboundSpxSyncStatus" class="hint" aria-live="polite"></span>
+          <span id="parcelDeliverySpxSyncStatus" class="hint" aria-live="polite"></span>
+        </div>
         <div id="parcelUploadStatus" class="parcel-upload-status" aria-live="polite"></div>
       </div>
 
@@ -5268,7 +5297,9 @@ html[data-theme="light"] .mobile-theme-toggle{background:#fff!important;border-c
       <label class="lh-upload"><span> Upload Exported TO List
         <input id="linehaulCsvFile" type="file" accept=".csv,text/csv">
       </label>
+      <button class="btn" id="syncLinehaulFromSPX" type="button" title="Export Pending Receive TO List from SPX and load it into BADOC HUB">↻ Sync from SPX</button>
       <button class="btn" id="clearLinehaul">Clear</button>
+      <span id="linehaulSpxSyncStatus" class="hint" aria-live="polite"></span>
     </div>
     <div class="lh-kpi-cards">
       <div class="lh-kpi-card"><div class="lh-kpi-value" id="lhKpiTotal">0</div><div class="lh-kpi-label">INCOMING VOLUME</div></div>
@@ -5724,6 +5755,43 @@ function parseCSV(text){
  return rows.filter(r=>r.some(x=>String(x).trim()!=="")).map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]??""])));
 }
 function spxTN(r){return badocRowMeta(r).tn}
+
+async function importParcelCsvText(text,fileName="export_forward_order.csv",source="file") {
+  const rows=parseCSV(String(text||""));
+  if(!rows.length)throw Error("No parcel rows were found in the SPX export.");
+
+  const existingByKey=new Map();
+  (Array.isArray(batches)?batches:[]).forEach(b=>(Array.isArray(b?.rows)?b.rows:[]).forEach(r=>{
+    const k=spxTN(r);
+    if(k)existingByKey.set(k,r);
+  }));
+
+  const seen=new Set();
+  const uniqueRows=[];
+  let added=0,updated=0,dupes=0;
+  rows.forEach(r=>{
+    const k=spxTN(r);
+    if(!k)return;
+    if(seen.has(k)){
+      const idx=uniqueRows.findIndex(x=>spxTN(x)===k);
+      if(idx>=0)uniqueRows[idx]=r;
+      updated++;dupes++;return;
+    }
+    if(existingByKey.has(k)){updated++;dupes++;}else added++;
+    seen.add(k);uniqueRows.push(r);
+  });
+
+  if(!uniqueRows.length)throw Error("The SPX export contained no rows with a usable SPX TN.");
+  const newBatch={name:fileName,time:Date.now(),rows:uniqueRows,duplicates:dupes,updated,uploadedBy:role,source};
+  batches.unshift(newBatch);
+  undoBatch={batch:newBatch,index:0};
+  current=mergeAllBatches();
+  saveTownSettings();
+  await saveBatches();
+  render();
+  showPage("dashboard");
+  return {total:uniqueRows.length,added,updated,duplicates:dupes,name:fileName};
+}
 
 const EXCEPTION_TN_KEY="badoc_exception_tracking_numbers_v1";
 
@@ -8602,57 +8670,263 @@ function renderLinehaul(){
   if(page && !page.classList.contains("active")) return;
   renderLinehaulCore();
 }
+
+async function importLinehaulCsvText(text,fileName="Uploaded TO List.csv",source="file"){
+  const imported=parseLinehaulCSV(text);
+  if(!imported.length)throw Error("No Line Haul Task ID / SPX TN values were found.");
+  const exportedRows=imported.flatMap(t=>t.exportRows||[]);
+  const exportedRowCount=exportedRows.length;
+  const exportedUniqueSPX=new Set(exportedRows.map(r=>normJoin(r?.spxTN)).filter(Boolean)).size;
+  localStorage.setItem(LH_EXPORT_TOTAL_KEY,String(exportedRowCount));
+  localStorage.setItem(LH_EXPORT_UNIQUE_KEY,String(exportedUniqueSPX));
+
+  const allRows=imported.flatMap(t=>t.exportRows||[]);
+  const blankRows=imported.filter(t=>t.blank).flatMap(t=>t.exportRows||[]);
+  localStorage.setItem(LH_PACKED_KEY,JSON.stringify(allRows));
+  localStorage.setItem(LH_BLANK_PACKED_KEY,JSON.stringify(blankRows));
+
+  imported.forEach(task=>{
+    if(task.blank){
+      task.townBreakdown={};
+      task.matchedCount=0;
+      return;
+    }
+    const towns=linehaulTownBreakdown(task,current?.rows||[]);
+    task.townBreakdown=towns;
+    task.matchedCount=Object.values(towns).reduce((s,g)=>s+g.items.length,0);
+    Object.entries(towns).forEach(([town,group])=>(group.items||[]).forEach(item=>{item.x.town=town;item.x.status=item.x.status||task.status;}));
+  });
+
+  const map=new Map(linehaulTasks.map(x=>[x.blank?"__BLANK_LINEHAUL__":x.id,x]));
+  imported.forEach(x=>map.set(x.blank?"__BLANK_LINEHAUL__":x.id,x));
+  linehaulTasks=[...map.values()];
+  saveLinehaul();
+  renderLinehaul();
+  if(typeof window.updateOperationProgress==="function") window.updateOperationProgress();
+  setTimeout(()=>window.updateOperationProgress?.(),50);
+  showPage("linehaul");
+
+  const matched=imported.reduce((s,x)=>s+(x.matchedCount||0),0);
+  const total=imported.reduce((s,x)=>s+(x.exportRows?.length||0),0);
+  const label=source==="spx"?"Synced":"Imported";
+  return {importedCount:imported.length,matched,total,fileName,label};
+}
+
 $("linehaulCsvFile")?.addEventListener("change",async e=>{
   const f=e.target.files?.[0];if(!f)return;
   try{
-    const text=await f.text();
-    const imported=parseLinehaulCSV(text);
-    if(!imported.length)throw Error("No Line Haul Task ID / SPX TN values were found.");
-    const exportedRows=imported.flatMap(t=>t.exportRows||[]);
-    const exportedRowCount=exportedRows.length;
-    const exportedUniqueSPX=new Set(exportedRows.map(r=>normJoin(r?.spxTN)).filter(Boolean)).size;
-    localStorage.setItem(LH_EXPORT_TOTAL_KEY,String(exportedRowCount));
-    localStorage.setItem(LH_EXPORT_UNIQUE_KEY,String(exportedUniqueSPX));
-
-    // Keep every row from the blank Line Haul Task ID group as the
-    // PACKED/PACKING source.
-    const allRows=imported.flatMap(t=>t.exportRows||[]);
-    const blankRows=imported.filter(t=>t.blank).flatMap(t=>t.exportRows||[]);
-    // Keep the complete exported file for the overall KPI calculation.
-    localStorage.setItem(LH_PACKED_KEY,JSON.stringify(allRows));
-    localStorage.setItem(LH_BLANK_PACKED_KEY,JSON.stringify(blankRows));
-
-    // Match the inbound file's SPX TN directly to Parcel Records' Order ID.
-    // Parcel Records are the forward-order export already loaded into the app.
-    imported.forEach(task=>{
-      if(task.blank){
-        task.townBreakdown={};
-        task.matchedCount=0;
-        return;
-      }
-      const towns=linehaulTownBreakdown(task,current?.rows||[]);
-      task.townBreakdown=towns;
-      task.matchedCount=Object.values(towns).reduce((s,g)=>s+g.items.length,0);
-      Object.entries(towns).forEach(([town,group])=>(group.items||[]).forEach(item=>{item.x.town=town;item.x.status=item.x.status||task.status;}));
-    });
-
-    const map=new Map(linehaulTasks.map(x=>[x.blank?"__BLANK_LINEHAUL__":x.id,x]));
-    imported.forEach(x=>map.set(x.blank?"__BLANK_LINEHAUL__":x.id,x));
-    linehaulTasks=[...map.values()];
-    saveLinehaul();renderLinehaul();
-    if(typeof window.updateOperationProgress==="function") window.updateOperationProgress();
-    setTimeout(()=>window.updateOperationProgress?.(),50);
-    showPage("linehaul");
-
-    const matched=imported.reduce((s,x)=>s+(x.matchedCount||0),0);
-    const total=imported.reduce((s,x)=>s+(x.exportRows?.length||0),0);
-    alert(`Imported ${imported.length} linehaul task${imported.length===1?"":"s"}. Matched ${matched.toLocaleString()} of ${total.toLocaleString()} SPX TNs to Parcel Record Order IDs.`);
+    const result=await importLinehaulCsvText(await f.text(),f.name,"file");
+    alert(`${result.label} ${result.importedCount} linehaul task${result.importedCount===1?"":"s"}. Matched ${result.matched.toLocaleString()} of ${result.total.toLocaleString()} SPX TNs to Parcel Record Order IDs.`);
   }catch(err){
     alert("Could not read this exported file: "+err.message);
     console.error(err);
   }
   e.target.value="";
 });
+
+const BADOC_SPX_BRIDGE_SOURCE="BADOC_SPX_BRIDGE";
+const BADOC_PAGE_SOURCE="BADOC_PAGE";
+
+function setParcelInboundSpxSyncStatus(message,state="") {
+  const el=$("parcelInboundSpxSyncStatus");
+  if(!el)return;
+  el.textContent=message||"";
+  el.classList.remove("is-working","is-success","is-error");
+  if(state)el.classList.add("is-"+state);
+}
+
+function beginParcelInboundSpxBridgeSync(){
+  const btn=$("syncParcelInboundFromSPX");
+  if(btn?.dataset.busy==="1")return;
+  if(btn){btn.dataset.busy="1";btn.disabled=true;}
+  setParcelInboundSpxSyncStatus("Connecting to SPX…","working");
+  postBadocSpxMessage("BADOC_START_PARCEL_INBOUND_SYNC");
+}
+
+function getBadocManilaDayBounds(){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const map=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+  const y=Number(map.year),m=Number(map.month)-1,d=Number(map.day);
+  // SPX timestamps are epoch seconds representing Manila local midnight.
+  const startMs=Date.UTC(y,m,d)-8*60*60*1000;
+  const endMs=startMs+24*60*60*1000-1;
+  const fmt=n=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(n)).replace(", "," ");
+  const today=`${map.year}-${map.month}-${map.day}`;
+  return {
+    date:today,
+    assignedStartUnix:Math.floor(startMs/1000),
+    assignedEndUnix:Math.floor(endMs/1000),
+    assignedStart:`${today} 00:00:00`,
+    assignedEnd:`${today} 23:59:59`,
+    assignedLabel:`${today} 00:00:00 → ${today} 23:59:59`
+  };
+}
+
+function setParcelDeliverySpxSyncStatus(message,state=""){
+  const el=$("parcelDeliverySpxSyncStatus");
+  if(!el)return;
+  el.textContent=message||"";
+  el.classList.remove("is-working","is-success","is-error");
+  if(state)el.classList.add("is-"+state);
+}
+
+function beginParcelDeliverySpxBridgeSync(){
+  const btn=$("syncParcelDeliveryFromSPX");
+  if(btn?.dataset.busy==="1")return;
+  const day=getBadocManilaDayBounds();
+  if(btn){btn.dataset.busy="1";btn.disabled=true;}
+  setParcelDeliverySpxSyncStatus(`Filtered Assigned: ${day.assignedLabel} · Connecting to SPX…`,"working");
+  postBadocSpxMessage("BADOC_START_PARCEL_DELIVERY_SYNC",{
+    trackingStatus:"4,2,5",
+    bulkyType:"1,0,2",
+    assignedStartUnix:day.assignedStartUnix,
+    assignedEndUnix:day.assignedEndUnix,
+    assignedStart:day.assignedStart,
+    assignedEnd:day.assignedEnd,
+    assignedLabel:day.assignedLabel,
+    // Match the native SPX export's current created-date window: 14 days
+    // ending at today's Manila midnight. The required Filtered Assigned
+    // window above remains strictly today's 00:00:00–23:59:59.
+    createdEndUnix:day.assignedStartUnix
+  });
+}
+
+function setLinehaulSpxSyncStatus(message,state=""){
+  const el=$("linehaulSpxSyncStatus");
+  if(!el)return;
+  el.textContent=message||"";
+  el.classList.remove("is-working","is-success","is-error");
+  if(state)el.classList.add("is-"+state);
+}
+
+function postBadocSpxMessage(type,data={}){
+  window.postMessage({source:BADOC_PAGE_SOURCE,type,...data},"*");
+}
+
+let badocSpxSyncPromise=null;
+
+function beginLinehaulSpxBridgeSync(){
+  const btn=$("syncLinehaulFromSPX");
+  if(btn?.dataset.busy==="1")return;
+  if(btn)btn.dataset.busy="1";
+  if(btn)btn.disabled=true;
+  setLinehaulSpxSyncStatus("Connecting to SPX…","working");
+  postBadocSpxMessage("BADOC_START_LINEHAUL_SYNC");
+}
+
+window.addEventListener("message",async event=>{
+  if(event.source!==window)return;
+  const data=event.data||{};
+  if(data.source!==BADOC_SPX_BRIDGE_SOURCE)return;
+
+  if(data.type==="BADOC_SPX_PROGRESS"){
+    const phase=data.phase||"";
+    const state=phase==="import"?"working":"working";
+    setLinehaulSpxSyncStatus(data.message||"Syncing from SPX…",state);
+    return;
+  }
+
+  if(data.type==="BADOC_SPX_PARCEL_DELIVERY_CSV"){
+    const btn=$("syncParcelDeliveryFromSPX");
+    try{
+      setParcelDeliverySpxSyncStatus(`Importing Delivering / Delivered / On-Hold export ${data.taskId||""}…`,"working");
+      if(!data.csvText)throw Error("The bridge returned an empty Delivering / Delivered / On-Hold CSV payload.");
+      const result=await importParcelCsvText(data.csvText,data.fileName||"export_delivery_status_today.csv","spx-delivery");
+      if(typeof window.__badocCloudUploadParcelText==="function"){
+        setParcelDeliverySpxSyncStatus("Saving delivery-status data to shared cloud…","working");
+        await window.__badocCloudUploadParcelText(data.csvText,data.fileName||"export_delivery_status_today.csv");
+      }
+      setParcelDeliverySpxSyncStatus(`Synced ${result.total.toLocaleString()} rows · Filtered Assigned ${data.assignedLabel||"today"}`,"success");
+      alert(`SPX Delivering / Delivered / On-Hold sync complete.\n\nRows: ${result.total.toLocaleString()}\nNew TNs: ${result.added.toLocaleString()}\nUpdated TNs: ${result.updated.toLocaleString()}\n\nFiltered Assigned: ${data.assignedLabel||"today"}`);
+    }catch(err){
+      console.error("SPX delivery-status CSV import failed:",err);
+      setParcelDeliverySpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
+      alert(`SPX Delivering / Delivered / On-Hold sync failed during import.\n\n${err.message}\n\nYour existing Parcel Count data was not cleared.`);
+    }finally{
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+    }
+    return;
+  }
+
+  if(data.type==="BADOC_SPX_PARCEL_DELIVERY_PROGRESS"){
+    setParcelDeliverySpxSyncStatus(data.message||"Syncing Delivering / Delivered / On-Hold from SPX…","working");
+    return;
+  }
+
+  if(data.type==="BADOC_SPX_PARCEL_DONE")return;
+
+  if(data.type==="BADOC_SPX_PARCEL_CSV"){
+    const btn=$("syncParcelInboundFromSPX");
+    try{
+      setParcelInboundSpxSyncStatus(`Importing SPX Parcel Count export ${data.taskId||""}…`,"working");
+      if(!data.csvText)throw Error("The bridge returned an empty Parcel Count CSV payload.");
+      const result=await importParcelCsvText(data.csvText,data.fileName||"export_forward_order.csv","spx-inbound");
+      if(typeof window.__badocCloudUploadParcelText==="function"){
+        setParcelInboundSpxSyncStatus("Saving Parcel Count data to shared cloud…","working");
+        await window.__badocCloudUploadParcelText(data.csvText,data.fileName||"export_forward_order.csv");
+      }
+      setParcelInboundSpxSyncStatus(`Synced ${result.total.toLocaleString()} Parcel Count rows`,`success`);
+      alert(`Parcel Count inbound sync complete.\n\nRows: ${result.total.toLocaleString()}\nNew TNs: ${result.added.toLocaleString()}\nUpdated TNs: ${result.updated.toLocaleString()}`);
+    }catch(err){
+      console.error("SPX Parcel Count CSV import failed:",err);
+      setParcelInboundSpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
+      alert(`SPX Parcel Count inbound sync failed during import.\n\n${err.message}\n\nYour existing Parcel Count data was not cleared.`);
+    }finally{
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+    }
+    return;
+  }
+
+  if(data.type==="BADOC_SPX_ERROR"){
+    console.error("BADOC SPX bridge error:",data.message);
+    if(data.kind==="parcel-delivery"){
+      const btn=$("syncParcelDeliveryFromSPX");
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      setParcelDeliverySpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
+      alert(`SPX Delivering / Delivered / On-Hold sync failed.\n\n${data.message||"Unknown error"}\n\nYour existing Parcel Count data was not cleared.`);
+    }else if(data.kind==="parcel-inbound"){
+      const btn=$("syncParcelInboundFromSPX");
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      setParcelInboundSpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
+      alert(`SPX Parcel Count inbound sync failed.\n\n${data.message||"Unknown error"}\n\nYour existing Parcel Count data was not cleared.`);
+    }else{
+      const btn=$("syncLinehaulFromSPX");
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      setLinehaulSpxSyncStatus("Sync failed — existing Linehaul data kept.","error");
+      alert(`SPX Linehaul sync failed.\n\n${data.message||"Unknown error"}\n\nYour existing Linehaul data was not cleared.`);
+    }
+    return;
+  }
+
+  if(data.type==="BADOC_SPX_CSV"){
+    const btn=$("syncLinehaulFromSPX");
+    try{
+      setLinehaulSpxSyncStatus(`Importing SPX Linehaul task ${data.taskId||""}…`,"working");
+      if(!data.csvText)throw Error("The bridge returned an empty CSV payload.");
+      const result=await importLinehaulCsvText(data.csvText,data.fileName||"inbound_to_from_spx.csv","spx");
+      // IMPORTANT: automatic SPX imports must also publish their CSV to the
+      // shared Linehaul object. Otherwise the cloud-sync poll can pull the
+      // previous snapshot a few seconds later and make the new data disappear.
+      if(typeof window.__badocCloudUploadLinehaulText==="function"){
+        setLinehaulSpxSyncStatus(`Saving SPX Linehaul data to shared cloud…`,"working");
+        await window.__badocCloudUploadLinehaulText(data.csvText,data.fileName||"inbound_to_from_spx.csv");
+      }
+      setLinehaulSpxSyncStatus(`Synced ${result.total.toLocaleString()} rows · ${result.importedCount} task${result.importedCount===1?"":"s"}`,"success");
+      alert(`SPX Linehaul sync complete.\n\nTasks: ${result.importedCount}\nRows: ${result.total.toLocaleString()}\nMatched SPX TNs: ${result.matched.toLocaleString()}`);
+    }catch(err){
+      console.error("SPX Linehaul CSV import failed:",err);
+      setLinehaulSpxSyncStatus("Sync failed — existing Linehaul data kept.","error");
+      alert(`SPX Linehaul sync failed during CSV import.\n\n${err.message}\n\nYour existing Linehaul data was not cleared.`);
+    }finally{
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+    }
+  }
+});
+
+$("syncParcelInboundFromSPX")?.addEventListener("click",beginParcelInboundSpxBridgeSync);
+$("syncParcelDeliveryFromSPX")?.addEventListener("click",beginParcelDeliverySpxBridgeSync);
+$("syncLinehaulFromSPX")?.addEventListener("click",beginLinehaulSpxBridgeSync);
+
 $("clearLinehaul")?.addEventListener("click",()=>{
   if(linehaulTasks.length&&confirm("Clear all linehaul tasks?")){
     linehaulTasks=[];
@@ -9145,6 +9419,29 @@ window.DASHBOARD_V2_READY = true;
     }catch(e){console.warn("Shared pull:",e);status("Sync retrying…")}
     finally{pulling=false}
   }
+
+  // Expose a safe bridge for non-file imports (e.g. SPX automatic sync) so
+  // freshly imported Linehaul data is published to the shared cloud state
+  // before the background pull can replace it with an older snapshot.
+  window.__badocCloudUploadLinehaulText = async function(text,fileName="inbound_to_from_spx.csv"){
+    const deadline=Date.now()+15000;
+    while(!started && Date.now()<deadline){
+      await new Promise(r=>setTimeout(r,100));
+    }
+    if(!started) throw Error("Shared cloud sync is not ready.");
+    const blob=new Blob([String(text||"")],{type:"text/csv"});
+    return uploadShared("linehaul",blob);
+  };
+
+  window.__badocCloudUploadParcelText = async function(text,fileName="export_forward_order.csv"){
+    const deadline=Date.now()+15000;
+    while(!started && Date.now()<deadline){
+      await new Promise(r=>setTimeout(r,100));
+    }
+    if(!started) throw Error("Shared cloud sync is not ready.");
+    const blob=new Blob([String(text||"")],{type:"text/csv"});
+    return uploadShared("upload",blob);
+  };
 
   async function uploadShared(kind,file){
     const path=kind==="upload"?P.upload:P.linehaul;
