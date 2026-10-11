@@ -116,8 +116,11 @@ function riderProgress(message, extra = {}) {
 
 
 async function createDedicatedSpxTab() {
+  // Batch Search is part of Order Management → Order Tracking.
+  // Open that route directly so the SPA does not remain on TO List when a
+  // hash-only route change fails to trigger tabs.onUpdated(status=complete).
   const tab = await chrome.tabs.create({
-    url: `${SPX_ORIGIN}/#/dcToManagement`,
+    url: `${SPX_ORIGIN}${PARCEL_ORDER_TRACKING_ROUTE}`,
     active: false
   });
 
@@ -153,7 +156,7 @@ async function createDedicatedSpxTab() {
     const onUpdated = (updatedTabId, changeInfo, updatedTab) => {
       if (updatedTabId !== tab.id) return;
       const url = String(updatedTab?.url || "");
-      if (changeInfo.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/dcToManagement/i.test(url)) {
+      if (changeInfo.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) {
         finish();
       }
     };
@@ -163,7 +166,7 @@ async function createDedicatedSpxTab() {
 
     chrome.tabs.get(tab.id).then(current => {
       const url = String(current?.url || "");
-      if (current?.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/dcToManagement/i.test(url)) finish();
+      if (current?.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) finish();
     }).catch(fail);
   });
 

@@ -5463,8 +5463,8 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
           <button class="btn" id="undoUpload">Undo last upload</button>
         </div>
         <div class="parcel-spx-sync">
-          <button class="btn" id="syncParcelInboundFromSPX" type="button" title="Automatically export the selected inbound SPX statuses and load them into BADOC HUB">↻ Sync Received / Transported / Transporting</button>
-          <button class="btn" id="syncParcelDeliveryFromSPX" type="button" title="Export Delivering, Delivered and OnHold using Filtered Assigned for today, 00:00:00–23:59:59, then load into BADOC HUB">↻ Sync Delivering / Delivered / On-Hold</button>
+          <button class="btn" id="syncParcelInboundFromSPX" type="button" title="Automatically export the selected inbound SPX statuses and load them into BADOC HUB">↻ Import Received / Transported / Transporting</button>
+          <button class="btn" id="syncParcelDeliveryFromSPX" type="button" title="Export Delivering, Delivered and OnHold using Filtered Assigned for today, 00:00:00–23:59:59, then load into BADOC HUB">↻ Import Delivering / Delivered / On-Hold</button>
           <button class="btn" id="reconcileDeliveringViaBatchSearch" type="button" title="Recheck only parcels NOL3 currently counts as Delivering using SPX Batch Search, then preview verified status changes">↻ Recheck Delivering via Batch Search</button>
           <span id="parcelInboundSpxSyncStatus" class="hint" aria-live="polite"></span>
           <span id="parcelDeliverySpxSyncStatus" class="hint" aria-live="polite"></span>
@@ -5552,7 +5552,7 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
       <label class="lh-upload"><span> Upload Exported TO List
         <input id="linehaulCsvFile" type="file" accept=".csv,text/csv">
       </label>
-      <button class="btn" id="syncLinehaulFromSPX" type="button" title="Export Pending Receive TO List from SPX and load it into BADOC HUB">↻ Sync Incoming</button>
+      <button class="btn" id="syncLinehaulFromSPX" type="button" title="Export Pending Receive TO List from SPX and load it into BADOC HUB">↻ Import incoming</button>
       <button class="btn" id="clearLinehaul">Clear</button>
       <span id="linehaulSpxSyncStatus" class="hint" aria-live="polite"></span>
     </div>
@@ -5832,7 +5832,7 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
       <div id="instructionsContent" class="instructions-content">ORDER MANAGEMENT &gt; ORDER TRACKING &gt; EXPORT &gt; EXPORT FORWARD ORDER
 
 3AM
-(LMHUB_RECEIVED, SOC_LHTRANSPORTING, SOC_LHTRANSPORTED)
+(LMHUB_RECEIVED, SOC_LHTRANSPORTING, SOC_LHTRANSPORTED, SOC_PACKED, SOC_PACKING)
 UPLOAD TO - PARCEL COUNT
 
 3AM
@@ -5840,7 +5840,11 @@ UPLOAD TO - PARCEL COUNT
 INBOUND &gt; TO LIST &gt; EXPORT &gt; EXPORT &gt;
 CHECK STATUS (PENDING RECEIVE)
 REMOVE (RECEIVE TIME END)
-CONFIRM - UPLOAD TO LINEHAUL TASK</div>
+CONFIRM - UPLOAD TO LINEHAUL TASK
+
+HOURLY OR AFTER DISPATCH AND EOD
+(DELIVERING, DELIVERED, ONHOLD)
+UPLOAD TO PARCEL COUNT</div>
     </div>
   </div>
 </section>
@@ -5874,6 +5878,7 @@ CONFIRM - UPLOAD TO LINEHAUL TASK</div>
 </div>
 <div class="section">
     <h2>Settings</h2><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <div class="hint">Reset the current day's Clear Floor Rate peak only. Parcel data, CFR1, and other settings are not affected.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Received Checking">
     <div class="received-checking-frame-shell">
@@ -9151,7 +9156,7 @@ async function beginParcelInboundSpxBridgeSync(){
   const btn=$("syncParcelInboundFromSPX");
   if(btn?.dataset.busy==="1")return;
   if(btn){btn.dataset.busy="1";btn.disabled=true;}
-  window.__badocOperationModalStart?.("Sync Received / Transporting / Transported","Connecting to SPX and requesting the inbound export…");
+  window.__badocOperationModalStart?.("Sync Received / Transported","Connecting to SPX and requesting the inbound export…");
   setParcelInboundSpxSyncStatus("Connecting to SPX…","working");
   postBadocSpxMessage("BADOC_START_PARCEL_INBOUND_SYNC");
 }
