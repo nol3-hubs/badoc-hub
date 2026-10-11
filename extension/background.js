@@ -988,13 +988,20 @@ async function executeSpxBatchSearch(tabId, trackingNumbers) {
             const buttonSelectors = "button,[role='button'],a.el-button,.el-button,.ant-btn,[tabindex],.ssc-button,[class*=\'ssc-button\']";
             // SPX Order Tracking uses this dedicated class on its Batch Search control.
             // Target it first; generic label matching is only a fallback.
+            const directSelector = "button.batch-search-button, .batch-search-button";
             const findDirectBatchSearchControl = () => {
-              const direct = [...document.querySelectorAll("button.batch-search-button, .batch-search-button")];
-              return direct.find(el => visible(el) && !el.disabled) ||
-                     direct.find(el => !el.disabled) || null;
+              const direct = [...document.querySelectorAll(directSelector)];
+              // Never click a hidden placeholder. Only accept an actually visible,
+              // enabled control and reject aria-disabled controls.
+              return direct.find(el => visible(el) && !el.disabled && el.getAttribute("aria-disabled") !== "true") || null;
+            };
+            const findBatchByVisibleLabel = () => {
+              const candidates = [...document.querySelectorAll(buttonSelectors)].filter(visible);
+              return candidates.find(el => !el.disabled && el.getAttribute("aria-disabled") !== "true" &&
+                labelVariants(el).some(label => label.includes("batch") && label.includes("search"))) || null;
             };
             while (Date.now() < buttonDeadline && !batchButton) {
-              batchButton = findDirectBatchSearchControl() || findActionControl("batchsearch");
+              batchButton = findDirectBatchSearchControl() || findBatchByVisibleLabel() || findActionControl("batchsearch");
               if (!batchButton) await sleep(250);
             }
             if (!batchButton) {
@@ -1002,8 +1009,15 @@ async function executeSpxBatchSearch(tabId, trackingNumbers) {
                 .filter(visible)
                 .map(el => ({ text: String(el.innerText || el.textContent || "").trim().slice(0, 100), normalized: labelVariants(el), tag: el.tagName, className: String(el.className || "").slice(0, 100), outerHTML: String(el.outerHTML || "").slice(0, 220) }))
                 .filter(x => x.text).slice(0, 35);
-              const directCount = document.querySelectorAll("button.batch-search-button, .batch-search-button").length;
-              throw new Error("Could not match the Batch Search control. Direct .batch-search-button count=" + directCount + "; visible controls=" + JSON.stringify(observed));
+              const directControls = [...document.querySelectorAll(directSelector)].map(el => ({
+                visible: visible(el), disabled: !!el.disabled, ariaDisabled: el.getAttribute("aria-disabled"),
+                text: String(el.innerText || el.textContent || "").trim().slice(0, 100),
+                className: String(el.className || "").slice(0, 160),
+                outerHTML: String(el.outerHTML || "").slice(0, 320)
+              })).slice(0, 8);
+              throw new Error("Could not find a visible, enabled Batch Search control. Page URL=" + String(location.href || "") +
+                "; title=" + String(document.title || "") + "; direct controls=" + JSON.stringify(directControls) +
+                "; visible controls=" + JSON.stringify(observed));
             }
             try { batchButton.scrollIntoView({ block: "center", inline: "nearest" }); } catch {}
             batchButton.click();

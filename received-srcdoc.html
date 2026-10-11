@@ -218,7 +218,7 @@ function renderSecondaryRows(){
   const secondaryCols=['Order ID','SLS Tracking Number','Status','Current Station','Destination Station','Town Name','Bulky Type','High Value','Chargeable Weight'];
   document.getElementById('secondaryCount').textContent=state.secondaryRows.length.toLocaleString();
   document.getElementById('secondaryThead').innerHTML='<tr>'+secondaryCols.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr>';
-  document.getElementById('secondaryTbody').innerHTML=state.secondaryRows.length?state.secondaryRows.map(r=>'<tr>'+secondaryCols.map(c=>`<td>${c==='Status'?`<span class="pill">${esc(r[c])}</span>`:esc(r[c])}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${secondaryCols.length}" class="empty">No SOC_LHTransported or Return_LMHub_Received parcels for Badoc Hub were found.</td></tr>`;
+  document.getElementById('secondaryTbody').innerHTML=state.secondaryRows.length?state.secondaryRows.map(r=>'<tr>'+secondaryCols.map(c=>`<td>${c==='Status'?`<span class="pill">${esc(r[c])}</span>`:esc(r[c])}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${secondaryCols.length}" class="empty">No Transported or RTS received.</td></tr>`;
 }
 function setRows(rows){
   state.rows=applyExemptions(normalizeBadocRows(rows));
@@ -510,6 +510,5 @@ renderSecondaryRows();
 <style>
 .badoc-filter-note{margin-top:6px;font-size:12px;opacity:.75}
 </style>
-<div class="badoc-filter-note" id="badocFilterNote">Main card filter: Current Station = Badoc Hub AND Destination Station = Badoc Hub. Separate card: SOC_LHTransported requires Current Station = Cagayan DC AND Destination Station = Badoc Hub; Return_LMHub_Received requires Destination Station = Badoc Hub.</div>
 
 </body></html>

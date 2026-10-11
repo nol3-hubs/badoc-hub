@@ -5067,6 +5067,200 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
     }
   }
 </style>
+
+<style id="print-towns-a4-portrait-final-fix">
+@media print {
+  @page { size: A4 portrait !important; margin: 5mm !important; }
+  html, body { margin: 0 !important; padding: 0 !important; }
+  body > *:not(#townPrintArea) { display: none !important; }
+  #townPrintArea {
+    display: block !important;
+    position: static !important;
+    visibility: visible !important;
+    width: 200mm !important;
+    max-width: 200mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+  }
+  #townPrintArea .print-date { font-size: 6.5pt !important; line-height: 1 !important; margin: 0 0 1mm !important; }
+  #townPrintArea .print-section {
+    display: block !important; width: 100% !important; max-width: 100% !important;
+    margin: 0 0 1.5mm !important; padding: 0 !important; box-sizing: border-box !important;
+    break-inside: avoid !important; page-break-inside: avoid !important; page-break-after: avoid !important;
+  }
+  #townPrintArea .print-section h2 { font-size: 8pt !important; line-height: 1 !important; margin: 0 0 .7mm !important; padding: 0 0 .4mm !important; }
+  #townPrintArea .town-grid {
+    display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 1mm !important; align-items: start !important; width: 100% !important;
+  }
+  #townPrintArea .town-column { display: contents !important; }
+  #townPrintArea .town-card {
+    width: 100% !important; min-width: 0 !important; box-sizing: border-box !important;
+    padding: .6mm !important; margin: 0 !important; border-radius: 1px !important;
+    break-inside: avoid !important; page-break-inside: avoid !important; box-shadow: none !important;
+  }
+  #townPrintArea .town-card-header {
+    display: flex !important; align-items: center !important; justify-content: space-between !important;
+    gap: .7mm !important; min-height: 0 !important; margin: 0 0 .25mm !important; padding: 0 0 .25mm !important;
+  }
+  #townPrintArea .print-rider {
+    display: block !important; flex: 1 1 auto !important; min-width: 0 !important;
+    font-size: 5.6pt !important; line-height: 1.05 !important; white-space: nowrap !important;
+    overflow: hidden !important; text-overflow: ellipsis !important; color: #000 !important;
+  }
+  #townPrintArea .town-card-total {
+    flex: 0 0 auto !important; min-width: 6mm !important; padding: .15mm .4mm !important;
+    font-size: 5.8pt !important; line-height: 1 !important;
+  }
+  #townPrintArea .town-row {
+    display: grid !important; grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 1mm !important; padding: .18mm 0 !important; font-size: 5.5pt !important; line-height: 1.05 !important;
+  }
+  #townPrintArea .town, #townPrintArea .count { font-size: 5.5pt !important; line-height: 1.05 !important; }
+  #townPrintArea .town {
+    min-width: 0 !important; white-space: nowrap !important;
+    overflow: hidden !important; text-overflow: ellipsis !important;
+    overflow-wrap: normal !important;
+  }
+  #townPrintArea .count {
+    white-space: nowrap !important; flex: 0 0 auto !important;
+    min-width: max-content !important; text-align: right !important;
+  }
+  #townPrintArea .town-card-note, #townPrintArea .town-rider-picker, #townPrintArea .town-drag-handle, #townPrintArea .empty-group { display: none !important; }
+}
+</style>
+
+
+<style id="print-towns-a4-portrait-layout-fix-v2">
+@media print {
+  @page { size: A4 portrait !important; margin: 4mm !important; }
+  #townPrintArea {
+    width: 202mm !important; max-width: 202mm !important;
+    margin: 0 auto !important; padding: 0 !important;
+    box-sizing: border-box !important; overflow: hidden !important;
+  }
+  #townPrintArea .print-section, #townPrintArea .town-grid {
+    width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+    box-sizing: border-box !important; overflow: hidden !important;
+  }
+  #townPrintArea .town-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    column-gap: 2mm !important; row-gap: 2mm !important;
+    align-items: start !important;
+  }
+  #townPrintArea .town-column { display: contents !important; min-width: 0 !important; }
+  #townPrintArea .town-card {
+    display: block !important; width: 100% !important; min-width: 0 !important;
+    max-width: 100% !important; box-sizing: border-box !important;
+    overflow: hidden !important; padding: 1mm !important; margin: 0 !important;
+    break-inside: avoid !important; page-break-inside: avoid !important;
+  }
+  #townPrintArea .town-card-header {
+    display: flex !important; width: 100% !important; min-width: 0 !important;
+    box-sizing: border-box !important; align-items: center !important;
+    justify-content: space-between !important; gap: 1mm !important;
+    overflow: hidden !important;
+  }
+  #townPrintArea .print-rider {
+    display: block !important; flex: 1 1 0 !important; min-width: 0 !important;
+    max-width: 100% !important; overflow: hidden !important; text-overflow: ellipsis !important;
+    white-space: nowrap !important; font-size: 6pt !important; line-height: 1.05 !important;
+  }
+  #townPrintArea .town-card-total {
+    display: inline-block !important; flex: 0 0 auto !important; min-width: 0 !important;
+    white-space: nowrap !important; font-size: 6.5pt !important;
+    padding: .3mm 1mm !important; margin: 0 !important; text-align: right !important;
+  }
+  #townPrintArea .town-row {
+    display: grid !important; grid-template-columns: minmax(0, 1fr) max-content !important;
+    align-items: center !important; justify-content: initial !important;
+    gap: 1mm !important; width: 100% !important; min-width: 0 !important;
+    box-sizing: border-box !important; overflow: hidden !important;
+    padding: .35mm 0 !important; line-height: 1.05 !important;
+  }
+  #townPrintArea .town {
+    display: block !important; min-width: 0 !important; max-width: 100% !important;
+    width: auto !important; flex: initial !important;
+    white-space: nowrap !important; overflow: hidden !important;
+    text-overflow: ellipsis !important; overflow-wrap: normal !important;
+    font-size: 6.5pt !important; line-height: 1.05 !important;
+  }
+  #townPrintArea .count {
+    display: block !important; width: auto !important; min-width: max-content !important;
+    flex: 0 0 auto !important; justify-self: end !important;
+    white-space: nowrap !important; text-align: right !important;
+    font-size: 7pt !important; line-height: 1.05 !important;
+  }
+}
+</style>
+
+
+<style id="print-towns-hard-truncate-town-labels">
+@media print {
+  #townPrintArea .town-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 8mm !important;
+    column-gap: 1mm !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  #townPrintArea .town-row > .town {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+  }
+  #townPrintArea .town-row > .count {
+    display: block !important;
+    width: 8mm !important;
+    min-width: 8mm !important;
+    max-width: 8mm !important;
+    justify-self: end !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+  }
+  #townPrintPreview .town-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 8mm !important;
+    column-gap: 1mm !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+  #townPrintPreview .town-row > .town {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  #townPrintPreview .town-row > .count {
+    width: 8mm !important;
+    min-width: 8mm !important;
+    max-width: 8mm !important;
+    justify-self: end !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+  }
+}
+</style>
+
 </head>
 <body data-app-version="6.0" data-app-version="5.0">
 
@@ -5269,8 +5463,8 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
           <button class="btn" id="undoUpload">Undo last upload</button>
         </div>
         <div class="parcel-spx-sync">
-          <button class="btn" id="syncParcelInboundFromSPX" type="button" title="Automatically export the selected inbound SPX statuses and load them into BADOC HUB">↻ Import Received / Transported / Transporting</button>
-          <button class="btn" id="syncParcelDeliveryFromSPX" type="button" title="Export Delivering, Delivered and OnHold using Filtered Assigned for today, 00:00:00–23:59:59, then load into BADOC HUB">↻ Import Delivering / Delivered / On-Hold</button>
+          <button class="btn" id="syncParcelInboundFromSPX" type="button" title="Automatically export the selected inbound SPX statuses and load them into BADOC HUB">↻ Sync Received / Transported / Transporting</button>
+          <button class="btn" id="syncParcelDeliveryFromSPX" type="button" title="Export Delivering, Delivered and OnHold using Filtered Assigned for today, 00:00:00–23:59:59, then load into BADOC HUB">↻ Sync Delivering / Delivered / On-Hold</button>
           <button class="btn" id="reconcileDeliveringViaBatchSearch" type="button" title="Recheck only parcels NOL3 currently counts as Delivering using SPX Batch Search, then preview verified status changes">↻ Recheck Delivering via Batch Search</button>
           <span id="parcelInboundSpxSyncStatus" class="hint" aria-live="polite"></span>
           <span id="parcelDeliverySpxSyncStatus" class="hint" aria-live="polite"></span>
@@ -5358,7 +5552,7 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
       <label class="lh-upload"><span> Upload Exported TO List
         <input id="linehaulCsvFile" type="file" accept=".csv,text/csv">
       </label>
-      <button class="btn" id="syncLinehaulFromSPX" type="button" title="Export Pending Receive TO List from SPX and load it into BADOC HUB">↻ Import incoming</button>
+      <button class="btn" id="syncLinehaulFromSPX" type="button" title="Export Pending Receive TO List from SPX and load it into BADOC HUB">↻ Sync Incoming</button>
       <button class="btn" id="clearLinehaul">Clear</button>
       <span id="linehaulSpxSyncStatus" class="hint" aria-live="polite"></span>
     </div>
@@ -5638,7 +5832,7 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
       <div id="instructionsContent" class="instructions-content">ORDER MANAGEMENT &gt; ORDER TRACKING &gt; EXPORT &gt; EXPORT FORWARD ORDER
 
 3AM
-(LMHUB_RECEIVED, SOC_LHTRANSPORTING, SOC_LHTRANSPORTED, SOC_PACKED, SOC_PACKING)
+(LMHUB_RECEIVED, SOC_LHTRANSPORTING, SOC_LHTRANSPORTED)
 UPLOAD TO - PARCEL COUNT
 
 3AM
@@ -5646,11 +5840,7 @@ UPLOAD TO - PARCEL COUNT
 INBOUND &gt; TO LIST &gt; EXPORT &gt; EXPORT &gt;
 CHECK STATUS (PENDING RECEIVE)
 REMOVE (RECEIVE TIME END)
-CONFIRM - UPLOAD TO LINEHAUL TASK
-
-HOURLY OR AFTER DISPATCH AND EOD
-(DELIVERING, DELIVERED, ONHOLD)
-UPLOAD TO PARCEL COUNT</div>
+CONFIRM - UPLOAD TO LINEHAUL TASK</div>
     </div>
   </div>
 </section>
@@ -5684,7 +5874,6 @@ UPLOAD TO PARCEL COUNT</div>
 </div>
 <div class="section">
     <h2>Settings</h2><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="clearData">Clear all data</button></div>
-    <div class="hint">Reset the current day's Clear Floor Rate peak only. Parcel data, CFR1, and other settings are not affected.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Received Checking">
     <div class="received-checking-frame-shell">
@@ -5750,7 +5939,53 @@ UPLOAD TO PARCEL COUNT</div>
     let receivedHtml = new TextDecoder('utf-8').decode(bytes);
     const hostTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
     receivedHtml = receivedHtml.replace('<html lang="en">', `<html lang="en" data-badoc-host-theme="${hostTheme}">`);
-    receivedHtml = receivedHtml.replace('</head>', `${integrationSkin}</head>`);
+    receivedHtml = receivedHtml.replace('</head>', `${integrationSkin}
+<style id="print-towns-a4-one-page-v182">
+/* v182: Print Towns is optimized for a single A4 landscape sheet. App layout is unchanged. */
+@media screen {
+  #townPrintPreview .print-preview-paper {
+    width:297mm !important; min-height:210mm !important; padding:4mm !important;
+    box-sizing:border-box !important; margin:0 auto !important;
+  }
+  #townPrintPreview .print-section { margin:0 0 2mm !important; }
+  #townPrintPreview .print-section h2 { font-size:9pt !important; margin:0 0 1mm !important; padding:0 0 .5mm !important; }
+  #townPrintPreview .town-grid { grid-template-columns:repeat(3,minmax(0,1fr)) !important; gap:1mm !important; }
+  #townPrintPreview .town-column { gap:1mm !important; }
+  #townPrintPreview .town-card { padding:.8mm !important; border-radius:1px !important; }
+  #townPrintPreview .town-card-header { min-height:0 !important; margin-bottom:.3mm !important; padding-bottom:.3mm !important; gap:1mm !important; }
+  #townPrintPreview .print-rider { font-size:6pt !important; line-height:1 !important; }
+  #townPrintPreview .town-card-total { font-size:6.5pt !important; min-width:7mm !important; padding:.2mm .6mm !important; }
+  #townPrintPreview .town-row, #townPrintPreview .town, #townPrintPreview .count { font-size:5.8pt !important; line-height:1 !important; padding:.25mm 0 !important; }
+}
+@media print {
+  @page { size:A4 landscape; margin:4mm; }
+  html, body { margin:0 !important; padding:0 !important; }
+  body > *:not(#townPrintArea) { display:none !important; }
+  #townPrintArea {
+    display:block !important; position:static !important; visibility:visible !important;
+    width:289mm !important; max-width:289mm !important; margin:0 !important; padding:0 !important;
+    box-sizing:border-box !important; overflow:visible !important;
+  }
+  #townPrintArea .print-date { font-size:6pt !important; line-height:1 !important; margin:0 0 1mm !important; }
+  #townPrintArea .print-section {
+    display:block !important; width:100% !important; margin:0 0 1.5mm !important; padding:0 !important;
+    break-inside:avoid !important; page-break-inside:avoid !important; page-break-after:avoid !important;
+  }
+  #townPrintArea .print-section:last-child { margin-bottom:0 !important; }
+  #townPrintArea .print-section h2 { font-size:8pt !important; line-height:1 !important; margin:0 0 .7mm !important; padding:0 0 .4mm !important; border-bottom:.5px solid #000 !important; }
+  #townPrintArea .town-grid { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)) !important; gap:1mm !important; align-items:start !important; }
+  #townPrintArea .town-column { display:flex !important; flex-direction:column !important; gap:1mm !important; min-width:0 !important; }
+  #townPrintArea .town-card { padding:.65mm !important; border-radius:1px !important; min-width:0 !important; break-inside:avoid !important; page-break-inside:avoid !important; box-shadow:none !important; }
+  #townPrintArea .town-card-header { display:flex !important; align-items:center !important; justify-content:space-between !important; gap:1mm !important; min-height:0 !important; margin-bottom:.25mm !important; padding-bottom:.25mm !important; }
+  #townPrintArea .print-rider { display:block !important; flex:1 1 auto !important; min-width:0 !important; color:#000 !important; font-size:5.8pt !important; line-height:1 !important; font-weight:700 !important; white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }
+  #townPrintArea .town-card-total { flex:0 0 auto !important; font-size:6.2pt !important; line-height:1 !important; min-width:7mm !important; padding:.2mm .6mm !important; border: .5px solid #000 !important; border-radius:1px !important; }
+  #townPrintArea .town-row { display:grid !important; grid-template-columns:minmax(0,1fr) auto !important; gap:2px !important; padding:.2mm 0 !important; font-size:5.8pt !important; line-height:1 !important; border-bottom:.3px solid #ddd !important; }
+  #townPrintArea .town { font-size:5.8pt !important; line-height:1 !important; font-weight:600 !important; }
+  #townPrintArea .count { font-size:5.8pt !important; line-height:1 !important; }
+  #townPrintArea .town-card-note, #townPrintArea .town-rider-picker, #townPrintArea .town-drag-handle, #townPrintArea .empty-group { display:none !important; }
+}
+</style>
+</head>`);
     frame.addEventListener('load', syncReceivedCheckingTheme);
     frame.srcdoc = receivedHtml;
     function syncReceivedCheckingTheme() {
@@ -8916,7 +9151,7 @@ async function beginParcelInboundSpxBridgeSync(){
   const btn=$("syncParcelInboundFromSPX");
   if(btn?.dataset.busy==="1")return;
   if(btn){btn.dataset.busy="1";btn.disabled=true;}
-  window.__badocOperationModalStart?.("Sync Received / Transported","Connecting to SPX and requesting the inbound export…");
+  window.__badocOperationModalStart?.("Sync Received / Transporting / Transported","Connecting to SPX and requesting the inbound export…");
   setParcelInboundSpxSyncStatus("Connecting to SPX…","working");
   postBadocSpxMessage("BADOC_START_PARCEL_INBOUND_SYNC");
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SPX BRIDGE",
-  "version": "69",
+  "version": "69.1.0",
   "description": "Unified SPX BRIDGE for BADOC HUB operations and isolated Received Checking exports.",
   "permissions": [
     "cookies",
