@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="badoc-received-checking" content="v69">
+<title>Received Checking — Badoc Hub</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#6b7280;--line:#e5e7eb;--accent:#ee4d2d;--good:#0f9d58;--warn:#d97706;--bad:#dc2626;--shadow:0 8px 24px rgba(20,30,50,.06)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font:14px Inter,Segoe UI,Arial,sans-serif;color:var(--text)}
+header{background:#fff;border-bottom:1px solid var(--line);padding:14px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}.brand{font-weight:800;font-size:20px}.brand span{color:var(--accent)}
+.actions{display:flex;gap:8px;align-items:center}button,input,select{font:inherit}button{border:0;border-radius:8px;padding:9px 13px;cursor:pointer;font-weight:700}.secondary{padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:#eef1f5;color:#1f2937;font-weight:700;cursor:pointer}.primary{background:var(--accent);color:white}.secondary{background:#eef1f5;color:#273142}.file{display:none}.status{font-size:12px;color:var(--muted)}
+main{padding:20px;max-width:1500px;margin:auto}.sync{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}.syncbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow);min-height:96px}.card.exemption-card{grid-column:span 2}.secondary-panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 14px 12px;margin:8px 0;box-shadow:var(--shadow)}.secondary-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 2px;padding:0;min-height:0}.secondary-panel-head .secondary{padding:5px 9px;font-size:12px;line-height:1.2}.secondary-panel h2{font-size:16px;line-height:1.2;margin:0}.secondary-panel #secondaryContent>.value{margin-top:0}.secondary-table{margin-top:7px}.exemption-tools{display:flex;gap:6px;margin-top:6px}.exemption-tools input{width:100%;min-width:0;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;font-size:12px}.exemption-tools button{padding:6px 9px;background:#eef1f5;color:#273142}.exemption-meta{font-size:10px;color:var(--muted);margin-top:6px}.label{color:var(--muted);font-size:12px}.value{font-size:22px;font-weight:800;margin-top:3px}
+.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:9px;margin-bottom:12px}.filters input,.multi-select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:white}.multi-select{position:relative;padding:0;background:#fff}.multi-select-btn{width:100%;min-height:38px;padding:9px 34px 9px 11px;background:#fff;color:#172033;text-align:left;border:0;border-radius:8px;font-weight:500;position:relative;cursor:pointer}.multi-select-btn::after{content:'▾';position:absolute;right:11px;top:50%;transform:translateY(-50%);color:#6b7280;font-size:13px}.multi-select.open .multi-select-btn::after{content:'▴'}.multi-select-menu{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 24px rgba(20,30,50,.14);padding:6px;max-height:260px;overflow:auto}.multi-select.open .multi-select-menu{display:block}.multi-option{display:flex;align-items:center;gap:8px;padding:8px 7px;border-radius:6px;cursor:pointer;font-size:13px}.multi-option:hover{background:#f3f4f6}.multi-option input{width:15px;height:15px;margin:0;accent-color:var(--accent)}.multi-option span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.multi-empty{padding:9px;color:var(--muted);font-size:12px}
+.tablewrap{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto;box-shadow:var(--shadow)}table{border-collapse:collapse;width:100%;min-width:1200px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{background:#fafafa;position:sticky;top:0;font-size:12px;color:#4b5563}td{font-size:12px}.pill{padding:3px 7px;border-radius:999px;background:#eef1f5;font-size:11px;font-weight:700}.empty{text-align:center;padding:40px;color:var(--muted)}
+@media(max-width:1000px){.grid{grid-template-columns:repeat(3,1fr)}.filters{grid-template-columns:1fr 1fr}.sync{align-items:flex-start;flex-direction:column}}
+ .filter-count{color:#6b7280;font-size:13px;font-weight:600}
+
+/* High-visibility notifications live in the open area above all data cards. */
+.sync{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,auto);gap:10px;align-items:start;margin:10px 0 16px;background:transparent;border:0;box-shadow:none}
+.notification-stack{display:grid;gap:8px;min-width:0}
+#conn{display:block;font-size:14px;font-weight:850;color:var(--text);padding:0 2px 1px;line-height:1.4}
+#syncStatus,#secondaryStatus{display:block;margin:0;padding:10px 12px;min-height:40px;border:1px solid #fdbaaa;border-left:5px solid #ee4d2d;border-radius:8px;background:#fff1ed;color:#9a3412;font-size:13px;font-weight:750;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+#lastSync{display:flex;align-items:center;max-width:100%;padding:9px 11px;min-height:36px;border:1px solid #a7f3d0;border-radius:8px;background:#ecfdf3;color:#166534;font-size:12px;font-weight:800;line-height:1.4;overflow-wrap:anywhere}
+#lastSync:empty{display:none}
+@media(max-width:700px){.sync{grid-template-columns:1fr}.notification-stack{width:100%}#lastSync{width:100%}}
+
+/* Compact and consistently aligned notification area */
+.sync{grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;margin:8px 0 12px}
+.notification-stack{display:grid;gap:6px;min-width:0;width:100%}
+#conn{font-size:13px;line-height:1.25;padding:0 2px;margin:0}
+#syncStatus,#secondaryStatus{display:block;width:100%;min-height:0;margin:0;padding:7px 10px;border-radius:7px;font-size:12px;font-weight:700;line-height:1.3;white-space:normal;overflow-wrap:anywhere}
+.notification-side{display:flex;justify-content:flex-end;align-items:flex-start;min-width:0}
+#lastSync{display:inline-flex;align-items:center;justify-content:center;max-width:100%;padding:7px 10px;min-height:32px;margin:0;border-radius:7px;font-size:11px;line-height:1.3;white-space:nowrap;overflow-wrap:normal}
+#lastSync:empty{display:none}
+@media(max-width:700px){.sync{grid-template-columns:1fr;gap:7px}.notification-side{justify-content:flex-start}#lastSync{white-space:normal;width:auto;max-width:100%}}
+
+
+/* Final notification alignment: two compact one-line sync messages, with Last Sync vertically centered. */
+.sync{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin:8px 0 12px}
+.notification-stack{display:grid;gap:6px;min-width:0;width:100%}
+.sync-messages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-width:0;align-items:center}
+#syncStatus,#secondaryStatus{display:block;width:100%;min-width:0;min-height:32px;margin:0;padding:7px 10px;border:1px solid #fdbaaa;border-left:5px solid #ee4d2d;border-radius:7px;background:#fff1ed;color:#9a3412;font-size:12px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.notification-side{display:flex;justify-content:flex-end;align-items:center;align-self:center;min-width:0}
+#lastSync{display:inline-flex;align-items:center;justify-content:center;max-width:100%;padding:7px 10px;min-height:32px;margin:0;border:1px solid #a7f3d0;border-radius:7px;background:#ecfdf3;color:#166534;font-size:11px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#lastSync:empty{display:none}
+@media(max-width:700px){.sync{grid-template-columns:minmax(0,1fr);align-items:stretch;gap:7px}.sync-messages{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.notification-side{justify-content:flex-start}.notification-side #lastSync{white-space:nowrap;max-width:100%}}
+@media(max-width:440px){.sync-messages{grid-template-columns:minmax(0,1fr)}.notification-side #lastSync{white-space:normal}}
+
+
+/* Keep Last Sync inside the primary Sync Received notification. */
+.sync{display:block;}
+.notification-stack{width:100%;}
+.sync-messages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:center;min-width:0;}
+.primary-notification{display:flex;align-items:center;gap:8px;min-width:0;min-height:32px;padding:0 7px 0 0;border:1px solid #fdbaaa;border-left:5px solid #ee4d2d;border-radius:7px;background:#fff1ed;overflow:hidden;}
+#syncStatus{flex:1 1 0;width:auto!important;min-width:0;min-height:0;margin:0!important;padding:7px 8px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#9a3412!important;font-size:12px;font-weight:700;line-height:1.3;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;}
+#lastSync{display:inline-flex;flex:0 1 auto;align-items:center;justify-content:center;width:auto;max-width:48%;min-width:0;min-height:22px;margin:0 0 0 auto;padding:4px 7px;border:1px solid #a7f3d0;border-radius:5px;background:#ecfdf3;color:#166534;font-size:10px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#lastSync:empty{display:none;}
+#secondaryStatus{min-width:0;}
+@media(max-width:700px){.sync-messages{grid-template-columns:minmax(0,1fr);gap:6px;}.primary-notification{width:100%;}.primary-notification #lastSync{max-width:45%;white-space:nowrap;}}
+@media(max-width:420px){.primary-notification{flex-wrap:wrap;gap:0;padding-bottom:5px;}.primary-notification #syncStatus{width:100%;flex-basis:100%;}.primary-notification #lastSync{margin:0 7px 0 auto;max-width:calc(100% - 14px);}}
+
+
+/* Keep the secondary loaded-parcels message and its green last-sync badge together. */
+.secondary-notification{display:flex;align-items:center;gap:8px;min-width:0;min-height:32px;padding:0 7px 0 0;border:1px solid #fdbaaa;border-left:5px solid #ee4d2d;border-radius:7px;background:#fff1ed;overflow:hidden;}
+.secondary-notification #secondaryStatus{flex:1 1 0;width:auto!important;min-width:0;min-height:0;margin:0!important;padding:7px 8px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#9a3412!important;font-size:12px;font-weight:700;line-height:1.3;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;}
+#secondaryLastSync{display:inline-flex;flex:0 1 auto;align-items:center;justify-content:center;width:auto;max-width:48%;min-width:0;min-height:22px;margin:0 0 0 auto;padding:4px 7px;border:1px solid #a7f3d0;border-radius:5px;background:#ecfdf3;color:#166534;font-size:10px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#secondaryLastSync:empty{display:none;}
+.primary-notification #syncStatus{flex:1 1 auto;width:100%!important;}
+@media(max-width:700px){.secondary-notification{width:100%;}.secondary-notification #secondaryLastSync{max-width:45%;white-space:nowrap;}}
+@media(max-width:420px){.secondary-notification{flex-wrap:wrap;gap:0;padding-bottom:5px;}.secondary-notification #secondaryStatus{width:100%;flex-basis:100%;}.secondary-notification #secondaryLastSync{margin:0 7px 0 auto;max-width:calc(100% - 14px);}}
+
+
+/* Final fix: keep both green Last Sync badges fully visible, not flex-shrunk. */
+.primary-notification #syncStatus {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+#lastSync,
+#secondaryLastSync {
+  flex: 0 0 auto !important;
+  width: max-content !important;
+  max-width: none !important;
+  min-width: max-content !important;
+  justify-content: flex-start !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+.primary-notification #lastSync,
+.secondary-notification #secondaryLastSync {
+  margin-left: auto !important;
+}
+@media (max-width: 420px) {
+  .primary-notification { flex-wrap: wrap; gap: 0; padding-bottom: 5px; }
+  .primary-notification #syncStatus { flex: 1 1 100% !important; flex-basis: 100% !important; width: 100% !important; }
+  #lastSync, #secondaryLastSync { min-width: 0 !important; max-width: calc(100% - 14px) !important; width: auto !important; white-space: normal !important; }
+  .primary-notification #lastSync, .secondary-notification #secondaryLastSync { margin: 0 7px 0 auto !important; }
+  .secondary-notification { flex-wrap: wrap; gap: 0; padding-bottom: 5px; }
+  .secondary-notification #secondaryStatus { flex: 1 1 100% !important; flex-basis: 100% !important; width: 100% !important; }
+}
+
+</style></head>
+<body>
+<script>
+/* BADOC HUB station guard:
+   Keep only parcels whose Current Station AND Destination Station are Badoc Hub.
+   This is applied automatically after every CSV sync/import. */
+(function () {
+  const BADOC_STATION = "badoc hub";
+
+  function normalizeStation(v) {
+    return String(v ?? "").trim().toLowerCase();
+  }
+
+  window.__badocHubOnlyFilter = function (rows) {
+    return (Array.isArray(rows) ? rows : []).filter(row => {
+      const current = normalizeStation(
+        row["Current Station"] ?? row.current_station_name ?? row.currentStation
+      );
+      const destination = normalizeStation(
+        row["Destination Station"] ?? row.station_name ?? row.destinationStation
+      );
+      return current === BADOC_STATION && destination === BADOC_STATION;
+    });
+  };
+})();
+</script>
+
+<header><div class="brand"><span>Badoc Hub</span></div><div class="actions"><button class="secondary" id="toggleSecondary" type="button" aria-expanded="false">Show Transported / RTS</button><button class="secondary" id="copyOrderIds">Copy Order IDs</button><button class="primary" id="sync">↻ Sync Received</button></div></header>
+<main>
+<div class="sync" aria-live="polite"><div class="notification-stack"><b id="conn">Waiting for SPX Bridge</b><div class="sync-messages"><div class="primary-notification"><div class="status" id="syncStatus" title="Import the sample/export or connect the Chrome extension.">Import the sample/export or connect the Chrome extension.</div><div class="status" id="lastSync" aria-label="Last Received sync time"></div></div><div class="secondary-notification"><div class="status" id="secondaryStatus" title="Transported / RTS: Not synced yet.">Transported / RTS: Not synced yet.</div><div class="status" id="secondaryLastSync" aria-label="Last Transported / RTS sync time"></div></div></div></div></div>
+<section class="secondary-panel" id="secondaryPanel" hidden><div class="secondary-panel-head"><div><h2>Transported and RTS</h2></div><button class="primary" id="syncSecondary" type="button">↻ Sync Transported / RTS</button></div><div id="secondaryContent"><div class="value" id="secondaryCount">0</div><div class="tablewrap secondary-table"><table><thead id="secondaryThead"></thead><tbody id="secondaryTbody"><tr><td class="empty">Click Sync Transported / Returned to load these statuses.</td></tr></tbody></table></div></div></section>
+<section class="grid" id="cards"></section>
+<div class="filters"><input id="q" placeholder="Search Order ID, tracking, town..."><div class="multi-select" id="statusWrap"><button class="multi-select-btn" type="button">Status</button><div class="multi-select-menu" id="statusMenu"></div></div><div class="multi-select" id="townWrap"><button class="multi-select-btn" type="button">Town</button><div class="multi-select-menu" id="townMenu"></div></div><div class="multi-select" id="highValueWrap"><button class="multi-select-btn" type="button">High Value</button><div class="multi-select-menu" id="highValueMenu"></div></div><div class="multi-select" id="bulkyWrap"><button class="multi-select-btn" type="button">Bulky</button><div class="multi-select-menu" id="bulkyMenu"></div></div><button class="secondary" id="clearFilters" type="button">Clear Filters</button></div>
+<div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+</main>
+<script>
+const state={
+  rows:[],
+  filtered:[],
+  secondaryRows:[], secondaryCsvByStatus:{},
+  exemptions:new Set((JSON.parse(localStorage.getItem('badoc_received_checking_v69_exemptions')||'[]')||[]).map(v=>String(v).trim().toUpperCase()).filter(Boolean))
+};
+function normTracking(v){return String(v??'').replace(/\s+/g,'').trim().toUpperCase()}
+function saveExemptions(){localStorage.setItem('badoc_received_checking_v69_exemptions',JSON.stringify([...state.exemptions]));}
+function trackingFromRow(r){
+  return normTracking(
+    r['SLS Tracking Number'] ??
+    r.sls_tracking_number ??
+    r['Tracking Number'] ??
+    r.tracking_number ??
+    r.trackingNumber
+  );
+}
+function orderIdFromRow(r){
+  return normTracking(
+    r['Order ID'] ??
+    r.order_id ??
+    r.shipment_id ??
+    r.shipmentId
+  );
+}
+function isExempt(r){
+  const tracking=trackingFromRow(r);
+  const orderId=orderIdFromRow(r);
+  return (tracking && state.exemptions.has(tracking)) ||
+         (orderId && state.exemptions.has(orderId));
+}
+function applyExemptions(rows){
+  return (Array.isArray(rows)?rows:[]).filter(r=>!isExempt(r));
+}
+function addExemption(){
+  const el=document.getElementById('exemptionInput');
+  const vals=el.value.split(/[\\n,;]+/).map(normTracking).filter(Boolean);
+  vals.forEach(v=>state.exemptions.add(v));
+  saveExemptions();
+  el.value='';
+  // Immediately remove newly exempted parcels from the current data.
+  state.rows=applyExemptions(state.rows);
+  fillFilters();
+  render();
+}
+function clearExemptions(){
+  if(confirm('Clear all exemption tracking numbers?')){
+    state.exemptions.clear();
+    saveExemptions();
+    // A clear only removes the exemption list. The next Sync will reload SPX data.
+    render();
+  }
+}
+const cols=['Order ID','Town Name','Bulky Type','High Value','Chargeable Weight','Current Station','Destination Station','Received Time'];
+function num(v){let n=parseFloat(String(v??'').replace(/,/g,''));return Number.isFinite(n)?n:0}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function isBadocHub(v){return String(v??'').trim().toLowerCase()==='badoc hub'}
+function isLMHubReceived(v){return String(v??'').trim().toLowerCase()==='lmhub_received'}
+function normalizeBadocRows(rows){
+  return (Array.isArray(rows)?rows:[]).filter(r =>
+    isLMHubReceived(r.Status) &&
+    isBadocHub(r['Current Station']) &&
+    isBadocHub(r['Destination Station'])
+  );
+}
+function normalizeSecondaryRows(rows){
+  const normalizeStatus=v=>String(v??'').trim().toLowerCase();
+  const normalizeStation=v=>String(v??'').trim().toLowerCase();
+  return (Array.isArray(rows)?rows:[]).filter(r=>{
+    const status=normalizeStatus(r.Status);
+    const current=normalizeStation(r['Current Station'] ?? r.current_station_name ?? r.currentStation);
+    const destination=normalizeStation(r['Destination Station'] ?? r.station_name ?? r.destinationStation);
+    if(destination!=='badoc hub') return false;
+    if(status==='soc_lhtransported') return current==='cagayan dc';
+    if(status==='return_lmhub_received') return true;
+    return false;
+  });
+}
+function renderSecondaryRows(){
+  const secondaryCols=['Order ID','SLS Tracking Number','Status','Current Station','Destination Station','Town Name','Bulky Type','High Value','Chargeable Weight'];
+  document.getElementById('secondaryCount').textContent=state.secondaryRows.length.toLocaleString();
+  document.getElementById('secondaryThead').innerHTML='<tr>'+secondaryCols.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr>';
+  document.getElementById('secondaryTbody').innerHTML=state.secondaryRows.length?state.secondaryRows.map(r=>'<tr>'+secondaryCols.map(c=>`<td>${c==='Status'?`<span class="pill">${esc(r[c])}</span>`:esc(r[c])}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${secondaryCols.length}" class="empty">No SOC_LHTransported or Return_LMHub_Received parcels for Badoc Hub were found.</td></tr>`;
+}
+function setRows(rows){
+  state.rows=applyExemptions(normalizeBadocRows(rows));
+  fillFilters();
+  render();
+}
+const filterConfig={
+  status:{label:'Status',key:'Status',menu:'statusMenu'},
+  town:{label:'Town',key:'Town Name',menu:'townMenu'},
+  highValue:{label:'High Value',key:'High Value',menu:'highValueMenu'},
+  bulky:{label:'Bulky',key:'Bulky Type',menu:'bulkyMenu'}
+};
+const filterState={status:new Set(),town:new Set(),highValue:new Set(),bulky:new Set()};
+function filterNorm(v){return String(v??'').trim().toLowerCase()}
+function selectedValues(id){return [...(filterState[id]||new Set())]}
+function optionLabel(id,v){
+  if(id==='highValue') return `High Value: ${v}`;
+  return String(v);
+}
+function updateFilterButton(id){
+  const wrap=document.getElementById(id+'Wrap');
+  if(!wrap) return;
+  const btn=wrap.querySelector('.multi-select-btn');
+  const vals=[...(filterState[id]||[])];
+  const label=filterConfig[id].label;
+  btn.textContent=vals.length?`${label}: ${vals.length} selected`:label;
+}
+function renderFilterMenu(id,values){
+  const menu=document.getElementById(filterConfig[id].menu);
+  if(!menu) return;
+  const key=filterConfig[id].key;
+  const counts=new Map();
+  for(const row of applyExemptions(state.rows)){
+    let raw=row[key];
+    // Keep the High Value display/count consistent with the filter values.
+    if(id==='highValue'){
+      const n=String(raw??'').trim().toUpperCase();
+      raw=(n==='Y'||n==='1'||n==='TRUE'||n==='YES')?'Y':'N';
+    }
+    const n=filterNorm(raw);
+    if(n) counts.set(n,(counts.get(n)||0)+1);
+  }
+  const unique=[...new Map(values.map(v=>[filterNorm(v),String(v).trim()])).entries()]
+    .filter(([k,v])=>k&&v).sort((a,b)=>a[1].localeCompare(b[1]));
+  if(!unique.length){
+    menu.innerHTML='<div class="multi-empty">No options</div>';
+    updateFilterButton(id);
+    return;
+  }
+  menu.innerHTML=unique.map(([norm,v])=>{
+    const count=counts.get(norm)||0;
+    const label=optionLabel(id,v);
+    return `<label class="multi-option"><input type="checkbox" data-filter-id="${id}" value="${esc(v)}" ${filterState[id].has(norm)?'checked':''}><span>${esc(label)} <span class="filter-count">(${count})</span></span></label>`;
+  }).join('');
+  menu.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
+    const set=filterState[id];
+    if(cb.checked)set.add(filterNorm(cb.value)); else set.delete(filterNorm(cb.value));
+    updateFilterButton(id);
+    render();
+  }));
+  updateFilterButton(id);
+}
+function setupFilterDropdowns(){
+  Object.keys(filterConfig).forEach(id=>{
+    const wrap=document.getElementById(id+'Wrap');
+    wrap.querySelector('.multi-select-btn').addEventListener('click',e=>{
+      e.stopPropagation();
+      document.querySelectorAll('.multi-select.open').forEach(el=>{if(el!==wrap)el.classList.remove('open')});
+      wrap.classList.toggle('open');
+    });
+    wrap.querySelector('.multi-select-menu').addEventListener('click',e=>e.stopPropagation());
+  });
+  document.addEventListener('click',()=>document.querySelectorAll('.multi-select.open').forEach(el=>el.classList.remove('open')));
+}
+function fillFilters(){
+  const values={
+    status:[...new Set(state.rows.map(r=>String(r.Status??'').trim()).filter(Boolean))],
+    town:[...new Set(state.rows.map(r=>String(r['Town Name']??'').trim()).filter(Boolean))],
+    highValue:['Y','N'],
+    bulky:[...new Set(state.rows.map(r=>String(r['Bulky Type']??'').trim()).filter(Boolean))]
+  };
+  Object.keys(values).forEach(id=>{
+    const available=new Set(values[id].map(filterNorm));
+    for(const v of [...filterState[id]]) if(!available.has(v)) filterState[id].delete(v);
+    renderFilterMenu(id,values[id]);
+  });
+}
+function normalizeSearchText(v){return String(v??'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
+function searchHaystack(r){
+  // Search only useful parcel-identifying fields. Hidden/internal fields are
+  // intentionally excluded so unrelated values do not create false matches.
+  return [
+    r['Order ID'], r['SLS Tracking Number'], r['Shopee Order SN'],
+    r['Town Name'], r['High Value'], r['Bulky Type'],
+    r['Chargeable Weight'], r['Current Station'], r['Destination Station'],
+    r['Received Time']
+  ].map(normalizeSearchText).filter(Boolean);
+}
+function matchesSearch(r, rawQuery){
+  const query=String(rawQuery??'').trim();
+  if(!query) return true;
+  const hay=searchHaystack(r);
+  const normalized=normalizeSearchText(query);
+  if(!normalized) return true;
+
+  // Support simple field-aware searches such as: order:12345, town:badoc,
+  // tracking:SPX..., while still allowing normal free-text search.
+  const fieldMatch=normalized.match(/^(order|tracking|town|sn|hv|highvalue|bulky):\s*(.+)$/i);
+  if(fieldMatch){
+    const key=fieldMatch[1].toLowerCase(), term=fieldMatch[2];
+    let values=[];
+    if(key==='order') values=[r['Order ID']];
+    else if(key==='tracking') values=[r['SLS Tracking Number']];
+    else if(key==='town') values=[r['Town Name']];
+    else if(key==='sn') values=[r['Shopee Order SN']];
+    else if(key==='hv'||key==='highvalue') values=[r['High Value']];
+    else if(key==='bulky') values=[r['Bulky Type']];
+    return values.some(v=>normalizeSearchText(v).includes(term));
+  }
+
+  // Every search word must be present somewhere in the same parcel record.
+  // This makes multi-word searches much more precise than one large substring.
+  const tokens=normalized.split(/\s+/).filter(Boolean);
+  return tokens.every(token=>hay.some(value=>value.includes(token)));
+}
+function render(){let visibleRows=applyExemptions(state.rows);let q=document.getElementById('q').value,fs=['status','town','highValue','bulky'].map(selectedValues);state.filtered=visibleRows.filter(r=>matchesSearch(r,q)&&(!fs[0].length||fs[0].includes(String(r.Status??'').trim().toLowerCase()))&&(!fs[1].length||fs[1].includes(String(r['Town Name']??'').trim().toLowerCase()))&&(!fs[2].length||fs[2].includes(String(r['High Value']??'').trim().toLowerCase()))&&(!fs[3].length||fs[3].includes(String(r['Bulky Type']??'').trim().toLowerCase())));
+let rows=state.filtered;let high=rows.filter(r=>/^(Y|1|true|yes)$/i.test(String(r['High Value']??'').trim())).length;let bulky=rows.filter(r=>num(r['Chargeable Weight'])>=4||['1','2'].includes(String(r['Bulky Type']))).length;document.getElementById('cards').innerHTML=[['TOTAL',rows.length],['HIGH VALUE',high],['BULKY',bulky]].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('')+
+`<div class="card exemption-card"><div class="label">EXEMPTION</div><div class="value">${state.exemptions.size}</div><div class="exemption-tools"><input id="exemptionInput" placeholder="Tracking number / Order ID"><button id="addExemption">Add</button></div><div class="exemption-meta">Tracking number or Order ID · <button id="clearExemptions" style="border:0;background:none;padding:0;color:var(--bad);font-size:11px">Clear</button></div>
+<div id="exemptionList" class="exemption-meta"></div></div>`;
+document.getElementById('addExemption').onclick=addExemption;
+document.getElementById('clearExemptions').onclick=clearExemptions;
+document.getElementById('exemptionInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addExemption();const nextInput=document.getElementById('exemptionInput');if(nextInput){nextInput.focus();nextInput.setSelectionRange(nextInput.value.length,nextInput.value.length);}}});
+document.getElementById('exemptionList').textContent=[...state.exemptions].join(', ');
+document.getElementById('thead').innerHTML='<tr>'+cols.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr>';document.getElementById('tbody').innerHTML=state.filtered.length?state.filtered.map(r=>'<tr>'+cols.map(c=>`<td>${c==='Status'?`<span class="pill">${esc(r[c])}</span>`:esc(r[c])}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${cols.length}" class="empty">No parcels match the current filters.</td></tr>`}
+async function copyOrderIds(){
+  const ids=state.filtered
+    .map(r=>String(r['Order ID']??r.order_id??r.shipment_id??'').trim())
+    .filter(Boolean);
+  const btn=document.getElementById('copyOrderIds');
+  if(!ids.length){
+    btn.textContent='No Order IDs';
+    setTimeout(()=>btn.textContent='Copy Order IDs',1400);
+    return;
+  }
+  const text=ids.join('\n');
+  try{
+    await navigator.clipboard.writeText(text);
+  }catch(e){
+    const ta=document.createElement('textarea');
+    ta.value=text;
+    ta.style.position='fixed';
+    ta.style.opacity='0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  btn.textContent=`Copied ${ids.length} Order IDs`;
+  setTimeout(()=>btn.textContent='Copy Order IDs',1400);
+}
+function parseCSV(text){let lines=[];let row=[],cell='',quote=false;for(let i=0;i<text.length;i++){let ch=text[i],n=text[i+1];if(ch==='"'){if(quote&&n==='"'){cell+='"';i++}else quote=!quote}else if(ch===','&&!quote){row.push(cell);cell=''}else if((ch==='\n'||ch==='\r')&&!quote){if(ch==='\r'&&n==='\n')i++;row.push(cell);if(row.some(x=>x!==''))lines.push(row);row=[];cell=''}else cell+=ch}if(cell||row.length){row.push(cell);lines.push(row)}let h=lines.shift().map(x=>x.trim());return lines.map(a=>Object.fromEntries(h.map((k,i)=>[k,a[i]??''])))}
+async function loadText(text){let rows=await parseCSV(text);setRows(rows);document.getElementById('syncStatus').textContent=`Loaded ${rows.length.toLocaleString()} parcels.`}
+document.getElementById('q').addEventListener('input',render);
+setupFilterDropdowns();
+document.getElementById('clearFilters').onclick=()=>{
+  document.getElementById('q').value='';
+  for(const id of ['status','town','highValue','bulky']){
+    filterState[id].clear();
+    updateFilterButton(id);
+  }
+  fillFilters();
+  render();
+};
+document.getElementById('copyOrderIds').onclick=copyOrderIds;
+const secondaryPanel=document.getElementById('secondaryPanel');
+const toggleSecondary=document.getElementById('toggleSecondary');
+toggleSecondary.addEventListener('click',()=>{const willShow=secondaryPanel.hidden;secondaryPanel.hidden=!willShow;toggleSecondary.textContent=willShow?'Hide Transported / RTS':'Show Transported / RTS';toggleSecondary.setAttribute('aria-expanded',String(willShow));});
+// Received Checking has its own, isolated SPX BRIDGE check. If the extension is absent,
+// ask the host BADOC HUB page to show the Received Checking installer modal.
+const RECEIVED_BRIDGE_VERSION='69';
+let receivedBridgeReady=false;
+let receivedBridgeCheckInFlight=null;
+window.addEventListener('message',e=>{
+  if(e.source!==window) return;
+  const d=e.data||{};
+  if(d.source==='BADOC_SPX_BRIDGE' && d.type==='BADOC_BRIDGE_READY' && String(d.version||'').trim()===RECEIVED_BRIDGE_VERSION){
+    receivedBridgeReady=true;
+  }
+});
+async function ensureReceivedCheckingBridge(reason){
+  if(receivedBridgeReady) return true;
+  if(receivedBridgeCheckInFlight) return receivedBridgeCheckInFlight;
+  receivedBridgeCheckInFlight=new Promise(resolve=>{
+    let settled=false;
+    const finish=ready=>{
+      if(settled) return;
+      settled=true;
+      clearTimeout(timer);
+      window.removeEventListener('message',onMessage);
+      receivedBridgeReady=!!ready;
+      resolve(!!ready);
+      receivedBridgeCheckInFlight=null;
+    };
+    const onMessage=e=>{
+      if(e.source!==window) return;
+      const d=e.data||{};
+      if(d.source==='BADOC_SPX_BRIDGE' && d.type==='BADOC_BRIDGE_READY' && String(d.version||'').trim()===RECEIVED_BRIDGE_VERSION) finish(true);
+    };
+    window.addEventListener('message',onMessage);
+    const timer=setTimeout(()=>finish(false),700);
+    window.postMessage({source:'BADOC_PAGE',type:'BADOC_BRIDGE_HELLO',version:RECEIVED_BRIDGE_VERSION},'*');
+  });
+  const ready=await receivedBridgeCheckInFlight;
+  if(!ready){
+    const msg='SPX BRIDGE v69 is not installed or connected. Install it to sync Received Checking.';
+    if(reason==='secondary') document.getElementById('secondaryStatus').textContent=msg;
+    else document.getElementById('syncStatus').textContent=msg;
+    if(window.parent && window.parent!==window){
+      window.parent.postMessage({source:'BADOC_RECEIVED_CHECKING',type:'BADOC_OPEN_BRIDGE_INSTALLER',reason},'*');
+    } else {
+      alert(msg+' Open this page through the BADOC HUB app to use its installer popup.');
+    }
+  }
+  return ready;
+}
+document.getElementById('syncSecondary').onclick=async()=>{
+  if(!(await ensureReceivedCheckingBridge('secondary'))) return;
+  state.secondaryCsvByStatus={};
+  state.secondaryRows=[];
+  renderSecondaryRows();
+  document.getElementById('secondaryStatus').textContent='Starting SOC_LHTransported + Return_LMHub_Received sync…';
+  window.postMessage({source:'BADOC_PAGE',type:'BADOC_START_PARCEL_SECONDARY_SYNC'},'*');
+};
+document.getElementById('sync').onclick=async()=>{
+  if(!(await ensureReceivedCheckingBridge('received'))) return;
+  document.getElementById('syncStatus').textContent='Starting LMHub_Received sync — Badoc Hub to Badoc Hub only…';
+  window.postMessage({source:'BADOC_PAGE',type:'BADOC_START_PARCEL_INBOUND_SYNC'},'*');
+};
+window.addEventListener('message',e=>{
+  const d=e.data||{};
+  if(d.type==='BADOC_BRIDGE_READY'){
+    document.getElementById('conn').textContent='SPX Bridge connected';
+    document.getElementById('syncStatus').textContent='Ready — click Sync Received.';
+  }
+  if(d.type==='BADOC_BRIDGE_DISCONNECTED'){
+    document.getElementById('conn').textContent='SPX Bridge disconnected';
+    document.getElementById('syncStatus').textContent=d.message||'Reload the extension or dashboard.';
+  }
+  if(d.type==='BADOC_SPX_PROGRESS'){
+    document.getElementById('conn').textContent='SPX Bridge connected';
+    if(d.kind==='parcel-secondary' || d.phase==='parcel-api-export' && d.kind==='parcel-secondary') document.getElementById('secondaryStatus').textContent=d.message||'Syncing…';
+    else document.getElementById('syncStatus').textContent=d.message||'Syncing…';
+  }
+  if(d.type==='BADOC_SPX_PARCEL_CSV'){
+    loadText(d.csvText||'');
+    document.getElementById('conn').textContent='SPX Bridge connected';
+    document.getElementById('syncStatus').textContent='Sync complete — LMHub_Received, Current Station = Badoc Hub, Destination Station = Badoc Hub.';
+  }
+  if(d.type==='BADOC_SPX_SECONDARY_PARCEL_CSV'){
+    const parsed=parseCSV(d.csvText||'');
+    const rowsForStatus=normalizeSecondaryRows(parsed);
+    const bucket=d.statusName||'unknown';
+    state.secondaryCsvByStatus=state.secondaryCsvByStatus||{};
+    state.secondaryCsvByStatus[bucket]=rowsForStatus;
+    state.secondaryRows=[...new Map(Object.values(state.secondaryCsvByStatus).flat().map(r=>[String(r['SLS Tracking Number']||r['Order ID']||JSON.stringify(r)),r])).values()];
+    renderSecondaryRows();
+    document.getElementById('secondaryStatus').textContent=`Loaded ${state.secondaryRows.length.toLocaleString()} parcels.`;
+  }
+  if(d.type==='BADOC_SPX_SECONDARY_PARCEL_DONE'){
+    document.getElementById('secondaryStatus').textContent=`Loaded ${state.secondaryRows.length.toLocaleString()} parcels.`;
+    document.getElementById('secondaryLastSync').textContent='Last sync: '+new Date().toLocaleString();
+  }
+  if(d.type==='BADOC_SPX_ERROR' && d.kind==='parcel-secondary'){
+    document.getElementById('secondaryStatus').textContent='Separate sync failed: '+(d.message||'Unknown error');
+  }
+  if(d.type==='BADOC_SPX_PARCEL_DONE'){
+    document.getElementById('syncStatus').textContent=document.getElementById('syncStatus').textContent || 'Sync Received complete.';
+    document.getElementById('lastSync').textContent='Last sync: '+new Date().toLocaleString();
+  }
+  if(d.type==='BADOC_SPX_ERROR' && d.kind!=='parcel-secondary'){
+    document.getElementById('conn').textContent='SPX Bridge error';
+    document.getElementById('syncStatus').textContent=d.message||'SPX sync failed.';
+  }
+});
+window.postMessage({source:'BADOC_PAGE',type:'BADOC_BRIDGE_HELLO'},'*');
+render();
+renderSecondaryRows();
+</script>
+<style>
+.badoc-filter-note{margin-top:6px;font-size:12px;opacity:.75}
+</style>
+<div class="badoc-filter-note" id="badocFilterNote">Main card filter: Current Station = Badoc Hub AND Destination Station = Badoc Hub. Separate card: SOC_LHTransported requires Current Station = Cagayan DC AND Destination Station = Badoc Hub; Return_LMHub_Received requires Destination Station = Badoc Hub.</div>
+
+</body></html>
