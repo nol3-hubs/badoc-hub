@@ -14113,7 +14113,7 @@ html[data-theme="dark"] #receivedCheckingBridgeInstallModal .rc-bridge-note{back
     }
     try{
       show('Choose the folder where SPX BRIDGE v69 files should be saved…');
-      const dir=await window.showDirectoryPicker({mode:'readwrite',id:'badoc-received-checking-spx-bridge',startIn:'downloads'});
+      const dir=await window.showDirectoryPicker({mode:'readwrite',id:'badoc-rc-spx-bridge',startIn:'downloads'});
       for(const name of Object.keys(BRIDGE_FILES_BASE64)) await writeFile(dir,name,text64(BRIDGE_FILES_BASE64[name]));
       show('SPX BRIDGE v69 files saved. Open chrome://extensions, enable Developer mode, click Load unpacked, and select this folder.');
     }catch(err){
