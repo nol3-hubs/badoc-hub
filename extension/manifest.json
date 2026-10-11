@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "SPX BRIDGE",
+  "version": "69",
+  "description": "Unified SPX BRIDGE for BADOC HUB operations and isolated Received Checking exports.",
+  "permissions": [
+    "cookies",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://spx.shopee.ph/*",
+    "https://*.susercontent.com/*",
+    "https://*.file.susercontent.com/*",
+    "https://*.github.io/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "file:///*",
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://localhost/*",
+        "https://127.0.0.1/*",
+        "https://*.github.io/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "short_name": "SPX BRIDGE"
+}

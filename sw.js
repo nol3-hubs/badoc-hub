@@ -1,48 +1,58 @@
-const CACHE = "badoc-hub-v29-clear-filter-hardfix";
+const CACHE_NAME = 'badoc-hub-pwa-v69-received-checking-theme-fix';
 const APP_SHELL = [
-  "./",
-  "./manifest.webmanifest",
-  "./badoc-hub-icon.png",
-  "./spx-logo-512.png"
+  './index.html',
+  './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
-self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(CACHE)
-      .then(cache => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
-  );
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(APP_SHELL);
+    await self.skipWaiting();
+  })());
 });
 
-self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(key => key !== CACHE).map(key => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
-  );
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key.startsWith('badoc-hub-pwa-') && key !== CACHE_NAME).map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
-self.addEventListener("fetch", event => {
+self.addEventListener('fetch', event => {
   const request = event.request;
-  if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  // Only cache the GitHub Pages app itself. SPX/API requests are left untouched.
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-  // Always fetch HTML/favicons fresh so deployments are not hidden by the PWA cache.
-  const isHtml = request.mode === "navigate" || request.destination === "document";
-  const isIcon = request.destination === "image" && (
-    url.pathname.endsWith("badoc-hub-icon.png") ||
-    url.pathname.endsWith("spx-logo-512.png")
-  );
-
-  if (isHtml || isIcon) {
-    event.respondWith(fetch(request, { cache: "no-store" }));
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        const response = await fetch(request);
+        if (response && response.ok) await cache.put(request, response.clone());
+        return response;
+      } catch (_) {
+        return (await cache.match(request)) || (await cache.match('./index.html')) || Response.error();
+      }
+    })());
     return;
   }
 
-  event.respondWith(
-    fetch(request).catch(() => caches.match(request))
-  );
+  // App-shell assets are cache-first for quick loads, with network fallback.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    try {
+      const response = await fetch(request);
+      if (response && response.ok) await cache.put(request, response.clone());
+      return response;
+    } catch (_) {
+      return Response.error();
+    }
+  })());
 });
