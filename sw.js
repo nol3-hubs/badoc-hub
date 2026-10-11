@@ -1,9 +1,9 @@
-const CACHE_NAME = 'badoc-hub-pwa-v69-round-logo-v2';
+const CACHE_NAME = 'badoc-hub-pwa-round-logo-v3';
 const APP_SHELL = [
   './index.html',
-  './manifest.webmanifest',
-  './icons/badoc-hub-round-v2-192.png',
-  './icons/badoc-hub-round-v2-512.png'
+  './manifest-badoc-hub-round-v3.webmanifest',
+  './icons/badoc-hub-spx-round-v3-192.png',
+  './icons/badoc-hub-spx-round-v3-512.png'
 ];
 
 self.addEventListener('install', event => {
