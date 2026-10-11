@@ -87,9 +87,14 @@
     ]);
     if (!supported.has(data.type)) return;
     if (!port) {
+      const errorKind = data.type === "BADOC_START_DELIVERING_RECONCILE" ? "delivering-reconcile" :
+        data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" :
+        data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
+        data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
+        data.type === "BADOC_START_RIDER_SYNC" ? "rider" : "parcel-inbound";
       emit("BADOC_SPX_ERROR", {
         message: "SPX BRIDGE v69 is not connected. Reload the extension and refresh BADOC HUB.",
-        kind: data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" : data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" : "parcel-inbound"
+        kind: errorKind
       });
       return;
     }

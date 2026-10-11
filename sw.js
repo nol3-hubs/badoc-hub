@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-v69-received-checking-theme-fix';
+const CACHE_NAME = 'badoc-hub-pwa-v69-sync-last-times3';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
