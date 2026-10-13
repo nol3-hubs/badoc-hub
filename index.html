@@ -5263,6 +5263,25 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
 }
 </style>
 
+
+<style id="v320-linehaul-arriving-in-time-checkbox">
+#linehaul .lh-task-arrival-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 11px;margin:0 0 8px;border:1px solid var(--line,#263342);border-radius:8px;background:var(--c-101a25-bg,#101a25);}
+#linehaul .lh-task-arrival-toggle label{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;font-weight:900;letter-spacing:.04em;color:var(--c-edf3f8-text,#edf3f8);}
+#linehaul .lh-task-arrival-toggle input[type="checkbox"]{width:16px;height:16px;margin:0;accent-color:#16a34a;cursor:pointer;flex:0 0 auto;}
+#linehaul .lh-task-arrival-note{font-size:10px;color:var(--c-8fa0ad-text,#8fa0ad);}
+@media(max-width:650px){#linehaul .lh-task-arrival-toggle{align-items:flex-start;flex-direction:column;gap:5px}}
+/* High-contrast arrival checkbox pinned to the far-right of the task header. */
+#linehaul .lh-task-arrival-header{display:inline-flex;align-items:center;gap:5px;margin-left:8px!important;padding:5px 9px;border:1px solid #a8c8d8;border-radius:6px;background:#ffffff;color:#17384a;font-size:9px;font-weight:900;letter-spacing:.02em;white-space:nowrap;cursor:pointer;flex:0 0 auto;}
+#linehaul .lh-task-arrival-header input[type="checkbox"]{width:14px;height:14px;margin:0;accent-color:#16803c;cursor:pointer;}
+#linehaul .lh-task-block.collapsed .lh-task-header-total{margin-left:auto!important;}
+#linehaul .lh-arrival-all-control{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid #b8d5e3;border-radius:8px;background:#f3f9fc;color:#17384a;}
+#linehaul .lh-arrival-all-control label{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:.025em;color:#17384a;cursor:pointer;}
+#linehaul .lh-arrival-all-control input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#16803c;cursor:pointer;}
+#linehaul .lh-arrival-all-note{font-size:10px;color:#526b78;}
+@media(max-width:700px){#linehaul .lh-task-arrival-header{font-size:8px;padding:4px 6px;gap:3px;margin-left:5px!important;}#linehaul .lh-arrival-all-control{align-items:flex-start;flex-direction:column;gap:5px;}}
+html[data-theme="dark"] #linehaul .lh-arrival-all-control{background:#101a25;border-color:#344454;color:#edf3f8;}html[data-theme="dark"] #linehaul .lh-arrival-all-control label{color:#edf3f8;}html[data-theme="dark"] #linehaul .lh-arrival-all-note{color:#9eafbf;}
+</style>
+
 </head>
 <body data-app-version="6.0" data-app-version="5.0">
 
@@ -5570,6 +5589,13 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
         <button type="button" class="btn" id="lhDoidClose">Close</button>
       </div>
       <div id="lhDoidList"></div>
+    </div>
+    <div class="lh-arrival-all-control" id="lhArrivalAllControl">
+      <label for="lhAllArrivingInTime" title="Check to mark every active incoming linehaul task as arriving on time.">
+        <input type="checkbox" id="lhAllArrivingInTime">
+        <span>ALL INCOMING LINEHAULS ARRIVING ON TIME</span>
+      </label>
+      <span class="lh-arrival-all-note">When checked, all linehaul task volumes can be included in Dashboard and Planning Board incoming volume.</span>
     </div>
     <div class="lh-dashboard">
       <div id="linehaulTaskTownDashboard"></div>
@@ -7217,6 +7243,10 @@ function getParcelIncomingLinehaul(){
 
   tasks.forEach(task=>{
     if(!task||task.blank||task.cleared||!String(task.id||"").trim())return;
+    // Only linehauls marked as arriving in time contribute to incoming volume
+    // in both Dashboard and Planning Board. Unchecked tasks remain visible in
+    // Linehaul Task for monitoring, but do not add to the incoming volume.
+    if(task.arrivingInTime!==true)return;
 
     const breakdown=typeof linehaulTownBreakdown==="function"
       ?linehaulTownBreakdown(task,parcelRows)
@@ -8972,6 +9002,10 @@ function renderLinehaulCore(){
         <div class="lh-task-block-header lh-task-toggle" role="button" tabindex="0" aria-expanded="false">
           <span class="lh-task-chevron">▶</span><span>LINEHAUL TASK</span><strong>${esc(taskId)}</strong>
           <b class="lh-task-header-total">TOTAL ${taskMatched.toLocaleString()}</b>
+          <label class="lh-task-arrival-header" title="Check this if this linehaul is expected to arrive in time. Include its volume in Dashboard and Planning Board incoming volume." onclick="event.stopPropagation()">
+            <input type="checkbox" data-lh-arrival-checkbox data-lh-arrival-task="${esc(taskId)}" ${task.arrivingInTime===true?"checked":""}>
+            <span>ARRIVING IN TIME</span>
+          </label>
         </div>
         ${cards}
         ${makeSection("BADOC",badocGroups)}
@@ -8982,8 +9016,57 @@ function renderLinehaulCore(){
   const taskTownEl=$("linehaulTaskTownDashboard");
   if(taskTownEl)taskTownEl.innerHTML=taskTownSections.join("");
 
+  // Master arrival-time checkbox: checked only when every active task is checked.
+  const allArrivalBox=$("lhAllArrivingInTime");
+  const activeArrivalTasks=(Array.isArray(linehaulTasks)?linehaulTasks:[]).filter(t=>t&&!t.blank&&!t.cleared&&String(t.id||"").trim());
+  if(allArrivalBox){
+    const checkedCount=activeArrivalTasks.filter(t=>t.arrivingInTime===true).length;
+    allArrivalBox.checked=activeArrivalTasks.length>0&&checkedCount===activeArrivalTasks.length;
+    allArrivalBox.indeterminate=checkedCount>0&&checkedCount<activeArrivalTasks.length;
+    if(!allArrivalBox.dataset.bound){
+      allArrivalBox.dataset.bound="1";
+      allArrivalBox.addEventListener("change",()=>{
+        const tasks=(Array.isArray(linehaulTasks)?linehaulTasks:[]).filter(t=>t&&!t.blank&&!t.cleared&&String(t.id||"").trim());
+        tasks.forEach(t=>{t.arrivingInTime=allArrivalBox.checked;});
+        try{saveLinehaul()}catch(err){console.warn("Could not save all linehaul arrival choices locally:",err)}
+        if(typeof render==="function")render();
+        if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
+        if(typeof window.__badocCloudSaveLinehaulArrivalFlags==="function"){
+          window.__badocCloudSaveLinehaulArrivalFlags().then(()=>{
+            if(typeof setLinehaulSpxSyncStatus==="function")setLinehaulSpxSyncStatus("Arrival-time selections synced","success");
+          }).catch(err=>{
+            console.warn("Linehaul arrival-time sync failed:",err);
+            if(typeof setLinehaulSpxSyncStatus==="function")setLinehaulSpxSyncStatus("Arrival-time choices saved on this device; cloud sync failed","error");
+          });
+        }
+      });
+    }
+  }
+
   if(!taskTownEl._collapseBound){
     taskTownEl._collapseBound=true;
+    taskTownEl.addEventListener("change",e=>{
+      const checkbox=e.target?.closest?.("[data-lh-arrival-checkbox]");
+      if(!checkbox)return;
+      const taskId=String(checkbox.getAttribute("data-lh-arrival-task")||"").trim();
+      const task=linehaulTasks.find(x=>!x?.blank&&String(x?.id||"").trim()===taskId);
+      if(!task)return;
+      task.arrivingInTime=!!checkbox.checked;
+      try{saveLinehaul()}catch(err){console.warn("Could not save linehaul arrival choice locally:",err)}
+      // Update the master incoming-volume displays immediately. The global
+      // incoming-volume toggle in each menu remains in control of whether
+      // the selected linehaul volume is added to its base totals.
+      if(typeof render==="function")render();
+      if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
+      if(typeof window.__badocCloudSaveLinehaulArrivalFlags==="function"){
+        window.__badocCloudSaveLinehaulArrivalFlags().then(()=>{
+          if(typeof setLinehaulSpxSyncStatus==="function")setLinehaulSpxSyncStatus("Arrival-time selections synced","success");
+        }).catch(err=>{
+          console.warn("Linehaul arrival-time sync failed:",err);
+          if(typeof setLinehaulSpxSyncStatus==="function")setLinehaulSpxSyncStatus("Arrival-time choice saved on this device; cloud sync failed","error");
+        });
+      }
+    });
     const toggle=(header)=>{
       const block=header.closest(".lh-task-block");
       if(!block)return;
@@ -8995,6 +9078,7 @@ function renderLinehaulCore(){
       if(hint)hint.textContent=collapsed?"Click to expand":"Click to collapse";
     };
     taskTownEl.addEventListener("click",e=>{
+      if(e.target.closest("[data-lh-arrival-checkbox]"))return;
       const header=e.target.closest(".lh-task-toggle");
       if(header)toggle(header);
     });
@@ -9083,7 +9167,15 @@ async function importLinehaulCsvText(text,fileName="Uploaded TO List.csv",source
   });
 
   const map=new Map(linehaulTasks.map(x=>[x.blank?"__BLANK_LINEHAUL__":x.id,x]));
-  imported.forEach(x=>map.set(x.blank?"__BLANK_LINEHAUL__":x.id,x));
+  imported.forEach(x=>{
+    const key=x.blank?"__BLANK_LINEHAUL__":x.id;
+    const previous=map.get(key);
+    if(typeof x.arrivingInTime!=="boolean"){
+      x.arrivingInTime=previous&&typeof previous.arrivingInTime==="boolean"
+        ?previous.arrivingInTime:false;
+    }
+    map.set(key,x);
+  });
   linehaulTasks=[...map.values()];
   saveLinehaul();
   renderLinehaul();
@@ -9739,7 +9831,7 @@ window.DASHBOARD_V2_READY = true;
   const cfg=window.BADOC_SHARED_CONFIG||{};
   const bucket="exported-files";
   const TABLE="badoc_shared_state";
-  const P={upload:"current/uploaded.csv",linehaul:"current/linehaul.csv",settings:"current/town-settings.json",riders:"current/riders-data.json",layout:"current/town-layout.json",riderSelections:"current/rider-selections.json",notes:"current/town-group-notes.json"};
+  const P={upload:"current/uploaded.csv",linehaul:"current/linehaul.csv",linehaulArrivalFlags:"current/linehaul-arrival-flags.json",settings:"current/town-settings.json",riders:"current/riders-data.json",layout:"current/town-layout.json",riderSelections:"current/rider-selections.json",notes:"current/town-group-notes.json"};
   let client=null,channel=null,pollTimer=null,pulling=false,started=false;
   const queuedPullKinds=new Set();
   const pendingCloudWrites=new Set();
@@ -9896,9 +9988,24 @@ window.DASHBOARD_V2_READY = true;
     const b=await get(P.linehaul);
     if(!b)return;
     if(typeof parseLinehaulCSV!=="function")return;
+    let sharedArrivalFlags={};
+    try{
+      const flagsBlob=await get(P.linehaulArrivalFlags);
+      if(flagsBlob){
+        const parsedFlags=JSON.parse(await flagsBlob.text());
+        if(parsedFlags&&typeof parsedFlags==="object"&&!Array.isArray(parsedFlags))sharedArrivalFlags=parsedFlags;
+      }
+    }catch(err){console.warn("Linehaul arrival flags load:",err)}
+    const previousTasks=new Map((Array.isArray(linehaulTasks)?linehaulTasks:[]).map(x=>[x.blank?"__BLANK_LINEHAUL__":String(x.id||"").trim(),x]));
     const imported=parseLinehaulCSV(await b.text());
     if(!imported.length)return;
     imported.forEach(task=>{
+      const id=String(task?.id||"").trim();
+      const key=task.blank?"__BLANK_LINEHAUL__":id;
+      const previous=previousTasks.get(key);
+      if(id&&Object.prototype.hasOwnProperty.call(sharedArrivalFlags,id))task.arrivingInTime=sharedArrivalFlags[id]===true;
+      else if(previous&&typeof previous.arrivingInTime==="boolean")task.arrivingInTime=previous.arrivingInTime;
+      else task.arrivingInTime=false;
       if(task.blank){task.townBreakdown={};task.matchedCount=0;return}
       const tb=typeof linehaulTownBreakdown==="function"?linehaulTownBreakdown(task,current?.rows||[]):{};
       task.townBreakdown=tb;
@@ -9913,6 +10020,8 @@ window.DASHBOARD_V2_READY = true;
     if(typeof saveLinehaul==="function")saveLinehaul();
     if(typeof renderLinehaul==="function")renderLinehaul();
     if(typeof renderLinehaulKpis==="function")renderLinehaulKpis();
+    if(typeof render==="function")render();
+    if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
   }
   async function applySettings(){
     const b=await get(P.settings);
@@ -10042,6 +10151,33 @@ window.DASHBOARD_V2_READY = true;
     if(!started) throw Error("Shared cloud sync is not ready.");
     const blob=new Blob([String(text||"")],{type:"text/csv"});
     return uploadShared("upload",blob);
+  };
+
+  // Save task-level arrival checkboxes separately from the imported CSV. Use
+  // the existing linehaul_version signal so other devices refresh these flags.
+  let arrivalFlagsWriteQueue=Promise.resolve();
+  window.__badocCloudSaveLinehaulArrivalFlags = function(){
+    const run=async()=>{
+      const deadline=Date.now()+15000;
+      while(!started && Date.now()<deadline){
+        await new Promise(r=>setTimeout(r,100));
+      }
+      if(!started)throw Error("Shared cloud sync is not ready.");
+      const flags={};
+      (Array.isArray(linehaulTasks)?linehaulTasks:[]).forEach(task=>{
+        const id=String(task?.id||"").trim();
+        if(id&&!task.blank)flags[id]=task.arrivingInTime===true;
+      });
+      const version=Date.now()+Math.floor(Math.random()*1000);
+      await put(P.linehaulArrivalFlags,new Blob([JSON.stringify(flags)],{type:"application/json"}),"application/json");
+      await setState({linehaul_version:version});
+      seen.linehaul=version;
+      await announce("linehaul","arrival-flags");
+      status("Linehaul arrival selections synced");
+      return true;
+    };
+    arrivalFlagsWriteQueue=arrivalFlagsWriteQueue.catch(()=>{}).then(run);
+    return arrivalFlagsWriteQueue;
   };
 
   async function uploadShared(kind,file){
@@ -10212,8 +10348,9 @@ window.DASHBOARD_V2_READY = true;
         localStorage.removeItem("badoc_linehaul_pending_version_v1");
       }catch{}
     }
-    // Delete payload, then atomically publish the durable CLEAR state.
+    // Delete payload and its per-task arrival choices, then publish the CLEAR state.
     await remove(path);
+    if(kind==="linehaul")await remove(P.linehaulArrivalFlags);
     await setState({
       [field+"_exists"]:false,
       [field+"_version"]:version
