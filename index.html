@@ -11046,7 +11046,22 @@ window.updateOperationProgress=function(){
   const cfr1ParseTime=v=>{
     const raw=String(v??"").trim();
     if(!raw)return null;
-    let d=new Date(raw.replace(" ","T"));
+    // Parse ISO / native spreadsheet timestamps first. Do not replace the first
+    // space blindly: display-formatted values such as "10/12/2026, 03:59 PM"
+    // would otherwise be changed into an invalid string.
+    let d=new Date(raw);
+    if(Number.isNaN(d.getTime())){
+      // Handle M/D/YYYY, h:mm AM/PM (including an optional comma) as local time.
+      const us=raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+      if(us){
+        let y=Number(us[3]); if(y<100)y+=2000;
+        let hour=Number(us[4]);
+        const meridiem=String(us[7]||"").toUpperCase();
+        if(meridiem==="AM"&&hour===12)hour=0;
+        else if(meridiem==="PM"&&hour<12)hour+=12;
+        d=new Date(y,Number(us[1])-1,Number(us[2]),hour,Number(us[5]),Number(us[6]||0),0);
+      }
+    }
     if(Number.isNaN(d.getTime())){
       // Handle common CSV timestamps without a timezone explicitly as local time.
       const m=raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -11075,15 +11090,32 @@ window.updateOperationProgress=function(){
 
   let cfr1Ledger=null;
   try{cfr1Ledger=JSON.parse(localStorage.getItem(CFR1_KEY)||"null");}catch(e){cfr1Ledger=null;}
-  if(!cfr1Ledger || cfr1Ledger.date!==cfr1DateKey || !Array.isArray(cfr1Ledger.records)){
-    cfr1Ledger={date:cfr1DateKey,cutoff:cfr1Four.getTime(),records:{}};
+  // Keep an existing object-backed ledger. The previous check required
+  // records to be an Array even though this code stores records as an object;
+  // that recreated the ledger on every refresh and prevented the 7 AM freeze.
+  const cfr1HasStoredRecords=!!(
+    cfr1Ledger && cfr1Ledger.date===cfr1DateKey &&
+    cfr1Ledger.records && typeof cfr1Ledger.records==="object"
+  );
+  if(!cfr1HasStoredRecords){
+    cfr1Ledger={date:cfr1DateKey,cutoff:cfr1Four.getTime(),records:{},frozen:false};
   }else if(Array.isArray(cfr1Ledger.records)){
     const o={}; cfr1Ledger.records.forEach(x=>{if(x?.key)o[x.key]=x}); cfr1Ledger.records=o;
+  }
+  // HARD DAILY FREEZE: once this date reaches 7:00 AM, persist the lock in
+  // localStorage. Unlike a clock-only check, the lock survives app refreshes
+  // and system-clock changes. The eligible record set and its scanned states
+  // remain fixed for the rest of the day; exception removals are still live.
+  if(cfr1Now>=cfr1Seven && cfr1Ledger.frozen!==true){
+    cfr1Ledger.frozen=true;
+    cfr1Ledger.frozenAt=cfr1Seven.getTime();
   }
 
   // Read every currently available upload.
   // Standard CFR1 eligibility remains Current Station = BADOC HUB with a
-  // Current Station Received Time at or before today's 4:00 AM cutoff.
+  // Current Station Received Time at or before today's 4:00 AM cutoff. This is
+  // a timestamp cutoff, NOT a same-calendar-day filter: yesterday/older records
+  // are eligible whenever their Received Time is on or before today's 4:00 AM.
   // Additional CFR1 TOTAL eligibility:
   //   1) SOC_LHTransported at CAGAYAN DC
   //   2) SOC TRANSPORTED with Destination Station = BADOC HUB
@@ -11093,9 +11125,9 @@ window.updateOperationProgress=function(){
   // bypasses the town filter and is TOTAL-only, not scanned.
   // All rules use the same 4:00 AM cutoff.
   // Once admitted, the eligibility timestamp is retained permanently for
-  // today's CFR1 cycle. New eligibility is frozen at 7:00 AM; status changes
-  // for already-admitted parcels may still update SCANNED/UNSCANNED, while
-  // live exceptions can always remove a parcel from CFR1.
+  // today's CFR1 cycle. At 7:00 AM, the whole day's ledger (including the
+  // SCANNED/UNSCANNED state) is hard-frozen; live exceptions can still remove
+  // a parcel from CFR1.
   const cfr1AllowedTowns=new Set([
     ...(Array.isArray(towns?.badoc)?towns.badoc:[]),
     ...(Array.isArray(towns?.pinili)?towns.pinili:[])
@@ -11118,53 +11150,52 @@ window.updateOperationProgress=function(){
     if(!prev || x.btime>prev.btime || (x.btime===prev.btime && x.ri>prev.ri)) latestByKey.set(key,x);
   });
 
-  // First pass: discover eligible CFR1 parcels from all available uploads.
-  // Late-upload recovery: do not use upload/batch time to reject a parcel.
-  // Eligibility is determined by the actual Current Station Received Time
-  // (at or before 4:00 AM) plus the existing station, status, and town rules.
-  // The 7:00 AM freeze remains the normal operational cutoff, but rows
-  // uploaded later can backfill parcels whose source received time qualifies.
+  // First pass: discover eligible CFR1 parcels only while the daily ledger
+  // is not frozen. After 7:00 AM, later uploads cannot add new parcel IDs.
+  // Standard BADOC HUB and CAGAYAN DC transported-town rules require a valid
+  // Current Station Received Time at or before 4:00 AM, including older dates.
+  // EXCEPTION: any transported parcel currently at CAGAYAN DC and destined
+  // for BADOC HUB qualifies without a Received Time or 4:00 AM cutoff.
   cfr1Rows.forEach(x=>{
+    if(cfr1Ledger.frozen===true || cfr1Now>=cfr1Seven)return;
     const r=x.r,key=cfr1Key(r); if(!key || cfr1IsExempt(r))return;
     const station=norm(r?.["Current Station"]||"");
     const status=cfr1Status(r);
+    const isTransported= status.includes("TRANSPORTED");
+    const transportedToBadocEligible=
+      isTransported && station==="CAGAYAN DC" && destination(r)==="BADOC HUB";
     const cfr1Town=cfr1TownOf(r);
-    if(!cfr1Town || !cfr1AllowedTowns.has(cfr1Town))return;
-    const rt=cfr1ReceivedTime(r); if(!rt || rt>cfr1Four)return;
+    const townEligible=!!cfr1Town && cfr1AllowedTowns.has(cfr1Town);
+    if(!transportedToBadocEligible && !townEligible)return;
+    const rt=cfr1ReceivedTime(r);
+    if(!transportedToBadocEligible && (!rt || rt>cfr1Four))return;
     const standardEligible=station==="BADOC HUB";
     const lhTransportedTotalEligible=station==="CAGAYAN DC" && status==="SOC LHTRANSPORTED";
-    // Special CFR1 TOTAL eligibility: SOC TRANSPORTED currently at CAGAYAN DC
-    // and destined for BADOC HUB. This special population is NOT restricted
-    // by the Badoc/Pinili town list.
-    const socTransportedToBadocEligible=
-      status==="SOC TRANSPORTED" &&
-      station==="CAGAYAN DC" &&
-      destination(r)==="BADOC HUB";
-    const town= cfr1TownOf(r);
-    const townEligible=cfr1AllowedTowns.has(town);
-    if(!socTransportedToBadocEligible &&
-       ((!standardEligible && !lhTransportedTotalEligible) || !townEligible))return;
+    if(!transportedToBadocEligible && ((!standardEligible && !lhTransportedTotalEligible) || !townEligible))return;
     const prev=cfr1Ledger.records[key];
-    if(!prev || !Number.isFinite(Number(prev.receivedMs)) || rt.getTime()<Number(prev.receivedMs)){
+    const rtMs=rt?rt.getTime():null;
+    const prevHasRt=!!(prev && prev.receivedMs!==null && prev.receivedMs!==undefined && prev.receivedMs!=="" && Number.isFinite(Number(prev.receivedMs)));
+    const shouldWrite=!prev || (!prevHasRt && rtMs!==null) || (rtMs!==null && prevHasRt && rtMs<Number(prev.receivedMs));
+    if(shouldWrite){
       cfr1Ledger.records[key]={
         key,
         orderId:String(r?.["Order ID"]??"").trim(),
         tn:String(spxTN(r)??"").trim(),
         town:String(r?.["Town Name"]??r?.["Town"]??"").trim(),
-        receivedMs:rt.getTime(),
+        receivedMs:rtMs,
         latestBatchTime:x.btime,
         latestRowTime:x.btime,
         status:String(statusTo(r)||r?.["Status"]||"").trim(),
         scannedTime:cfr1IsScannedStatus(r)?cfr1PickUpTime(r):"",
-        noTownFilter:!!socTransportedToBadocEligible
+        noTownFilter:!!transportedToBadocEligible
       };
     }
   });
 
-  // Second pass: update existing CFR1 parcels from later uploads.  This is
-  // what moves the SAME Order ID from UNSCANNED to SCANNED without replacing
-  // the original 4:00 AM eligibility record.
-  Object.keys(cfr1Ledger.records).forEach(key=>{
+  // Second pass: before 7:00 AM, refresh the status of already-admitted
+  // parcels. Once frozen, do not let later uploads change the frozen SCANNED /
+  // UNSCANNED split. Live exception removals are applied separately below.
+  if(cfr1Ledger.frozen!==true) Object.keys(cfr1Ledger.records).forEach(key=>{
     const rec=cfr1Ledger.records[key];
     const latest=latestByKey.get(key);
     if(latest){
@@ -11181,8 +11212,8 @@ window.updateOperationProgress=function(){
         }
         const latestStation=norm(r?.["Current Station"]||"");
         const latestStatus=cfr1Status(r);
-        rec.noTownFilter=(
-          latestStatus==="SOC TRANSPORTED" &&
+        rec.noTownFilter=!!rec.noTownFilter || (
+          latestStatus.includes("TRANSPORTED") &&
           latestStation==="CAGAYAN DC" &&
           destination(r)==="BADOC HUB"
         );
@@ -11212,15 +11243,15 @@ window.updateOperationProgress=function(){
         orderId:rec.orderId||rec.tn||"",
         town:rec.town||"",
         status:rawStatus,
-        receivedTime:Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):"",
+        receivedTime:rec.receivedMs!==null && rec.receivedMs!==undefined && rec.receivedMs!=="" && Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):"",
         scannedTime:rec.scannedTime||""
       });
-    }else if(norm(rawStatus)==="LMHUB RECEIVED" || norm(rawStatus)==="SOC LHTRANSPORTED"){
+    }else if(norm(rawStatus)==="LMHUB RECEIVED" || norm(rawStatus).includes("TRANSPORTED")){
       cfr1UnscannedRows.push({
         orderId:rec.orderId||rec.tn||"",
         town:rec.town||"",
         status:rawStatus,
-        receivedTime:Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):""
+        receivedTime:rec.receivedMs!==null && rec.receivedMs!==undefined && rec.receivedMs!=="" && Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):""
       });
     }
   });
@@ -13169,7 +13200,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     table.className="cfr1-detail-table";
     const thead=document.createElement("thead");
     const hr=document.createElement("tr");
-    const headers=active==="scanned"?["ORDER ID","TOWN","STATUS","RECEIVED TIME","SCANNED TIME"]:["ORDER ID","TOWN","STATUS"];
+    const headers=active==="scanned"?["ORDER ID","TOWN","STATUS","RECEIVED TIME","SCANNED TIME"]:["ORDER ID","TOWN","STATUS","RECEIVED TIME"];
     headers.forEach(label=>{
       const th=document.createElement("th"); th.textContent=label; hr.appendChild(th);
     });
@@ -13181,8 +13212,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       const td2=document.createElement("td"); td2.textContent=item.town||"—";
       const td3=document.createElement("td"); td3.textContent=item.status||"—";
       tr.append(td1,td2,td3);
+      const td4=document.createElement("td"); td4.textContent=item.receivedTime||"—"; tr.appendChild(td4);
       if(active==="scanned"){
-        const td4=document.createElement("td"); td4.textContent=item.receivedTime||"—"; tr.appendChild(td4);
         const td5=document.createElement("td"); td5.textContent=item.scannedTime||"—"; tr.appendChild(td5);
       }
       tbody.appendChild(tr);
