@@ -1457,6 +1457,11 @@ window.DASHBOARD_V2 = {
   font-weight:950;
   margin-top:8px;
 }
+/* KPI achievement status colors from live Google Sheet values. */
+.v3-kpi-card.kpi-status-below-b{background:linear-gradient(135deg,rgba(220,38,38,.16),rgba(220,38,38,.05))!important;border:1px solid rgba(220,38,38,.72)!important;color:var(--c-ff8888-text,#b91c1c)!important;}
+.v3-kpi-card.kpi-status-b{background:linear-gradient(135deg,rgba(249,115,22,.17),rgba(249,115,22,.05))!important;border:1px solid rgba(249,115,22,.78)!important;color:var(--c-ffb45c-text,#c2410c)!important;}
+.v3-kpi-card.kpi-status-a{background:linear-gradient(135deg,rgba(22,163,74,.17),rgba(22,163,74,.05))!important;border:1px solid rgba(22,163,74,.78)!important;color:var(--c-69e6a1-text,#15803d)!important;}
+.v3-kpi-card.kpi-status-below-b .kpi-target-row>div,.v3-kpi-card.kpi-status-b .kpi-target-row>div,.v3-kpi-card.kpi-status-a .kpi-target-row>div{background:rgba(127,127,127,.08)!important;}
 .v3-kpi-card{
   position:relative;
   overflow:hidden;
@@ -5282,6 +5287,34 @@ html[data-theme="dark"] #badocSpxBridgeInstallModal .badoc-bridge-close-x{color:
 html[data-theme="dark"] #linehaul .lh-arrival-all-control{background:#101a25;border-color:#344454;color:#edf3f8;}html[data-theme="dark"] #linehaul .lh-arrival-all-control label{color:#edf3f8;}html[data-theme="dark"] #linehaul .lh-arrival-all-note{color:#9eafbf;}
 </style>
 
+
+<style id="v-kpi-light-mode-status-colors-final">
+/* Strong, clearly differentiated KPI status colors in Light Mode */
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b{
+  background:linear-gradient(135deg,#fee2e2 0%,#fecaca 100%)!important;
+  border:1px solid #dc2626!important;color:#7f1d1d!important;
+  box-shadow:inset 0 0 0 1px rgba(220,38,38,.10)!important;
+}
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-b{
+  background:linear-gradient(135deg,#ffedd5 0%,#fed7aa 100%)!important;
+  border:1px solid #f97316!important;color:#7c2d12!important;
+  box-shadow:inset 0 0 0 1px rgba(249,115,22,.10)!important;
+}
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-a{
+  background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%)!important;
+  border:1px solid #16a34a!important;color:#14532d!important;
+  box-shadow:inset 0 0 0 1px rgba(22,163,74,.10)!important;
+}
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row>div,
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row>div,
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row>div{
+  background:rgba(255,255,255,.72)!important;border:1px solid rgba(15,23,42,.08)!important;
+}
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row span{color:#991b1b!important;opacity:1!important}
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row span{color:#9a3412!important;opacity:1!important}
+body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row span{color:#166534!important;opacity:1!important}
+</style>
+
 </head>
 <body data-app-version="6.0" data-app-version="5.0">
 
@@ -6030,7 +6063,85 @@ UPLOAD TO PARCEL COUNT</div>
     const themeObserver = new MutationObserver(syncReceivedCheckingTheme);
     themeObserver.observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
   } catch (err) {
-    frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="font:14px Arial;padding:24px;color:#b91c1c">Received Checking could not load. Refresh the app and try again.</body>';
+    frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="font:14px Arial;padding:24px;color:#b91c1c">Received Checking could not load. Refresh the app and try again.
+<style id="kpi-light-mode-achievement-colors-fix">
+/* Keep KPI achievement colors distinct and readable in Light Mode. */
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b{
+  background:linear-gradient(135deg,#fee2e2 0%,#fff1f2 100%)!important;
+  border:1px solid #dc2626!important;
+  color:#7f1d1d!important;
+  box-shadow:0 3px 10px rgba(127,29,29,.10)!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b{
+  background:linear-gradient(135deg,#ffedd5 0%,#fff7ed 100%)!important;
+  border:1px solid #f97316!important;
+  color:#7c2d12!important;
+  box-shadow:0 3px 10px rgba(124,45,18,.10)!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a{
+  background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%)!important;
+  border:1px solid #16a34a!important;
+  color:#14532d!important;
+  box-shadow:0 3px 10px rgba(20,83,45,.10)!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b h3,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-actual,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row span,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row strong,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b h3,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-actual,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row span,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row strong,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a h3,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-actual,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row span,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row strong{
+  color:inherit!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row>div{background:rgba(220,38,38,.08)!important;border:1px solid rgba(220,38,38,.15)!important}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row>div{background:rgba(249,115,22,.09)!important;border:1px solid rgba(249,115,22,.18)!important}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row>div{background:rgba(22,163,74,.08)!important;border:1px solid rgba(22,163,74,.16)!important}
+</style>
+
+
+<style id="kpi-status-colors-dark-mode-fix">
+/* Keep the stronger pastel status palette in Light Mode, but use deep tinted cards in Dark Mode. */
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b{
+  background:linear-gradient(145deg,#351719 0%,#211012 100%)!important;
+  border-color:#8f3035!important;
+  color:#ffe4e6!important;
+  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
+}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b{
+  background:linear-gradient(145deg,#38230f 0%,#24170b 100%)!important;
+  border-color:#9a5a1b!important;
+  color:#ffedd5!important;
+  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
+}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a{
+  background:linear-gradient(145deg,#103322 0%,#0b2117 100%)!important;
+  border-color:#26784a!important;
+  color:#dcfce7!important;
+  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
+}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b h3,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-actual,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row span,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row strong{color:#fecaca!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b h3,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-actual,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row span,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row strong{color:#fed7aa!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a h3,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-actual,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row span,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row strong{color:#bbf7d0!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row>div{background:rgba(220,38,38,.13)!important;border:1px solid rgba(248,113,113,.22)!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row>div{background:rgba(249,115,22,.13)!important;border:1px solid rgba(251,146,60,.24)!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row>div{background:rgba(22,163,74,.13)!important;border:1px solid rgba(74,222,128,.22)!important;}
+</style>
+
+</body>';
     console.error('Received Checking embedded page failed to initialize:', err);
   }
 })();
@@ -8179,7 +8290,7 @@ async function loadLiveKPI(){
   const norm=v=>String(v??"").trim().toLowerCase().replace(/\s+/g," ");
 
   const groups=[
-    ["COST METRICS",["Fleet Productivity (Points)","Backroom Productivity","3WH MTD Headcount","4WH MTD Headcount","4WH Bulky %"]],
+    ["COST METRICS",["Fleet Productivity (Points)","Backroom Productivity","New Rider Utilization %","4WH MTD Headcount","4WH Bulky %"]],
     ["LEAD TIME METRICS",["Clear Floor Rate (FM + LM (ex. Sunday) + RTS + NSS)","Clear Floor Rate (CFR1 - Early Dispatch)","Clear Floor Rate (LM - Sunday)","Success Rate (LM + RTS + NSS)","Loss Rate"]],
     ["BUYER & SELLER EXPERIENCE METRICS",["FM No Successful Pickup","FM Partial Pickup","LM POD Tier Performance","LM Onhold Validation"]],
     ["HUB COMPLIANCE & FRAUD METRICS",["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points","Hub BSC Additional Points"]]
@@ -8296,7 +8407,7 @@ async function loadLiveKPI(){
         const x=(rows[j]||[]).map(norm);
         if(x.some(v=>v.includes("fleet productivity")) ||
            x.some(v=>v.includes("backroom productivity")) ||
-           x.some(v=>v.includes("3wh mtd headcount"))){
+           x.some(v=>v.includes("new rider utilization"))){
           metricHeader=j;
           break;
         }
@@ -8331,6 +8442,11 @@ async function loadLiveKPI(){
     if(simpleMetrics.includes(name)){
       return {actual:data[start]??"",target:data[start+1]??"",targetB:"",targetA:"",weight:data[start+2]??""};
     }
+    // New Rider Utilization % has no B+ target in the source Google Sheet.
+    // Its columns are Actual, Target to hit A+, and Weight.
+    if(name==="New Rider Utilization %"){
+      return {actual:data[start]??"",target:"",targetB:"",targetA:data[start+1]??"",weight:data[start+2]??""};
+    }
     return {actual:data[start]??"",target:"",targetB:data[start+1]??"",targetA:data[start+2]??"",weight:data[start+3]??""};
   };
 
@@ -8351,8 +8467,11 @@ async function loadLiveKPI(){
       if(actual===null)return;
       total++;
       if(b===null)return;
-      if(a!==null&&actual>=a)on++;
-      else if(actual>=b)near++;
+      // 4WH MTD Headcount is a lower-is-better metric: a smaller actual
+      // headcount earns the higher grade, unlike productivity/achievement metrics.
+      const lowerIsBetter=["4WH MTD Headcount","Loss Rate","FM No Successful Pickup","FM Partial Pickup"].includes(name);
+      if(a!==null && (lowerIsBetter ? actual<=a : actual>=a))on++;
+      else if(lowerIsBetter ? actual<=b : actual>=b)near++;
       else below++;
     }));
     return {on,near,below,total};
@@ -8404,10 +8523,37 @@ async function loadLiveKPI(){
           `<div class="kpi-target-row">`+
           (simple
             ? `<div><span>Target</span><strong>${esc(v.target||"—")}</strong></div>`
-            : `<div><span>Target to hit B+</span><strong>${esc(v.targetB||"—")}</strong></div>`+
-              `<div><span>Target to hit A+</span><strong>${esc(v.targetA||"—")}</strong></div>`)+
+            : name==="New Rider Utilization %"
+              ? `<div><span>Target to hit A+</span><strong>${esc(v.targetA||"—")}</strong></div>`
+              : `<div><span>Target to hit B+</span><strong>${esc(v.targetB||"—")}</strong></div>`+
+                `<div><span>Target to hit A+</span><strong>${esc(v.targetA||"—")}</strong></div>`)+
           `<div><span>Weight</span><strong>${esc(v.weight||"—")}</strong></div>`+
           `</div>`;
+        // Color every card when the source provides usable target data.
+        // Metrics with B+/A+ thresholds use red/orange/green bands. Metrics
+        // with a single Target use green when the target is met and red when
+        // missed. For loss/failed/partial pickup rates, lower is better.
+        const actualNum=numeric(v.actual), targetNum=numeric(v.target);
+        const bNum=numeric(v.targetB), aNum=numeric(v.targetA);
+        const lowerIsBetter=["4WH MTD Headcount","Loss Rate","FM No Successful Pickup","FM Partial Pickup"].includes(name);
+        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;
+        if(actualNum!==null){
+          if(aNum!==null || bNum!==null){
+            if(aNum!==null && meets(actualNum,aNum)) card.classList.add("kpi-status-a");
+            else if(bNum!==null && meets(actualNum,bNum)) card.classList.add("kpi-status-b");
+            else if(aNum!==null || bNum!==null) card.classList.add("kpi-status-below-b");
+          }else if(targetNum!==null){
+            if(meets(actualNum,targetNum)){
+              card.classList.add("kpi-status-a");
+            }else{
+              // Single-target metrics: orange when performance is within 5% of target,
+              // red when it is more than 5% away. For a zero target, avoid division by zero.
+              const gap=Math.abs(actualNum-targetNum);
+              const nearTarget=targetNum!==0 && gap/Math.abs(targetNum)<=0.05;
+              card.classList.add(nearTarget?"kpi-status-b":"kpi-status-below-b");
+            }
+          }
+        }
         grid.appendChild(card);
       });
       content.appendChild(cat);
@@ -15120,6 +15266,44 @@ html[data-theme="dark"] #receivedCheckingBridgeInstallModal .rc-bridge-note{back
   });
 })();
 </script>
+
+
+<style id="kpi-status-colors-dark-mode-fix">
+/* Keep the stronger pastel status palette in Light Mode, but use deep tinted cards in Dark Mode. */
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b{
+  background:linear-gradient(145deg,#351719 0%,#211012 100%)!important;
+  border-color:#8f3035!important;
+  color:#ffe4e6!important;
+  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
+}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b{
+  background:linear-gradient(145deg,#38230f 0%,#24170b 100%)!important;
+  border-color:#9a5a1b!important;
+  color:#ffedd5!important;
+  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
+}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a{
+  background:linear-gradient(145deg,#103322 0%,#0b2117 100%)!important;
+  border-color:#26784a!important;
+  color:#dcfce7!important;
+  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
+}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b h3,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-actual,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row span,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row strong{color:#fecaca!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b h3,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-actual,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row span,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row strong{color:#fed7aa!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a h3,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-actual,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row span,
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row strong{color:#bbf7d0!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row>div{background:rgba(220,38,38,.13)!important;border:1px solid rgba(248,113,113,.22)!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row>div{background:rgba(249,115,22,.13)!important;border:1px solid rgba(251,146,60,.24)!important;}
+html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row>div{background:rgba(22,163,74,.13)!important;border:1px solid rgba(74,222,128,.22)!important;}
+</style>
 
 </body>
 
