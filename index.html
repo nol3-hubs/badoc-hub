@@ -6063,85 +6063,7 @@ UPLOAD TO PARCEL COUNT</div>
     const themeObserver = new MutationObserver(syncReceivedCheckingTheme);
     themeObserver.observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
   } catch (err) {
-    frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="font:14px Arial;padding:24px;color:#b91c1c">Received Checking could not load. Refresh the app and try again.
-<style id="kpi-light-mode-achievement-colors-fix">
-/* Keep KPI achievement colors distinct and readable in Light Mode. */
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b{
-  background:linear-gradient(135deg,#fee2e2 0%,#fff1f2 100%)!important;
-  border:1px solid #dc2626!important;
-  color:#7f1d1d!important;
-  box-shadow:0 3px 10px rgba(127,29,29,.10)!important;
-}
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b{
-  background:linear-gradient(135deg,#ffedd5 0%,#fff7ed 100%)!important;
-  border:1px solid #f97316!important;
-  color:#7c2d12!important;
-  box-shadow:0 3px 10px rgba(124,45,18,.10)!important;
-}
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a{
-  background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%)!important;
-  border:1px solid #16a34a!important;
-  color:#14532d!important;
-  box-shadow:0 3px 10px rgba(20,83,45,.10)!important;
-}
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b h3,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-actual,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row span,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row strong,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b h3,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-actual,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row span,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row strong,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a h3,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-actual,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row span,
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row strong{
-  color:inherit!important;
-}
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row>div{background:rgba(220,38,38,.08)!important;border:1px solid rgba(220,38,38,.15)!important}
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row>div{background:rgba(249,115,22,.09)!important;border:1px solid rgba(249,115,22,.18)!important}
-html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row>div{background:rgba(22,163,74,.08)!important;border:1px solid rgba(22,163,74,.16)!important}
-</style>
-
-
-<style id="kpi-status-colors-dark-mode-fix">
-/* Keep the stronger pastel status palette in Light Mode, but use deep tinted cards in Dark Mode. */
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b{
-  background:linear-gradient(145deg,#351719 0%,#211012 100%)!important;
-  border-color:#8f3035!important;
-  color:#ffe4e6!important;
-  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
-}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b{
-  background:linear-gradient(145deg,#38230f 0%,#24170b 100%)!important;
-  border-color:#9a5a1b!important;
-  color:#ffedd5!important;
-  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
-}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a{
-  background:linear-gradient(145deg,#103322 0%,#0b2117 100%)!important;
-  border-color:#26784a!important;
-  color:#dcfce7!important;
-  box-shadow:0 7px 20px rgba(0,0,0,.32)!important;
-}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b h3,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-actual,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row span,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row strong{color:#fecaca!important;}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b h3,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-actual,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row span,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row strong{color:#fed7aa!important;}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a h3,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-actual,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row span,
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row strong{color:#bbf7d0!important;}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b .kpi-target-row>div{background:rgba(220,38,38,.13)!important;border:1px solid rgba(248,113,113,.22)!important;}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-row>div{background:rgba(249,115,22,.13)!important;border:1px solid rgba(251,146,60,.24)!important;}
-html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row>div{background:rgba(22,163,74,.13)!important;border:1px solid rgba(74,222,128,.22)!important;}
-</style>
-
-</body>';
+    frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="font:14px Arial;padding:24px;color:#b91c1c">Received Checking could not load. Refresh the app and try again.</body>';
     console.error('Received Checking embedded page failed to initialize:', err);
   }
 })();
@@ -15301,6 +15223,44 @@ html[data-theme="dark"] #receivedCheckingBridgeInstallModal .rc-bridge-note{back
 </script>
 
 
+<style id="kpi-light-mode-achievement-colors-fix">
+/* Keep KPI achievement colors distinct and readable in Light Mode. */
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b{
+  background:linear-gradient(135deg,#fee2e2 0%,#fff1f2 100%)!important;
+  border:1px solid #dc2626!important;
+  color:#7f1d1d!important;
+  box-shadow:0 3px 10px rgba(127,29,29,.10)!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b{
+  background:linear-gradient(135deg,#ffedd5 0%,#fff7ed 100%)!important;
+  border:1px solid #f97316!important;
+  color:#7c2d12!important;
+  box-shadow:0 3px 10px rgba(124,45,18,.10)!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a{
+  background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%)!important;
+  border:1px solid #16a34a!important;
+  color:#14532d!important;
+  box-shadow:0 3px 10px rgba(20,83,45,.10)!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b h3,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-actual,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row span,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row strong,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b h3,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-actual,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row span,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row strong,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a h3,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-actual,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row span,
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row strong{
+  color:inherit!important;
+}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-below-b .kpi-target-row>div{background:rgba(220,38,38,.08)!important;border:1px solid rgba(220,38,38,.15)!important}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-b .kpi-target-row>div{background:rgba(249,115,22,.09)!important;border:1px solid rgba(249,115,22,.18)!important}
+html[data-theme="light"] #kpi .v3-kpi-card.kpi-status-a .kpi-target-row>div{background:rgba(22,163,74,.08)!important;border:1px solid rgba(22,163,74,.16)!important}
+</style>
 <style id="kpi-status-colors-dark-mode-fix">
 /* Keep the stronger pastel status palette in Light Mode, but use deep tinted cards in Dark Mode. */
 html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-below-b{
