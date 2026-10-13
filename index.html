@@ -1304,6 +1304,8 @@ window.BADOC_SHARED_CONFIG = {
   url: "https://qxmfkpctbaiahgerrkuo.supabase.co",
   key: "sb_publishable_hpKmEjEVlUvY6SxN-4aEYQ_Ih3yyjsQ"
 };
+/* Daily History Google Sheets Web App URL. This stays blank until its Apps Script is deployed. */
+window.BADOC_DAILY_HISTORY_GSHEET_URL = "https://script.google.com/a/macros/spxexpress.com/s/AKfycbxRMaXmJA_Du7wrSqDUmt2xMflAzLa7YpPCY5n74XQod1lApgXPjOJul2nJy_ld4eawWA/exec";
 </script>
 <style>
 #kpiLiveSheet .kpi-category-title{padding:12px 14px;background:linear-gradient(90deg,var(--c-071923-bg),var(--c-05090d-bg))!important;border-left:4px solid var(--electric-blue)!important;color:var(--c-eaf8ff-text)!important;font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase}
@@ -10782,6 +10784,8 @@ window.updateOperationProgress=function(){
     return tn?"TN:"+tn:"";
   };
   const cfr1Status=r=>norm(statusTo(r));
+  // Pick Up Time is the source of truth for the first scanned time.
+  const cfr1PickUpTime=r=>String(r?.["Pick Up Time"]??r?.["Pick up time"]??r?.["PICK UP TIME"]??"").trim();
   // SOC_LHTransported is part of the CFR1 TOTAL when it is at CAGAYAN DC;
   // it is NOT a scanned status.
   const cfr1IsScannedStatus=r=>["DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD"].includes(cfr1Status(r));
@@ -10806,7 +10810,9 @@ window.updateOperationProgress=function(){
   // bypasses the town filter and is TOTAL-only, not scanned.
   // All rules use the same 4:00 AM cutoff.
   // Once admitted, the eligibility timestamp is retained permanently for
-  // today's CFR1 cycle.
+  // today's CFR1 cycle. New eligibility is frozen at 7:00 AM; status changes
+  // for already-admitted parcels may still update SCANNED/UNSCANNED, while
+  // live exceptions can always remove a parcel from CFR1.
   const cfr1AllowedTowns=new Set([
     ...(Array.isArray(towns?.badoc)?towns.badoc:[]),
     ...(Array.isArray(towns?.pinili)?towns.pinili:[])
@@ -10829,7 +10835,12 @@ window.updateOperationProgress=function(){
     if(!prev || x.btime>prev.btime || (x.btime===prev.btime && x.ri>prev.ri)) latestByKey.set(key,x);
   });
 
-  // First pass: discover newly eligible CFR1 parcels from any upload.
+  // First pass: discover eligible CFR1 parcels from all available uploads.
+  // Late-upload recovery: do not use upload/batch time to reject a parcel.
+  // Eligibility is determined by the actual Current Station Received Time
+  // (at or before 4:00 AM) plus the existing station, status, and town rules.
+  // The 7:00 AM freeze remains the normal operational cutoff, but rows
+  // uploaded later can backfill parcels whose source received time qualifies.
   cfr1Rows.forEach(x=>{
     const r=x.r,key=cfr1Key(r); if(!key || cfr1IsExempt(r))return;
     const station=norm(r?.["Current Station"]||"");
@@ -10861,6 +10872,7 @@ window.updateOperationProgress=function(){
         latestBatchTime:x.btime,
         latestRowTime:x.btime,
         status:String(statusTo(r)||r?.["Status"]||"").trim(),
+        scannedTime:cfr1IsScannedStatus(r)?cfr1PickUpTime(r):"",
         noTownFilter:!!socTransportedToBadocEligible
       };
     }
@@ -10879,6 +10891,11 @@ window.updateOperationProgress=function(){
         rec.tn=String(spxTN(r)??rec.tn??"").trim();
         rec.town=String(r?.["Town Name"]??r?.["Town"]??rec.town??"").trim();
         rec.status=String(statusTo(r)||r?.["Status"]||r?.["Parcel Status"]||r?.["Current Status"]||"").trim();
+        // Capture Pick Up Time only once, when the parcel is first observed
+        // in a scanned status. Later status updates must not overwrite it.
+        if(!String(rec.scannedTime||"").trim() && cfr1IsScannedStatus(r)){
+          rec.scannedTime=cfr1PickUpTime(r);
+        }
         const latestStation=norm(r?.["Current Station"]||"");
         const latestStatus=cfr1Status(r);
         rec.noTownFilter=(
@@ -10897,7 +10914,9 @@ window.updateOperationProgress=function(){
   Object.values(cfr1Ledger.records).forEach(rec=>{
     const key=rec.key;
     const latest=latestByKey.get(key)?.r;
-    if(latest && cfr1IsExempt(latest))return;
+    // Exceptions remain live even after 7:00 AM: adding a parcel to the
+    // exception list removes it from CFR1 totals/details immediately.
+    if(cfr1IsExempt(latest||rec))return;
     const latestTown=cfr1TownOf(latest||rec);
     const specialNoTownFilter=!!rec.noTownFilter;
     if(!specialNoTownFilter && (!latestTown || !cfr1AllowedTowns.has(latestTown)))return;
@@ -10906,9 +10925,20 @@ window.updateOperationProgress=function(){
     cfr1Total++;
     if(scanned){
       cfr1Scanned++;
-      cfr1ScannedRows.push({orderId:rec.orderId||rec.tn||"",town:rec.town||"",status:rawStatus});
+      cfr1ScannedRows.push({
+        orderId:rec.orderId||rec.tn||"",
+        town:rec.town||"",
+        status:rawStatus,
+        receivedTime:Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):"",
+        scannedTime:rec.scannedTime||""
+      });
     }else if(norm(rawStatus)==="LMHUB RECEIVED" || norm(rawStatus)==="SOC LHTRANSPORTED"){
-      cfr1UnscannedRows.push({orderId:rec.orderId||rec.tn||"",town:rec.town||"",status:rawStatus});
+      cfr1UnscannedRows.push({
+        orderId:rec.orderId||rec.tn||"",
+        town:rec.town||"",
+        status:rawStatus,
+        receivedTime:Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):""
+      });
     }
   });
   window.__badocCfr1Details={
@@ -12856,7 +12886,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     table.className="cfr1-detail-table";
     const thead=document.createElement("thead");
     const hr=document.createElement("tr");
-    ["ORDER ID","TOWN","STATUS"].forEach(label=>{
+    const headers=active==="scanned"?["ORDER ID","TOWN","STATUS","RECEIVED TIME","SCANNED TIME"]:["ORDER ID","TOWN","STATUS"];
+    headers.forEach(label=>{
       const th=document.createElement("th"); th.textContent=label; hr.appendChild(th);
     });
     thead.appendChild(hr); table.appendChild(thead);
@@ -12866,7 +12897,12 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       const td1=document.createElement("td"); td1.textContent=item.orderId||"—";
       const td2=document.createElement("td"); td2.textContent=item.town||"—";
       const td3=document.createElement("td"); td3.textContent=item.status||"—";
-      tr.append(td1,td2,td3); tbody.appendChild(tr);
+      tr.append(td1,td2,td3);
+      if(active==="scanned"){
+        const td4=document.createElement("td"); td4.textContent=item.receivedTime||"—"; tr.appendChild(td4);
+        const td5=document.createElement("td"); td5.textContent=item.scannedTime||"—"; tr.appendChild(td5);
+      }
+      tbody.appendChild(tr);
     });
     table.appendChild(tbody); body.appendChild(table);
   }
@@ -12884,8 +12920,22 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     }
     const data=window.__badocCfr1Details||{scanned:[],unscanned:[]};
     const rows=[
-      ...(Array.isArray(data.scanned)?data.scanned:[]).map(r=>({group:"SCANNED",orderId:r.orderId||"",town:r.town||"",status:r.status||""})),
-      ...(Array.isArray(data.unscanned)?data.unscanned:[]).map(r=>({group:"UNSCANNED",orderId:r.orderId||"",town:r.town||"",status:r.status||""}))
+      ...(Array.isArray(data.scanned)?data.scanned:[]).map(r=>({
+        group:"SCANNED",
+        orderId:r.orderId||"",
+        town:r.town||"",
+        status:r.status||"",
+        receivedTime:r.receivedTime||"",
+        scannedTime:r.scannedTime||""
+      })),
+      ...(Array.isArray(data.unscanned)?data.unscanned:[]).map(r=>({
+        group:"UNSCANNED",
+        orderId:r.orderId||"",
+        town:r.town||"",
+        status:r.status||"",
+        receivedTime:r.receivedTime||"",
+        scannedTime:r.scannedTime||""
+      }))
     ];
     const originalText=btn.textContent;
     btn.disabled=true; btn.textContent="Exporting…";
@@ -13520,6 +13570,20 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 .daily-history-clickable{cursor:pointer;transition:transform .12s ease,border-color .12s ease}.daily-history-clickable:hover{transform:translateY(-1px);border-color:var(--c-ffffff47-border)}
 .badoc-detail-overlay{position:fixed;inset:0;background:var(--c-000000ad-bg);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px}.badoc-detail-modal{width:min(760px,96vw);max-height:88vh;background:var(--c-080c11-bg);border:1px solid var(--c-2c3947-border);border-radius:14px;box-shadow:0 24px 70px var(--c-000000a6-shadow);overflow:hidden;display:flex;flex-direction:column}.badoc-detail-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--c-24303b-border)}.badoc-detail-head h3{margin:0;font-size:16px}.badoc-detail-close{border:0;background:transparent;color:inherit;font-size:24px;cursor:pointer;line-height:1}.badoc-detail-body{padding:12px 16px;overflow:auto}.badoc-detail-count{font-size:12px;opacity:var(--op-72);margin-bottom:10px}.badoc-detail-table{width:100%;border-collapse:collapse;font-size:12px}.badoc-detail-table th,.badoc-detail-table td{padding:8px;border-bottom:1px solid var(--c-202a34-border);text-align:left;vertical-align:top}.badoc-detail-table th{font-size:10px;opacity:var(--op-65);text-transform:uppercase}.badoc-detail-empty{padding:20px;text-align:center;opacity:var(--op-65)}
 </style>
+<style id="badoc-daily-history-cfr1">
+.daily-history-cfr1-table-wrap{width:100%;overflow:auto;margin:8px 0 14px;border:1px solid var(--c-24303b-border);border-radius:8px}
+.daily-history-cfr1-table{width:100%;border-collapse:collapse;min-width:520px;font-size:12px}
+.daily-history-cfr1-table th,.daily-history-cfr1-table td{padding:8px 10px;border-bottom:1px solid var(--c-24303b-border);text-align:left;vertical-align:top;white-space:nowrap}
+.daily-history-cfr1-table th{position:sticky;top:0;background:var(--c-101821-bg);color:var(--c-9fc6d9-text);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.daily-history-cfr1-table tr:last-child td{border-bottom:0}
+.daily-history-cfr1-subtitle{font-size:12px;font-weight:800;letter-spacing:.04em;margin:14px 0 6px}
+.daily-history-cfr1-empty{padding:12px;border:1px dashed var(--c-344454-border);border-radius:8px;color:var(--c-8fa0ad-text);font-size:12px}
+.daily-history-cfr1-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 12px}
+.daily-history-copy-ids-btn{border:1px solid var(--c-2d6f9f-border,#2d6f9f);background:var(--c-17365d-bg,#17365d);color:#fff;border-radius:7px;padding:9px 13px;font-size:12px;font-weight:800;cursor:pointer;min-height:36px}
+.daily-history-copy-ids-btn:hover:not(:disabled){filter:brightness(1.12)}
+.daily-history-copy-ids-btn:disabled{opacity:.5;cursor:not-allowed}
+.daily-history-copy-ids-hint{font-size:11px;color:var(--c-71808c-text)}
+</style>
 <style id="badoc-v259-smooth-scrolling">
 html{scroll-behavior:smooth}
 body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
@@ -13536,7 +13600,7 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
 
   const BUCKET="exported-files";
   const PREFIX="daily-history/";
-  const SNAPSHOT_VERSION="v225";
+  const SNAPSHOT_VERSION="v226";
   let historyClient=null;
 
   function cfg(){
@@ -13611,6 +13675,18 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
   }
   function buildSnapshot(date){
     const rows=typeof getParcelCountRows==="function"?getParcelCountRows():[];
+    const liveCfr1=window.__badocCfr1Details||{};
+    const cfr1HistoryScanned=Array.isArray(liveCfr1.scanned)?liveCfr1.scanned.map(r=>({
+      orderId:clean(r?.orderId||""),town:clean(r?.town||""),status:clean(r?.status||""),
+      receivedTime:clean(r?.receivedTime||""),scannedTime:clean(r?.scannedTime||"")
+    })):[];
+    const cfr1HistoryUnscanned=Array.isArray(liveCfr1.unscanned)?liveCfr1.unscanned.map(r=>({
+      orderId:clean(r?.orderId||""),town:clean(r?.town||""),status:clean(r?.status||""),
+      receivedTime:clean(r?.receivedTime||""),scannedTime:""
+    })):[];
+    const cfr1HistoryScannedCount=Math.max(0,n(liveCfr1.scannedCount??cfr1HistoryScanned.length));
+    const cfr1HistoryTotalCount=Math.max(cfr1HistoryScannedCount,n(liveCfr1.totalCount??(cfr1HistoryScanned.length+cfr1HistoryUnscanned.length)));
+    const cfr1HistoryUnscannedCount=Math.max(0,cfr1HistoryTotalCount-cfr1HistoryScannedCount);
     const mis=Array.isArray(current?.mis)?current.mis:[];
     const incomingEnabled=typeof parcelIncomingEnabled==="function"&&parcelIncomingEnabled();
     const incoming= incomingEnabled&&typeof getParcelIncomingLinehaul==="function"
@@ -13696,7 +13772,8 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
         onHold:"Google Sheet Column F matched against uploaded Parcel Count SPX TNs",
         riderPositions:"Current Town Counts rider selections/positions",
         misrouted:"Current Parcel Count misrouted rows",
-        exemptions:"Current exception/exemption tracking list"
+        exemptions:"Current exception/exemption tracking list",
+        cfr1:"Current CFR1 ledger and scanned/unscanned details, including source Received Time and first Scanned Time"
       },
       metrics:{
         totalVolume:eodDispatched,
@@ -13710,7 +13787,17 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
         flexiRiders:eodFleetFlexi,
         totalRiders:eodTotalRiders,
         misrouted:mis.length,
-        exemptions:Array.isArray(exceptionTrackingNumbers)?exceptionTrackingNumbers.length:0
+        exemptions:Array.isArray(exceptionTrackingNumbers)?exceptionTrackingNumbers.length:0,
+        cfr1Total:cfr1HistoryTotalCount,
+        cfr1Scanned:cfr1HistoryScannedCount,
+        cfr1Unscanned:cfr1HistoryUnscannedCount
+      },
+      cfr1:{
+        totalCount:cfr1HistoryTotalCount,
+        scannedCount:cfr1HistoryScannedCount,
+        unscannedCount:cfr1HistoryUnscannedCount,
+        scanned:cfr1HistoryScanned,
+        unscanned:cfr1HistoryUnscanned
       },
       eodLeaderboard,
       misroutedDetails:mis.map(r=>({
@@ -13748,13 +13835,107 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     };
   }
 
+  function googleSheetsUrl(){
+    return clean(window.BADOC_DAILY_HISTORY_GSHEET_URL||"");
+  }
+  function googleSheetsConfigured(){
+    return /^https:\/\/script\.google\.com\/(?:macros\/s\/[^/]+\/exec|a\/macros\/[^/]+\/s\/[^/]+\/exec)(?:\?.*)?$/i.test(googleSheetsUrl());
+  }
+  function googleSheetsBridgeRequest(action, payload={}){
+    const endpoint=googleSheetsUrl();
+    if(!googleSheetsConfigured())return Promise.reject(new Error("Daily History Google Sheets is not connected. Deploy the Daily History Apps Script and set BADOC_DAILY_HISTORY_GSHEET_URL."));
+    return new Promise((resolve,reject)=>{
+      const requestId="dh_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2);
+      const frame=document.createElement("iframe");
+      frame.name="badocDailyHistoryBridge_"+requestId;
+      frame.id="badocDailyHistoryBridge_"+requestId;
+      frame.title="Daily History storage bridge";
+      frame.setAttribute("aria-hidden","true");
+      frame.style.cssText="position:fixed;width:1px;height:1px;border:0;left:-10000px;top:-10000px;opacity:0;pointer-events:none";
+      let done=false;
+      let form=null;
+      let timer=null;
+      const cleanup=()=>{
+        if(done)return;
+        done=true;
+        if(timer)clearTimeout(timer);
+        window.removeEventListener("message",onMessage);
+        if(frame.parentNode)frame.parentNode.removeChild(frame);
+        if(form&&form.parentNode)form.parentNode.removeChild(form);
+      };
+      const finish=(error,data)=>{
+        if(done)return;
+        cleanup();
+        if(error)reject(error);
+        else if(!data||data.ok!==true)reject(new Error(data&&data.error?String(data.error):"Google Sheets request failed."));
+        else resolve(data);
+      };
+      const onMessage=(event)=>{
+        // Apps Script HtmlService adds a sandboxed inner iframe. Its postMessage
+        // source may therefore be a nested frame rather than frame.contentWindow.
+        // Accept only Google-hosted/opaque sandbox origins plus our unguessable
+        // per-request ID and dedicated message channel.
+        const origin=String(event.origin||"");
+        let allowedOrigin=(origin==="null");
+        try{
+          const host=new URL(origin).hostname.toLowerCase();
+          allowedOrigin=allowedOrigin||host==="script.google.com"||host==="script.googleusercontent.com"||host.endsWith(".googleusercontent.com");
+        }catch(e){}
+        if(!allowedOrigin)return;
+        const data=event.data;
+        if(!data||data.channel!=="BADOC_DAILY_HISTORY_GSHEET"||data.requestId!==requestId)return;
+        finish(null,data.payload);
+      };
+      window.addEventListener("message",onMessage);
+      timer=setTimeout(()=>finish(new Error("Timed out waiting for Google Sheets. Check that the latest Apps Script version is deployed and accessible to your account.")),30000);
+      document.body.appendChild(frame);
+      if(action==="save"){
+        if(!payload.snapshot||!payload.snapshot.date){finish(new Error("Daily History snapshot is missing its date."));return;}
+        form=document.createElement("form");
+        form.method="POST";
+        form.action=endpoint;
+        form.target=frame.name;
+        form.enctype="application/x-www-form-urlencoded";
+        form.acceptCharset="UTF-8";
+        form.style.display="none";
+        const parentOrigin=location.protocol==="file:"?"null":location.origin;
+        const fields={bridge:"1",bridgeAction:"save",requestId,parentOrigin,snapshotJson:JSON.stringify(payload.snapshot)};
+        Object.keys(fields).forEach(name=>{
+          const input=document.createElement("input");
+          input.type="hidden";input.name=name;input.value=fields[name];form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        try{form.submit()}catch(e){finish(new Error("Could not submit the Google Sheets save form: "+String(e&&e.message||e)));}
+      }else{
+        const parentOrigin=location.protocol==="file:"?"null":location.origin;
+        const params=new URLSearchParams({bridge:"1",bridgeAction:String(action),requestId,parentOrigin,_:String(Date.now())});
+        if(payload.date)params.set("date",String(payload.date));
+        const separator=endpoint.includes("?")?"&":"?";
+        frame.src=endpoint+separator+params.toString();
+      }
+    });
+  }
+  async function googleSheetsRequest(action, payload={}){
+    return await googleSheetsBridgeRequest(action,payload);
+  }
+  async function legacyListSnapshots(){
+    const r=await storage().list(PREFIX,{limit:1000,sortBy:{column:"name",order:"desc"}});
+    if(r.error)throw new Error(r.error.message||"Legacy Daily History list failed");
+    return (r.data||[]).map(x=>clean(x.name)).filter(x=>/^\d{4}-\d{2}-\d{2}\.json$/.test(x)).map(x=>x.slice(0,-5)).sort().reverse();
+  }
   async function saveSnapshot(snapshot,markFinal=false){
-    const path=PREFIX+snapshot.date+".json";
-    const blob=new Blob([JSON.stringify(snapshot)],{type:"application/json"});
-    const r=await storage().upload(path,blob,{contentType:"application/json",upsert:true,cacheControl:"0"});
-    if(r.error)throw new Error(r.error.message||"Daily History cloud save failed");
-    // Only the final pre-reset capture marks the date as finalized. Live
-    // captures must never prevent the 2 AM reset from running.
+    if(googleSheetsConfigured()){
+      await googleSheetsRequest("save",{snapshot});
+      console.log("BADOC Daily History saved to Google Sheets:",snapshot.date);
+    }else{
+      // Transitional fallback: keep the current app working until the Apps Script URL is added.
+      const path=PREFIX+snapshot.date+".json";
+      const blob=new Blob([JSON.stringify(snapshot)],{type:"application/json"});
+      const r=await storage().upload(path,blob,{contentType:"application/json",upsert:true,cacheControl:"0"});
+      if(r.error)throw new Error(r.error.message||"Daily History cloud save failed");
+      console.warn("Daily History Google Sheets endpoint is not configured yet; this snapshot was saved to Supabase.");
+    }
+    // Only the final pre-reset capture marks the date as finalized. Live captures must never prevent reset.
     if(markFinal){
       try{localStorage.setItem("badoc_daily_history_last_saved_v210",snapshot.date)}catch(e){}
     }
@@ -13762,13 +13943,22 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
   }
 
   async function listSnapshots(){
-    const r=await storage().list(PREFIX,{limit:1000,sortBy:{column:"name",order:"desc"}});
-    if(r.error)throw new Error(r.error.message||"Daily History list failed");
-    return (r.data||[]).map(x=>clean(x.name)).filter(x=>/^\d{4}-\d{2}-\d{2}\.json$/.test(x)).map(x=>x.slice(0,-5)).sort().reverse();
+    if(!googleSheetsConfigured())return legacyListSnapshots();
+    const result=await googleSheetsRequest("list");
+    const sheetDates=Array.isArray(result.dates)?result.dates:[];
+    // Older snapshots remain readable from the existing Supabase folder. New captures are saved only to Sheets.
+    let legacyDates=[];
+    try{legacyDates=await legacyListSnapshots()}catch(e){console.warn("Legacy Daily History dates could not be listed:",e)}
+    return [...new Set([...sheetDates,...legacyDates].map(clean).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)))].sort().reverse();
   }
 
   async function loadSnapshot(date){
     if(!date)return null;
+    if(googleSheetsConfigured()){
+      const result=await googleSheetsRequest("load",{date});
+      if(result.found&&result.snapshot)return result.snapshot;
+      // A date not yet migrated may still exist in the old Supabase archive.
+    }
     const r=await storage().download(PREFIX+date+".json");
     if(r.error){
       if(/not found|404|object not found/i.test(r.error.message||""))return null;
@@ -13799,7 +13989,8 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     // Performance would immediately collapse again on the next refresh.
     const openState={
       riderSection:!!host.querySelector(".daily-history-rider-section")?.open,
-      leaderboardSection:!!host.querySelector(".daily-history-leaderboard-section")?.open
+      leaderboardSection:!!host.querySelector(".daily-history-leaderboard-section")?.open,
+      cfr1Section:!!host.querySelector(".daily-history-cfr1-section")?.open
     };
 
     if(!s){
@@ -13810,6 +14001,18 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     window.__badocDailyHistoryCurrentSnapshot=s;
     const m=s.metrics||{};
     const groups=Array.isArray(s.riderPerformance)?s.riderPerformance:[];
+    const cfr1=s.cfr1&&typeof s.cfr1==="object"?s.cfr1:null;
+    const cfr1Scanned=Array.isArray(cfr1?.scanned)?cfr1.scanned:[];
+    const cfr1Unscanned=Array.isArray(cfr1?.unscanned)?cfr1.unscanned:[];
+    const cfr1Total=n(cfr1?.totalCount??m.cfr1Total);
+    const cfr1ScannedCount=n(cfr1?.scannedCount??m.cfr1Scanned??cfr1Scanned.length);
+    const cfr1UnscannedCount=n(cfr1?.unscannedCount??m.cfr1Unscanned??Math.max(0,cfr1Total-cfr1ScannedCount));
+    const renderCfr1Table=(items,kind)=>{
+      if(!items.length)return '<div class="daily-history-cfr1-empty">No '+kind.toLowerCase()+' CFR1 parcel details saved for this date.</div>';
+      const scanned=kind==="SCANNED";
+      const headers=scanned?["Order ID","Town","Status","Received Time","Scanned Time"]:["Order ID","Town","Status","Received Time"];
+      return '<div class="daily-history-cfr1-table-wrap"><table class="daily-history-cfr1-table"><thead><tr>'+headers.map(h=>'<th>'+escH(h)+'</th>').join('')+'</tr></thead><tbody>'+items.map(r=>'<tr><td>'+escH(r.orderId||"—")+'</td><td>'+escH(r.town||"—")+'</td><td>'+escH(r.status||"—")+'</td><td>'+escH(r.receivedTime||"—")+'</td>'+(scanned?'<td>'+escH(r.scannedTime||"—")+'</td>':'')+'</tr>').join('')+'</tbody></table></div>';
+    };
     host.innerHTML=`
       <div class="daily-history-snapshot">
         <div class="daily-history-block">
@@ -13822,6 +14025,26 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
             ${metricCard("Success Rate %",n(m.successRate).toFixed(1)+"%")}
           </div>
         </div>
+        <div class="daily-history-block">
+          <div class="daily-history-block-title">CFR1 History</div>
+          <div class="daily-history-metrics">
+            ${metricCard("CFR1 Total",cfr1Total.toLocaleString())}
+            ${metricCard("CFR1 Scanned",cfr1ScannedCount.toLocaleString())}
+            ${metricCard("CFR1 Unscanned",cfr1UnscannedCount.toLocaleString())}
+          </div>
+          ${cfr1?'<div class="hint">CFR1 snapshot captured with this daily record.</div>':'<div class="hint">This saved historical snapshot predates CFR1 history capture. CFR1 details cannot be reconstructed for this date from the snapshot alone.</div>'}
+        </div>
+        <details class="daily-history-block daily-history-cfr1-section">
+          <summary class="daily-history-block-title">CFR1 Parcel Details</summary>
+          <div class="daily-history-cfr1-toolbar">
+            <button type="button" class="daily-history-copy-ids-btn" data-action="daily-history-copy-cfr1-ids" ${(!cfr1Scanned.length&&!cfr1Unscanned.length)?"disabled":""}>Copy All Order IDs</button>
+            <span class="daily-history-copy-ids-hint">Copies scanned and unscanned IDs, one per line.</span>
+          </div>
+          <div class="daily-history-cfr1-subtitle">SCANNED (${cfr1Scanned.length.toLocaleString()})</div>
+          ${renderCfr1Table(cfr1Scanned,"SCANNED")}
+          <div class="daily-history-cfr1-subtitle">UNSCANNED (${cfr1Unscanned.length.toLocaleString()})</div>
+          ${renderCfr1Table(cfr1Unscanned,"UNSCANNED")}
+        </details>
         <div class="daily-history-block">
           <div class="daily-history-operations">
             <div class="daily-history-metric daily-history-clickable" data-action="daily-history-misrouted" role="button" tabindex="0" aria-label="View misrouted parcels"><strong>${n(m.misrouted)}</strong><span>Misrouted</span></div>
@@ -13924,6 +14147,8 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     if(riderSection)riderSection.open=openState.riderSection;
     const leaderboardSection=host.querySelector(".daily-history-leaderboard-section");
     if(leaderboardSection)leaderboardSection.open=openState.leaderboardSection;
+    const cfr1Section=host.querySelector(".daily-history-cfr1-section");
+    if(cfr1Section)cfr1Section.open=openState.cfr1Section;
   }
 
   function todayDate(){
@@ -14098,6 +14323,59 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
   }
 
   document.addEventListener("click",e=>{
+    const copyCfr1Button=e.target?.closest?.('[data-action="daily-history-copy-cfr1-ids"]');
+    if(copyCfr1Button){
+      e.preventDefault();
+      e.stopPropagation();
+      if(copyCfr1Button.disabled)return;
+      const snap=window.__badocDailyHistoryCurrentSnapshot;
+      const savedCfr1=snap&&snap.cfr1&&typeof snap.cfr1==="object"?snap.cfr1:{};
+      const seen=new Set();
+      const ids=[];
+      [...(Array.isArray(savedCfr1.scanned)?savedCfr1.scanned:[]),...(Array.isArray(savedCfr1.unscanned)?savedCfr1.unscanned:[])].forEach(row=>{
+        const id=String(row&&row.orderId!==undefined?row.orderId:"").trim();
+        if(id && id!=="—" && !seen.has(id)){seen.add(id);ids.push(id);}
+      });
+      if(!ids.length){
+        const original=copyCfr1Button.dataset.originalLabel||copyCfr1Button.textContent;
+        copyCfr1Button.dataset.originalLabel=original;
+        copyCfr1Button.textContent="No Order IDs";
+        setTimeout(()=>{if(copyCfr1Button.isConnected)copyCfr1Button.textContent=original;},1800);
+        return;
+      }
+      const copyText=ids.join("\n");
+      const fallbackCopy=()=>{
+        const ta=document.createElement("textarea");
+        ta.value=copyText;
+        ta.setAttribute("readonly","");
+        ta.style.position="fixed";
+        ta.style.left="-9999px";
+        ta.style.top="0";
+        ta.style.opacity="0";
+        document.body.appendChild(ta);
+        ta.focus();ta.select();ta.setSelectionRange(0,ta.value.length);
+        let ok=false;
+        try{ok=document.execCommand("copy");}catch(err){}
+        ta.remove();
+        if(!ok)throw new Error("Clipboard access was blocked by the browser.");
+      };
+      const original=copyCfr1Button.dataset.originalLabel||copyCfr1Button.textContent;
+      copyCfr1Button.dataset.originalLabel=original;
+      (async()=>{
+        try{
+          if(navigator.clipboard&&typeof navigator.clipboard.writeText==="function"){
+            try{await navigator.clipboard.writeText(copyText);}
+            catch(err){fallbackCopy();}
+          }else fallbackCopy();
+          copyCfr1Button.textContent="Copied "+ids.length.toLocaleString()+" IDs";
+        }catch(err){
+          copyCfr1Button.textContent="Copy Failed";
+          console.warn("CFR1 Order ID copy failed:",err);
+        }
+        setTimeout(()=>{if(copyCfr1Button.isConnected)copyCfr1Button.textContent=original;},2200);
+      })();
+      return;
+    }
     const riderLink=e.target?.closest?.("[data-below90-rider]");
     if(riderLink){
       e.preventDefault();
@@ -14175,7 +14453,9 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
       }catch(e){
         console.warn("Daily History manual capture failed:",e);
         captureBtn.textContent="✕ Capture Failed";
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},1800);
+        const reason=String(e&&e.message||e||"Unknown error");
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},2200);
+        alert("Daily History capture failed:\n\n"+reason);
       }
     });
         setTimeout(()=>window.__badocRefreshDailyHistory?.(),700);
