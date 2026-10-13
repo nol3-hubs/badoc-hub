@@ -5517,7 +5517,7 @@ body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-r
           <button class="btn" id="undoUpload">Undo last upload</button>
         </div>
         <div class="parcel-spx-sync">
-          <button class="btn" id="syncParcelInboundFromSPX" type="button" title="Automatically export the selected inbound SPX statuses and load them into BADOC HUB">↻ Import Received / Transported / Transporting</button>
+          <button class="btn" id="syncParcelInboundFromSPX" type="button" title="Import Received, Transported, Transporting, SOC_LHPacked, and SOC_LHPacking statuses from SPX into BADOC HUB">↻ Import Received / Transported / Transporting / LH Packed &amp; Packing</button>
           <button class="btn" id="syncParcelDeliveryFromSPX" type="button" title="Export Delivering, Delivered and OnHold using Filtered Assigned for today, 00:00:00–23:59:59, then load into BADOC HUB">↻ Import Delivering / Delivered / On-Hold</button>
           <button class="btn" id="reconcileDeliveringViaBatchSearch" type="button" title="Recheck only parcels NOL3 currently counts as Delivering using SPX Batch Search, then preview verified status changes">↻ Recheck Delivering via Batch Search</button>
           <span id="parcelInboundSpxSyncStatus" class="hint" aria-live="polite"></span>
@@ -9352,7 +9352,7 @@ const BADOC_PAGE_SOURCE="BADOC_PAGE";
 
 // Persist independent last-success timestamps for the three Parcel Count SPX actions.
 const BADOC_PARCEL_SYNC_STAMPS = {
-  inbound: {key:"badoc_parcel_count_received_transported_last_sync_v69", element:"parcelInboundSpxSyncStatus", label:"Received / Transported", verb:"Last synced"},
+  inbound: {key:"badoc_parcel_count_received_transported_last_sync_v69", element:"parcelInboundSpxSyncStatus", label:"Received / Transported / LH Packed / Packing", verb:"Last synced"},
   delivery: {key:"badoc_parcel_count_delivery_status_last_sync_v69", element:"parcelDeliverySpxSyncStatus", label:"Delivering / Delivered / On-Hold", verb:"Last synced"},
   batch: {key:"badoc_parcel_count_delivering_batch_search_last_sync_v69", element:"deliveringBatchReconcileStatus", label:"Delivering Batch Search", verb:"Last checked"}
 };
@@ -9396,7 +9396,7 @@ async function beginParcelInboundSpxBridgeSync(){
   const btn=$("syncParcelInboundFromSPX");
   if(btn?.dataset.busy==="1")return;
   if(btn){btn.dataset.busy="1";btn.disabled=true;}
-  window.__badocOperationModalStart?.("Sync Received / Transported","Connecting to SPX and requesting the inbound export…");
+  window.__badocOperationModalStart?.("Sync Received / Transported / LH Packed / Packing","Connecting to SPX and requesting the inbound export, including SOC_LHPacked and SOC_LHPacking…");
   setParcelInboundSpxSyncStatus("Connecting to SPX…","working");
   postBadocSpxMessage("BADOC_START_PARCEL_INBOUND_SYNC");
 }
@@ -10870,6 +10870,8 @@ window.updateOperationProgress=function(){
     "LMHUBRECEIVED",
     "SOCLHTRANSPORTING",
     "SOCLHTRANSPORTED",
+    "SOCLHPACKED",
+    "SOCLHPACKING",
     "SOCPACKED",
     "SOCPACKING"
   ]);
