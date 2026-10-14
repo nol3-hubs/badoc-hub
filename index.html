@@ -11298,25 +11298,21 @@ window.updateOperationProgress=function(){
   };
   setText("opCfr1Scanned",window.__badocCfr1Details.scannedCount);
   setText("opCfr1Total",window.__badocCfr1Details.totalCount);
-  // ON-HOLD source for the operational card: ONLY live Google Sheet Column F.
-  // A parcel is On Hold when its SPX TN appears in the live GSheet Column F.
-  // The uploaded parcel status is NOT used to create On-Hold here.
+  // ON-HOLD KPI source of truth: Google Sheets Column F ONLY.
+  // The live sheet loader normalizes TNs into a Set, so duplicates are counted once.
+  // Do not intersect with today's uploaded parcel rows: unmatched sheet TNs still count.
   const liveHold=(window.__badocLiveHoldTNs instanceof Set)?window.__badocLiveHoldTNs:new Set();
   const holdKey=window.__badocHoldKey||normJoin;
-  let onHold=0;
-  const uploadedParcelRows=todayRows.filter(r=>!isExceptionRow(r));
-  uploadedParcelRows.forEach(r=>{
-    const tn=spxTN(r);
-    if(tn && liveHold.has(holdKey(tn))) onHold++;
-  });
+  const onHold=liveHold.size;
   counts.ONHOLD=onHold;
   setText("opOnHold",onHold);
 
   // Keep a diagnostic list of GSheet Column F TNs not present in the uploaded
-  // parcel population. This does not affect the On-Hold count.
+  // parcel population. This warning is informational only and never changes the KPI.
+  const uploadedParcelRows=todayRows.filter(r=>!isExceptionRow(r));
   const uploadedTNKeys=new Set(uploadedParcelRows.map(r=>holdKey(spxTN(r))).filter(Boolean));
   const rawHoldTNs=Array.isArray(window.__badocLiveHoldRawTNs)?window.__badocLiveHoldRawTNs:[];
-  window.__badocUnmatchedHoldTNs=rawHoldTNs.filter(v=>{const k=holdKey(v);return k&&!uploadedTNKeys.has(k);});
+  window.__badocUnmatchedHoldTNs=[...new Set(rawHoldTNs.map(v=>String(v??'').trim()).filter(v=>{const k=holdKey(v);return k&&!uploadedTNKeys.has(k);} ))];
 
   // Unscanned: Today's Volume minus Delivering, Delivered and On-Hold.
   const unscanned=Math.max(0,todayVolume-(counts.DELIVERING||0)-(counts.DELIVERED||0)-onHold);
