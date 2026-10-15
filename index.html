@@ -8195,7 +8195,8 @@ $("resetCfr1").onclick=async()=>{
   if(!confirm("Reset today's CFR1 ledger and shared count freeze?\n\nThis clears the shared CFR1 ledger for all devices. CFR1 will rebuild from parcel data available in this browser. It does NOT delete uploaded files, change parcel statuses, reset other KPIs, or change town settings."))return;
   try{
     await window.__badocCfr1CloudSync?.resetCloud?.();
-    localStorage.removeItem("badoc_cfr1_ledger_v5_cagayan_lh_total");
+    window.__badocCfr1LedgerMemory=null;
+    // Remove any legacy cache from older versions; current versions never write it.
   }catch(e){
     alert("CFR1 cloud reset failed. The local ledger was kept. Check cloud connectivity and try again.\n\n"+(e?.message||e));
     return;
@@ -9990,7 +9991,7 @@ window.DASHBOARD_V2_READY = true;
     );
     if(r.error)throw Error(r.error.message||"CFR1 cloud upload failed");
     lastCloudStamp=String(payload._cloudUpdatedAt);
-    try{localStorage.setItem(KEY,JSON.stringify(payload))}catch(e){}
+    window.__badocCfr1LedgerMemory=payload;
     const status=document.getElementById("cfr1CloudSyncStatus");
     if(status)status.textContent="CFR1 cloud synced";
   }
@@ -10012,7 +10013,7 @@ window.DASHBOARD_V2_READY = true;
     }catch(e){
       console.warn("CFR1 cloud sync failed:",e);
       const status=document.getElementById("cfr1CloudSyncStatus");
-      if(status)status.textContent="CFR1 cloud sync failed — local data retained";
+      if(status)status.textContent="CFR1 cloud sync failed — cloud not updated";
     }finally{busy=false}
   }
   async function poll(){
@@ -10021,15 +10022,15 @@ window.DASHBOARD_V2_READY = true;
     try{
       const cloud=await downloadLedger();
       if(!cloud||!cloud.date)return;
-      const local=JSON.parse(localStorage.getItem(KEY)||"null");
+      const memory=window.__badocCfr1LedgerMemory||null;
       const cloudStamp=String(cloud._cloudUpdatedAt||"");
       if(cloudStamp&&cloudStamp!==lastCloudStamp){
         lastCloudStamp=cloudStamp;
-        if(!local||local.date!==cloud.date||
-          Number(cloud._cloudUpdatedAt||0)>Number(local._cloudUpdatedAt||0)){
-          localStorage.setItem(KEY,JSON.stringify(cloud));
-          // Refresh the CFR1 view using the shared ledger and current local data.
-          if(local&&local.date===cloud.date&&cloud.date===new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0")+"-"+String(new Date().getDate()).padStart(2,"0")){
+        if(!memory||memory.date!==cloud.date||
+          Number(cloud._cloudUpdatedAt||0)>Number(memory._cloudUpdatedAt||0)){
+          window.__badocCfr1LedgerMemory=cloud;
+          // Refresh the CFR1 view when the shared ledger changes for today's date.
+          if(cloud.date===new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0")+"-"+String(new Date().getDate()).padStart(2,"0")){
             location.reload();
           }
         }
@@ -10037,7 +10038,25 @@ window.DASHBOARD_V2_READY = true;
     }catch(e){console.warn("CFR1 cloud poll failed:",e)}
     finally{busy=false}
   }
-  window.__badocCfr1CloudSync={publish};
+  async function resetCloud(){
+    // Serialize reset with any in-flight poll/publish so an older ledger is not
+    // accidentally uploaded while the shared object is being removed.
+    while(busy) await new Promise(resolve=>setTimeout(resolve,100));
+    busy=true;
+    const status=document.getElementById("cfr1CloudSyncStatus");
+    try{
+      const r=await getClient().storage.from("exported-files").remove([PATH]);
+      if(r.error)throw Error(r.error.message||"CFR1 cloud ledger deletion failed");
+      lastCloudStamp="";
+      window.__badocCfr1LedgerMemory=null;
+      if(status)status.textContent="CFR1 cloud ledger reset; rebuilding from this device's available parcel data";
+      return true;
+    }catch(e){
+      if(status)status.textContent="CFR1 cloud reset failed — existing cloud ledger retained";
+      throw e;
+    }finally{busy=false}
+  }
+  window.__badocCfr1CloudSync={publish,resetCloud};
   window.addEventListener("load",()=>{poll();setInterval(poll,15000)});
 })();
 </script>
@@ -11165,8 +11184,8 @@ window.updateOperationProgress=function(){
   // it is NOT a scanned status.
   const cfr1IsScannedStatus=r=>["DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD"].includes(cfr1Status(r));
 
-  let cfr1Ledger=null;
-  try{cfr1Ledger=JSON.parse(localStorage.getItem(CFR1_KEY)||"null");}catch(e){cfr1Ledger=null;}
+  // CFR1 ledger is memory-only on this device; shared persistence is cloud-only.
+  let cfr1Ledger=window.__badocCfr1LedgerMemory||null;
   // Keep an existing object-backed ledger. The previous check required
   // records to be an Array even though this code stores records as an object;
   // that recreated the ledger on every refresh and prevented the 7 AM freeze.
@@ -11345,10 +11364,11 @@ window.updateOperationProgress=function(){
       }
     }
   });
-  try{localStorage.setItem(CFR1_KEY,JSON.stringify(cfr1Ledger));}catch(e){console.warn("CFR1 ledger save failed",e)}
-  // Cloud-sync the daily CFR1 ledger separately from the uploaded parcel data.
-  // The object in Storage is authoritative across devices; localStorage remains
-  // the fast local cache. Do not sync the reset operation by deleting parcel data.
+  // Keep the latest CFR1 ledger in memory only. Supabase Storage is the sole
+  // persistent source for this ledger; no CFR1 ledger is written to localStorage.
+  window.__badocCfr1LedgerMemory=cfr1Ledger;
+  // Cloud-sync the daily CFR1 ledger separately from uploaded parcel data.
+  // Do not sync the reset operation by deleting parcel data.
   try{window.__badocCfr1CloudSync?.publish?.(CFR1_KEY,cfr1Ledger)}catch(e){console.warn("CFR1 cloud publish queue failed",e)}
 
   let cfr1Total=0,cfr1Scanned=0;
