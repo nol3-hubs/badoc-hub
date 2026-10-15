@@ -11187,6 +11187,20 @@ window.updateOperationProgress=function(){
     cfr1Ledger.frozen=false;
     delete cfr1Ledger.frozenAt;
   }
+  // Remove stale standard records left by the prior eligibility rule. This
+  // repairs today's ledger too, including already-frozen ledgers, while keeping
+  // the explicit transported-to-BADOC total-only exception.
+  Object.keys(cfr1Ledger.records||{}).forEach(key=>{
+    const rec=cfr1Ledger.records[key];
+    if(rec?.noTownFilter===true)return;
+    const ms=Number(rec?.receivedMs);
+    if(!Number.isFinite(ms)) { delete cfr1Ledger.records[key]; return; }
+    const d=new Date(ms);
+    const receivedToday=d.getFullYear()===cfr1Now.getFullYear() &&
+      d.getMonth()===cfr1Now.getMonth() && d.getDate()===cfr1Now.getDate();
+    if(!receivedToday || d>cfr1Four) delete cfr1Ledger.records[key];
+  });
+
   // Persist the 7:00 AM eligible-parcel membership snapshot. Current statuses
   // and scanned/unscanned classification continue updating after the cutoff.
   const cfr1FreezeLedger=()=>{
@@ -11220,9 +11234,9 @@ window.updateOperationProgress=function(){
 
   // Read every currently available upload.
   // Standard CFR1 eligibility remains Current Station = BADOC HUB with a
-  // Current Station Received Time at or before today's 4:00 AM cutoff. This is
-  // a timestamp cutoff, NOT a same-calendar-day filter: yesterday/older records
-  // are eligible whenever their Received Time is on or before today's 4:00 AM.
+  // Current Station Received Time dated TODAY and at or before today's 4:00 AM.
+  // Do not carry yesterday's delivered/received parcels into today's membership
+  // merely because their timestamp is earlier than today's 4:00 AM cutoff.
   // Additional CFR1 TOTAL eligibility:
   //   1) SOC_LHTransported at CAGAYAN DC
   //   2) SOC TRANSPORTED with Destination Station = BADOC HUB
@@ -11278,8 +11292,8 @@ window.updateOperationProgress=function(){
 
   // First pass: discover eligible CFR1 parcels only while the daily ledger
   // is not frozen. After 7:00 AM, later uploads cannot add new parcel IDs.
-  // Standard BADOC HUB and CAGAYAN DC transported-town rules require a valid
-  // Current Station Received Time at or before 4:00 AM, including older dates.
+  // Standard BADOC HUB and CAGAYAN DC SOC_LHTransported-town rules require a
+  // valid Current Station Received Time from today's calendar date at or before 4:00 AM.
   // EXCEPTION: any transported parcel currently at CAGAYAN DC and destined
   // for BADOC HUB qualifies without a Received Time or 4:00 AM cutoff.
   cfr1Rows.forEach(x=>{
@@ -11297,7 +11311,11 @@ window.updateOperationProgress=function(){
     const townEligible=!!cfr1Town && cfr1AllowedTowns.has(cfr1Town);
     if(!transportedToBadocEligible && !townEligible)return;
     const rt=cfr1ReceivedTime(r);
-    if(!transportedToBadocEligible && (!rt || rt>cfr1Four))return;
+    const receivedToday=!!rt &&
+      rt.getFullYear()===cfr1Now.getFullYear() &&
+      rt.getMonth()===cfr1Now.getMonth() &&
+      rt.getDate()===cfr1Now.getDate();
+    if(!transportedToBadocEligible && (!rt || !receivedToday || rt>cfr1Four))return;
     const standardEligible=station==="BADOC HUB";
     const lhTransportedTotalEligible=station==="CAGAYAN DC" && status==="SOC LHTRANSPORTED";
     if(!transportedToBadocEligible && ((!standardEligible && !lhTransportedTotalEligible) || !townEligible))return;
