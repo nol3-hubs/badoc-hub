@@ -13293,7 +13293,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   <div class="cfr1-detail-modal" role="dialog" aria-modal="true" aria-labelledby="cfr1DetailTitle">
     <div class="cfr1-detail-head">
       <strong id="cfr1DetailTitle">CFR1 Parcels</strong>
-      <button class="cfr1-detail-export" id="cfr1DetailExport" type="button">⬆ Export to Sheet</button>
+      
       <button class="cfr1-detail-close" id="cfr1DetailClose" type="button" aria-label="Close">×</button>
     </div>
     <div class="cfr1-detail-tabs">
@@ -13357,14 +13357,19 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   // See cfr1-export-apps-script.gs for the code to paste into the target Sheet.
   const CFR1_EXPORT_URL="https://script.google.com/a/macros/spxexpress.com/s/AKfycbyAatZngTjIXBBH9EP6XVEhMDtth0e4HgfmcsRQLj5B5oj3hOrouxy8f9XWfgyts5J4Eg/exec";
 
-  async function exportToSheet(){
+  async function exportToSheet(options={}){
+    const fromCapture=options&&options.fromCapture===true;
     const btn=byId("cfr1DetailExport");
-    if(!btn)return;
+    if(!fromCapture&&!btn)return {submitted:false,count:0};
     if(!CFR1_EXPORT_URL){
-      alert("Export isn't connected to a Google Sheet yet. Deploy the Apps Script Web App and give the URL to Claude to finish wiring this up.");
-      return;
+      const error=new Error("CFR1 export is not connected to a Google Sheet.");
+      if(!fromCapture)alert(error.message);
+      throw error;
     }
-    const data=window.__badocCfr1Details||{scanned:[],unscanned:[]};
+    const data=window.__badocCfr1Details;
+    if(!data||(!Array.isArray(data.scanned)&&!Array.isArray(data.unscanned))){
+      throw new Error("CFR1 parcel details are not available yet. Refresh the dashboard and try again.");
+    }
     const rows=[
       ...(Array.isArray(data.scanned)?data.scanned:[]).map(r=>({
         group:"SCANNED",
@@ -13383,17 +13388,15 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         scannedTime:r.scannedTime||""
       }))
     ];
-    const originalText=btn.textContent;
-    btn.disabled=true; btn.textContent="Exporting…";
+    if(!rows.length){
+      throw new Error("No CFR1 parcels are available to export. Nothing was sent to the sheet.");
+    }
+    const originalText=btn?btn.textContent:"";
+    if(btn){btn.disabled=true;btn.textContent="Exporting…";}
     try{
-      // A background fetch() is blocked by the browser when this app is
-      // opened as a local downloaded file (content:// origin) rather than
-      // served over http(s). A real <form> submission is treated as a plain
-      // navigation instead of a network/XHR call, so it isn't blocked --
-      // targeting a hidden iframe (instead of _blank) means it runs with
-      // nothing visibly opening. We can't read the cross-origin response
-      // (browser security), so "load fired" is treated as a best-effort
-      // success signal rather than a guaranteed one.
+      // Submit via a hidden form/iframe so it works from a downloaded HTML file.
+      // The cross-origin Apps Script response cannot be inspected by this page;
+      // this confirms submission, not that the remote sheet completed its write.
       let frame=document.getElementById("cfr1ExportFrame");
       if(!frame){
         frame=document.createElement("iframe");
@@ -13402,7 +13405,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         frame.style.display="none";
         document.body.appendChild(frame);
       }
-      frame.onload=()=>{ btn.textContent="✓ Export sent ("+rows.length+")"; };
+      if(btn)frame.onload=()=>{btn.textContent="✓ Export sent ("+rows.length+")";};
       const form=document.createElement("form");
       form.method="POST";
       form.action=CFR1_EXPORT_URL;
@@ -13416,14 +13419,19 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       document.body.appendChild(form);
       form.submit();
       document.body.removeChild(form);
+      return {submitted:true,count:rows.length,confirmationAvailable:false};
     }catch(e){
       console.warn("CFR1 export failed:",e);
-      btn.textContent="✕ Export Failed";
-      alert("Export error (please screenshot this):\n\n"+(e&&e.name?e.name+": ":"")+(e&&e.message?e.message:String(e)));
+      if(btn){btn.textContent="✕ Export Failed";}
+      if(!fromCapture)alert("Export error (please screenshot this):\n\n"+(e&&e.name?e.name+": ":"")+(e&&e.message?e.message:String(e)));
+      throw e;
+    }finally{
+      if(btn)setTimeout(()=>{btn.disabled=false;btn.textContent=originalText;},5000);
     }
-    setTimeout(()=>{btn.disabled=false; btn.textContent=originalText;},5000);
   }
 
+  // The Daily History Capture Now action reuses this exact CFR1 export path.
+  window.__badocExportCfr1ToSheet=()=>exportToSheet({fromCapture:true});
   function openDetails(){
     const overlay=byId("cfr1DetailOverlay");
     if(!overlay)return;
@@ -15074,26 +15082,33 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
       if(captureBtn.disabled)return;
       const old=captureBtn.textContent;
       captureBtn.disabled=true;
-      captureBtn.textContent="⬆ Capturing both…";
+      captureBtn.textContent="⬆ Capturing + Exporting CFR1…";
       const d=todayDate();
       const outcomes=await Promise.allSettled([
         (async()=>{if(typeof window.__badocCaptureDailyHistory!=="function")throw new Error("Original DailySnapshots capture function is unavailable.");return await window.__badocCaptureDailyHistory("manual",d);})(),
-        (async()=>{if(typeof window.__badocCaptureCfrSummary!=="function")throw new Error("CFR summary capture function is unavailable.");return await window.__badocCaptureCfrSummary(d);})()
+        (async()=>{if(typeof window.__badocCaptureCfrSummary!=="function")throw new Error("CFR summary capture function is unavailable.");return await window.__badocCaptureCfrSummary(d);})(),
+        (async()=>{if(typeof window.__badocExportCfr1ToSheet!=="function")throw new Error("CFR1 export function is unavailable.");return await window.__badocExportCfr1ToSheet();})()
       ]);
-      const original=outcomes[0],cfr=outcomes[1];
-      const originalOk=original.status==="fulfilled",cfrOk=cfr.status==="fulfilled";
-      const describe=(label,outcome)=>outcome.status==="fulfilled"?label+": saved":label+": FAILED — "+String(outcome.reason?.message||outcome.reason||"Unknown error");
-      if(originalOk&&cfrOk){
-        captureBtn.textContent="✓ Both Saved";
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},1700);
-      }else if(originalOk||cfrOk){
-        captureBtn.textContent=originalOk?"⚠ CFR Save Failed":"⚠ Snapshot Save Failed";
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},3000);
-        alert("Capture partly completed.\n\n"+describe("DailySnapshots",original)+"\n"+describe("CFR Daily Summary",cfr));
+      const original=outcomes[0],cfr=outcomes[1],cfr1=outcomes[2];
+      const originalOk=original.status==="fulfilled";
+      const cfrOk=cfr.status==="fulfilled";
+      const cfr1Ok=cfr1.status==="fulfilled";
+      const describe=(label,outcome,format)=>{
+        if(outcome.status!=="fulfilled")return label+": FAILED — "+String(outcome.reason?.message||outcome.reason||"Unknown error");
+        return label+": "+(format?format(outcome.value):"saved");
+      };
+      const resultsText=[
+        describe("DailySnapshots",original),
+        describe("CFR Daily Summary",cfr),
+        describe("CFR1 Export",cfr1,v=>"request submitted ("+(Number(v?.count)||0)+" parcels; Google Sheets completion cannot be confirmed by the browser)")
+      ].join("\n");
+      if(originalOk&&cfrOk&&cfr1Ok){
+        captureBtn.textContent="✓ Captured + CFR1 Sent";
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},2200);
       }else{
-        captureBtn.textContent="✕ Both Saves Failed";
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},3000);
-        alert("Both Capture saves failed.\n\n"+describe("DailySnapshots",original)+"\n"+describe("CFR Daily Summary",cfr));
+        captureBtn.textContent=(originalOk||cfrOk||cfr1Ok)?"⚠ Partly Completed":"✕ Capture Failed";
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},3500);
+        alert((originalOk||cfrOk||cfr1Ok?"Capture partly completed.":"Capture and export failed.")+"\n\n"+resultsText);
       }
     });
         setTimeout(()=>window.__badocRefreshDailyHistory?.(),700);
