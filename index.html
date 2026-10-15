@@ -5685,7 +5685,7 @@ body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-r
         <div style="display:flex;align-items:center;gap:8px">
           <input id="dailyHistoryDate" type="date" aria-label="Select Daily History date" title="Select Daily History date" style="flex:1;min-width:0">
           <button type="button" class="btn" id="dailyHistoryRefreshBtn" title="Refresh Daily History">↻ Refresh</button>
-      <button id="dailyHistoryCaptureBtn" type="button" class="btn">Save to Gsheet</button>
+      <button id="dailyHistoryCaptureBtn" type="button" class="btn">⬆ Capture Now</button>
         </div>
       </div>
     </div>
@@ -11251,10 +11251,23 @@ window.updateOperationProgress=function(){
     Array.isArray(b?.rows)?b.rows.map((r,i)=>({r,btime:Number(b?.time||0),ri:i})):[]
   );
   const latestByKey=new Map();
+  // Keep scanned history separately from the latest status. EOD data may
+  // replace a previously scanned status with LMHub_Received or
+  // Return_LMHub_Packed, but that must not undo the fact it was scanned.
+  const cfr1ScannedEvidenceByKey=new Map();
   cfr1Rows.forEach(x=>{
     const key=cfr1Key(x.r); if(!key)return;
     const prev=latestByKey.get(key);
     if(!prev || x.btime>prev.btime || (x.btime===prev.btime && x.ri>prev.ri)) latestByKey.set(key,x);
+    const pickupTime=cfr1PickUpTime(x.r);
+    if(cfr1IsScannedStatus(x.r) || pickupTime){
+      const prior=cfr1ScannedEvidenceByKey.get(key)||{};
+      cfr1ScannedEvidenceByKey.set(key,{
+        wasScanned:true,
+        // Preserve any recorded Pick Up Time from an earlier version/status.
+        scannedTime:prior.scannedTime || pickupTime || ""
+      });
+    }
   });
 
   // Snapshot whether this refresh is recovering an empty post-7 AM ledger.
@@ -11302,7 +11315,8 @@ window.updateOperationProgress=function(){
         latestBatchTime:x.btime,
         latestRowTime:x.btime,
         status:String(statusTo(r)||r?.["Status"]||"").trim(),
-        scannedTime:cfr1IsScannedStatus(r)?cfr1PickUpTime(r):"",
+        wasScanned:!!cfr1ScannedEvidenceByKey.get(key)?.wasScanned,
+        scannedTime:cfr1ScannedEvidenceByKey.get(key)?.scannedTime || (cfr1IsScannedStatus(r)?cfr1PickUpTime(r):""),
         noTownFilter:!!transportedToBadocEligible
       };
     }
@@ -11329,10 +11343,17 @@ window.updateOperationProgress=function(){
         rec.tn=String(spxTN(r)??rec.tn??"").trim();
         rec.town=String(r?.["Town Name"]??r?.["Town"]??rec.town??"").trim();
         rec.status=String(statusTo(r)||r?.["Status"]||r?.["Parcel Status"]||r?.["Current Status"]||"").trim();
-        // Capture Pick Up Time only once, when the parcel is first observed
-        // in a scanned status. Later status updates must not overwrite it.
-        if(!String(rec.scannedTime||"").trim() && cfr1IsScannedStatus(r)){
-          rec.scannedTime=cfr1PickUpTime(r);
+        // Scanned is a sticky historical fact: later EOD statuses do not undo it.
+        // A qualifying scanned status, a recorded Pick Up Time, or an earlier
+        // batch showing this TN as scanned is sufficient evidence.
+        const scanEvidence=cfr1ScannedEvidenceByKey.get(key);
+        if(cfr1IsScannedStatus(r) || cfr1PickUpTime(r) || scanEvidence?.wasScanned){
+          rec.wasScanned=true;
+        }
+        // Preserve the first available Pick Up Time; never overwrite it with a
+        // later EOD status that is no longer classified as a scanned status.
+        if(!String(rec.scannedTime||"").trim()){
+          rec.scannedTime=cfr1PickUpTime(r) || scanEvidence?.scannedTime || "";
         }
         const latestStation=norm(r?.["Current Station"]||"");
         const latestStatus=cfr1Status(r);
@@ -11365,7 +11386,9 @@ window.updateOperationProgress=function(){
     // Always show the latest synced status. The daily freeze is for count
     // membership only; it must not pin a parcel to its 7:00 AM status.
     const rawStatus=String(rec.status||"").trim();
-    const scanned=cfr1IsScannedStatus({Status:rawStatus});
+    // Latest status is displayed, but scanned classification remains true if
+    // the parcel was scanned earlier in the day or has a recorded Pick Up Time.
+    const scanned=rec.wasScanned===true || !!String(rec.scannedTime||"").trim() || cfr1IsScannedStatus({Status:rawStatus});
     cfr1Total++;
     if(scanned){
       cfr1Scanned++;
