@@ -11092,8 +11092,8 @@ window.updateOperationProgress=function(){
     cfr1Ledger.frozen=false;
     delete cfr1Ledger.frozenAt;
   }
-  // Freeze a complete snapshot of the CFR1 display state. Later parcel-status
-  // syncs may update the live dataset, but must not rewrite the CFR1 daily view.
+  // Persist the 7:00 AM eligible-parcel membership snapshot. Current statuses
+  // and scanned/unscanned classification continue updating after the cutoff.
   const cfr1FreezeLedger=()=>{
     Object.values(cfr1Ledger.records||{}).forEach(rec=>{
       if(!Object.prototype.hasOwnProperty.call(rec,"frozenStatus")) rec.frozenStatus=String(rec.status||"").trim();
@@ -11103,10 +11103,9 @@ window.updateOperationProgress=function(){
     cfr1Ledger.frozen=true;
     cfr1Ledger.frozenAt=cfr1Seven.getTime();
   };
-  // HARD DAILY FREEZE: once this date reaches 7:00 AM, persist the lock in
-  // localStorage. Unlike a clock-only check, the lock survives app refreshes
-  // and system-clock changes. The eligible record set and its scanned states
-  // remain fixed for the rest of the day; exception removals are still live.
+  // HARD DAILY COUNT FREEZE: once this date reaches 7:00 AM, persist the lock
+  // in localStorage. The eligible parcel ID set stays fixed for the day, while
+  // statuses and scanned/unscanned classification remain live.
   // Do not freeze an empty ledger. If today's list was missed (for example,
   // this HTML file was opened after 7 AM or local storage was reset), allow
   // CFR1 to recover eligible records from the parcel batches already available.
@@ -11138,9 +11137,9 @@ window.updateOperationProgress=function(){
   // bypasses the town filter and is TOTAL-only, not scanned.
   // All rules use the same 4:00 AM cutoff.
   // Once admitted, the eligibility timestamp is retained permanently for
-  // today's CFR1 cycle. At 7:00 AM, the whole day's ledger (including the
-  // SCANNED/UNSCANNED state) is hard-frozen; live exceptions can still remove
-  // a parcel from CFR1.
+  // today's CFR1 cycle. At 7:00 AM, only the daily eligible parcel ID set is
+  // frozen; latest statuses and SCANNED/UNSCANNED classification still update.
+  // Live exceptions can still remove a parcel from CFR1.
   const cfr1AllowedTowns=new Set([
     ...(Array.isArray(towns?.badoc)?towns.badoc:[]),
     ...(Array.isArray(towns?.pinili)?towns.pinili:[])
@@ -11221,10 +11220,11 @@ window.updateOperationProgress=function(){
     cfr1FreezeLedger();
   }
 
-  // Second pass: before 7:00 AM, refresh the status of already-admitted
-  // parcels. Once frozen, do not let later uploads change the frozen SCANNED /
-  // UNSCANNED split. Live exception removals are applied separately below.
-  if(cfr1Ledger.frozen!==true) Object.keys(cfr1Ledger.records).forEach(key=>{
+  // Second pass: the 7:00 AM freeze locks ONLY the eligible parcel ID set
+  // (the daily CFR1 total membership). Statuses remain live after 7:00 AM:
+  // later SPX imports must update each admitted parcel's current status and
+  // its SCANNED / UNSCANNED classification without adding new parcel IDs.
+  Object.keys(cfr1Ledger.records).forEach(key=>{
     const rec=cfr1Ledger.records[key];
     const latest=latestByKey.get(key);
     if(latest){
@@ -11263,8 +11263,10 @@ window.updateOperationProgress=function(){
     const latestTown=cfr1TownOf(latest||rec);
     const specialNoTownFilter=!!rec.noTownFilter;
     if(!specialNoTownFilter && (!latestTown || !cfr1AllowedTowns.has(latestTown)))return;
-    const rawStatus=String(cfr1Ledger.frozen===true && Object.prototype.hasOwnProperty.call(rec,"frozenStatus") ? rec.frozenStatus : (rec.status||"")).trim();
-    const scanned=cfr1Ledger.frozen===true && Object.prototype.hasOwnProperty.call(rec,"frozenScanned") ? rec.frozenScanned===true : cfr1IsScannedStatus({Status:rawStatus});
+    // Always show the latest synced status. The daily freeze is for count
+    // membership only; it must not pin a parcel to its 7:00 AM status.
+    const rawStatus=String(rec.status||"").trim();
+    const scanned=cfr1IsScannedStatus({Status:rawStatus});
     cfr1Total++;
     if(scanned){
       cfr1Scanned++;
@@ -11273,7 +11275,7 @@ window.updateOperationProgress=function(){
         town:rec.town||"",
         status:rawStatus,
         receivedTime:rec.receivedMs!==null && rec.receivedMs!==undefined && rec.receivedMs!=="" && Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):"",
-        scannedTime:(cfr1Ledger.frozen===true && Object.prototype.hasOwnProperty.call(rec,"frozenScannedTime") ? rec.frozenScannedTime : rec.scannedTime)||""
+        scannedTime:rec.scannedTime||""
       });
     }else{
       // Every parcel counted in cfr1Total must appear in exactly one tab.
@@ -16525,6 +16527,67 @@ html[data-theme="dark"] #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-targe
     bottom:0!important;
     width:42px!important;
     transform:translateX(-50%)!important;
+  }
+}
+</style>
+
+
+<style id="badoc-mobile-parcel-count-layout-fix">
+/* Restore readable, touch-friendly Parcel Count controls on phones. */
+@media (max-width: 700px) {
+  #dashboard .parcel-source-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  #dashboard .parcel-source-row > *,
+  #dashboard .upload-section,
+  #dashboard .exception-area {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  #dashboard .parcel-spx-sync {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  #dashboard .parcel-spx-sync .btn,
+  #dashboard #syncParcelInboundFromSPX,
+  #dashboard #syncParcelDeliveryFromSPX,
+  #dashboard #reconcileDeliveringViaBatchSearch {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 42px !important;
+    padding: 10px 12px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.3 !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
+  }
+  #dashboard #parcelInboundSpxSyncStatus,
+  #dashboard #parcelDeliverySpxSyncStatus,
+  #dashboard #deliveringBatchReconcileStatus {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+  #dashboard .upload-actions .btn {
+    width: 100% !important;
+    min-height: 42px !important;
   }
 }
 </style>
