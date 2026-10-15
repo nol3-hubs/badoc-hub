@@ -5938,8 +5938,8 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="clearData">Clear all data</button></div>
-    <div class="hint">Reset the current day's Clear Floor Rate peak only. Parcel data, CFR1, and other settings are not affected.</div>
+    <h2>Settings</h2><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Received Checking">
     <div class="received-checking-frame-shell">
@@ -8191,6 +8191,19 @@ $("exportValid").onclick=exportValidFiltered;$("exportMis").onclick=()=>current&
 $("addBadoc").onclick=()=>addTown("badoc");$("addPinili").onclick=()=>addTown("pinili");
 $("backup").onclick=()=>download("parcel-dashboard-backup.json",JSON.stringify({towns,batches},null,2),"application/json");
 $("restoreBtn").onclick=()=>$("restoreFile").click();$("restoreFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);towns=x.towns;batches=x.batches;current=batches[0]||null;saveTownSettings();render();alert("Backup restored.")}catch(err){alert("Invalid backup file.")}};r.readAsText(f)};
+$("resetCfr1").onclick=()=>{
+  if(!confirm("Reset today's CFR1 ledger and count freeze?\n\nCFR1 will rebuild its eligible parcel list from the parcel data currently available in this browser. The 7:00 AM count freeze will be recreated from that data. This does NOT delete uploaded files, change parcel statuses, reset other KPIs, or change town settings."))return;
+  try{
+    // Reset only the CFR1 daily ledger. Keep all parcel batches, exceptions,
+    // town settings, and other dashboard state untouched.
+    localStorage.removeItem("badoc_cfr1_ledger_v5_cagayan_lh_total");
+  }catch(e){
+    alert("Could not reset CFR1 in this browser. Check local storage permissions and try again.");
+    return;
+  }
+  alert("CFR1 ledger reset. The page will reload and rebuild today's eligible parcel list from the currently available parcel data.");
+  window.location.reload();
+};
 $("resetClearFloorRate").onclick=()=>{
   if(!confirm("Reset today's Clear Floor Rate to 0%?\n\nThis will only reset the regular CFR peak for the current day. It will not delete parcel data or reset CFR1."))return;
   try{
