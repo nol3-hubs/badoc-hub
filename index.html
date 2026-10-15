@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta name="badoc-main-app" content="v69">
+<meta name="badoc-main-app" content="v70-cfr-capture-dual-save">
 <style id="opacity-vars-dark-defaults">:root{--op-3:.3;--op-35:.35;--op-38:.38;--op-45:.45;--op-5:.5;--op-55:.55;--op-58:.58;--op-6:.6;--op-62:.62;--op-65:.65;--op-7:.7;--op-72:.72;--op-75:.75;--op-8:.8;--op-85:.85;--op-88:.88;--op-9:.9;}</style>
 <style id="opacity-vars-light-overrides">html[data-theme="light"]{--op-3:0.72;--op-35:0.74;--op-38:0.752;--op-45:0.78;--op-5:0.8;--op-55:0.82;--op-58:0.832;--op-6:0.84;--op-62:0.848;--op-65:0.86;--op-7:0.88;--op-72:0.888;--op-75:0.9;--op-8:0.92;--op-85:0.94;--op-88:0.952;--op-9:0.96;}</style>
 
@@ -14062,6 +14062,17 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     return historyClient;
   }
   function storage(){return client().storage.from(BUCKET)}
+  // Return an unambiguous ISO timestamp in Philippines time (UTC+08:00).
+  // Store it as text so the browser and Apps Script server timezone cannot shift it.
+  function phTimestamp(date=new Date()){
+    const parts=new Intl.DateTimeFormat("en-CA",{
+      timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit",
+      hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"
+    }).formatToParts(date);
+    const p={};
+    parts.forEach(part=>{if(part.type!=="literal")p[part.type]=part.value;});
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}+08:00`;
+  }
   function dayKey(d=new Date()){
     return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
   }
@@ -14207,7 +14218,7 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     return {
       version:SNAPSHOT_VERSION,
       date,
-      capturedAt:new Date().toISOString(),
+      capturedAt:phTimestamp(),
       captureReason:"pre-reset",
       source:{
         topTotals:"Daily Data > EOD Data (live Google Sheet): Dispatched/Delivered/Onhold/Redelivery/RTS, Fleet Summary, Delivery Performance %, Leaderboard",
@@ -14335,8 +14346,10 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
       window.addEventListener("message",onMessage);
       timer=setTimeout(()=>finish(new Error("Timed out waiting for Google Sheets. Check that the latest Apps Script version is deployed and accessible to your account.")),30000);
       document.body.appendChild(frame);
-      if(action==="save"){
-        if(!payload.snapshot||!payload.snapshot.date){finish(new Error("Daily History snapshot is missing its date."));return;}
+      const actionKey=String(action||"").toLowerCase();
+      if(actionKey==="save"||actionKey==="savecfrsummary"){
+        if(actionKey==="save"&&(!payload.snapshot||!payload.snapshot.date)){finish(new Error("Daily History snapshot is missing its date."));return;}
+        if(actionKey==="savecfrsummary"&&(!payload.summary||!payload.summary.date)){finish(new Error("CFR summary is missing its date."));return;}
         form=document.createElement("form");
         form.method="POST";
         form.action=endpoint;
@@ -14345,7 +14358,9 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
         form.acceptCharset="UTF-8";
         form.style.display="none";
         const parentOrigin=location.protocol==="file:"?"null":location.origin;
-        const fields={bridge:"1",bridgeAction:"save",requestId,parentOrigin,snapshotJson:JSON.stringify(payload.snapshot)};
+        const fields=actionKey==="save"
+          ?{bridge:"1",bridgeAction:"save",requestId,parentOrigin,snapshotJson:JSON.stringify(payload.snapshot)}
+          :{bridge:"1",bridgeAction:"savecfrsummary",requestId,parentOrigin,summaryJson:JSON.stringify(payload.summary)};
         Object.keys(fields).forEach(name=>{
           const input=document.createElement("input");
           input.type="hidden";input.name=name;input.value=fields[name];form.appendChild(input);
@@ -14674,6 +14689,175 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     }
   };
 
+  // CFR Daily Summary: separate daily row written by the same Capture button.
+  // The time buckets are based on Current Station Received Time; one TN can only
+  // appear in one bucket. Qualifying CAGAYAN DC -> BADOC HUB transported parcels
+  // are included in As of 4AM under the existing CFR1 transported rule.
+  function cfrSummaryParseReceivedTime(row){
+    const raw=String(
+      row?.["Current Station Received Time"] ?? row?.["Current Station Received time"] ??
+      row?.["Current station received time"] ?? row?.["Received Time"] ?? row?.["Received time"] ?? ""
+    ).trim();
+    if(!raw)return null;
+    let d=new Date(raw);
+    if(Number.isNaN(d.getTime())){
+      const m=raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+      if(m){let y=Number(m[3]);if(y<100)y+=2000;let h=Number(m[4]);const ap=String(m[7]||"").toUpperCase();if(ap==="AM"&&h===12)h=0;else if(ap==="PM"&&h<12)h+=12;d=new Date(y,Number(m[1])-1,Number(m[2]),h,Number(m[5]),Number(m[6]||0),0);}
+    }
+    if(Number.isNaN(d.getTime()))return null;
+    return d;
+  }
+  function cfrSummaryTN(row){
+    try{return clean(typeof spxTN==="function"?spxTN(row):row?.["SPX TN"]||row?.["SLS Tracking Number"]||row?.["Tracking Number"]||"");}catch(e){return clean(row?.["SPX TN"]||row?.["SLS Tracking Number"]||row?.["Tracking Number"]||"");}
+  }
+  function cfrSummaryTNKey(value){
+    try{return typeof window.__badocHoldKey==="function"?String(window.__badocHoldKey(value)||""):clean(value).toUpperCase().replace(/[\s\-_.]/g,"");}catch(e){return clean(value).toUpperCase().replace(/[\s\-_.]/g,"");}
+  }
+  function cfrSummaryNorm(value){return clean(value).toUpperCase().replace(/[_-]+/g," ").replace(/\s+/g," ").trim();}
+  function cfrSummaryStatus(row){return cfrSummaryNorm(statusOf(row));}
+  function cfrSummaryMeta(row){
+    try{if(typeof window.__badocRowMeta==="function")return window.__badocRowMeta(row)||{};}catch(e){}
+    return {station:row?.["Current Station"]||"",destination:row?.["Destination Station"]||"",status:statusOf(row)};
+  }
+  function cfrSummaryEodValue(labels){
+    const d=window.__badocEodDashboard||{};
+    const normKey=v=>String(v??"").trim().toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    for(const label of labels){
+      const target=normKey(label);
+      for(const [k,v] of Object.entries(d))if(normKey(k)===target&&String(v??"").trim()!=="")return v;
+    }
+    // Fallback to the currently-rendered EOD summary if its source label varies slightly.
+    for(const row of document.querySelectorAll("#eodDashboardSummary .eod-row")){
+      const cells=row.querySelectorAll("span");
+      if(cells.length<2)continue;
+      const label=normKey(cells[0].textContent);
+      if(labels.some(candidate=>{const target=normKey(candidate);return label===target||label.includes(target)||target.includes(label);}))return cells[cells.length-1].textContent;
+    }
+    return null;
+  }
+  function cfrSummaryNumber(value){const v=parseFloat(String(value??"").replace(/,/g,"").replace(/%/g,""));return Number.isFinite(v)?v:0;}
+  function buildCfrDailySummary(date){
+    const targetDate=String(date||dayKey(new Date())).trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(targetDate))throw new Error("CFR summary date must use YYYY-MM-DD.");
+    const todayRows=typeof getParcelCountRows==="function"?getParcelCountRows():[];
+    const allParcelRows=[
+      ...(Array.isArray(current?.valid)?current.valid:[]),
+      ...(Array.isArray(current?.mis)?current.mis:[])
+    ];
+    const specialTransported=new Map();
+    allParcelRows.forEach(row=>{
+      if(typeof isExceptionRow==="function"&&isExceptionRow(row))return;
+      const meta=cfrSummaryMeta(row);
+      const st=cfrSummaryStatus(row);
+      if(!st.includes("TRANSPORTED"))return;
+      if(cfrSummaryNorm(meta.station||row?.["Current Station"])!=="CAGAYAN DC")return;
+      if(cfrSummaryNorm(meta.destination||row?.["Destination Station"])!=="BADOC HUB")return;
+      const tn=cfrSummaryTN(row),key=cfrSummaryTNKey(tn);
+      if(key&&!specialTransported.has(key))specialTransported.set(key,row);
+    });
+    // Exact same Today\'s Volume denominator and linehaul toggle as the dashboard.
+    const TV_LINEHAUL_KEY=typeof PARCEL_INCOMING_KEY!=="undefined"?PARCEL_INCOMING_KEY:"badoc_parcel_incoming_linehaul_v1";
+    let linehaulEnabled=false;try{linehaulEnabled=localStorage.getItem(TV_LINEHAUL_KEY)==="1";}catch(e){}
+    const incoming=linehaulEnabled&&typeof getParcelIncomingLinehaul==="function"?getParcelIncomingLinehaul():{total:0};
+    const todayVolume=todayRows.length+(Number(incoming?.total)||0);
+
+    let asOf4am=0,from4to11=0,from11to3=0;
+    const bucketSeen=new Set();
+    const specialKeys=new Set(specialTransported.keys());
+    todayRows.forEach(row=>{
+      const tn=cfrSummaryTN(row),key=cfrSummaryTNKey(tn);
+      if(key&&specialKeys.has(key))return; // the transported TN belongs only in As of 4AM
+      if(!key)return;
+      if(bucketSeen.has(key))return;
+      const received=cfrSummaryParseReceivedTime(row);
+      if(!received)return;
+      const rowDate=[received.getFullYear(),String(received.getMonth()+1).padStart(2,"0"),String(received.getDate()).padStart(2,"0")].join("-");
+      if(rowDate!==targetDate)return;
+      const minutes=received.getHours()*60+received.getMinutes();
+      if(minutes<4*60){asOf4am++;bucketSeen.add(key);}
+      else if(minutes<11*60){from4to11++;bucketSeen.add(key);}
+      else if(minutes<=15*60){from11to3++;bucketSeen.add(key);}
+    });
+    specialTransported.forEach((row,key)=>{
+      if(bucketSeen.has(key))return;
+      asOf4am++;bucketSeen.add(key);
+    });
+
+    // Status-based CFR uses the same unique Today's Volume rows and the
+    // dashboard's optional incoming-linehaul volume. No KPI card totals are added.
+    const liveHold=(window.__badocLiveHoldTNs instanceof Set)?window.__badocLiveHoldTNs:new Set();
+    const clearedStatuses=new Set(["ASSIGNING","LMHUB ASSIGNING","ASSIGNED","LMHUB ASSIGNED","DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD","LMHUB ON HOLD"]);
+    const statusSeen=new Set();let clearedParcels=0;
+    todayRows.forEach(row=>{
+      const tn=cfrSummaryTN(row),key=cfrSummaryTNKey(tn);
+      const status=cfrSummaryStatus(row);
+      // A row without a TN cannot be de-duplicated; treat it as an individual
+      // parcel row so the cleared numerator still follows Today's Volume rows.
+      if(!key){if(clearedStatuses.has(status))clearedParcels++;return;}
+      if(statusSeen.has(key))return;
+      statusSeen.add(key);
+      const isHold=liveHold.has(key)||liveHold.has(tn)||liveHold.has(clean(tn));
+      if(clearedStatuses.has(status)||isHold)clearedParcels++;
+    });
+    const unclearedParcels=Math.max(0,todayVolume-clearedParcels);
+    const cfrRate=todayVolume?clearedParcels/todayVolume*100:0;
+    // Redelivery is counted directly from the currently loaded Forward Order
+    // parcel rows: OnHold Time must be yesterday (relative to the summary date)
+    // and status must be LMHub_Received. Count each tracking number only once.
+    const yesterdayDate=(()=>{
+      const parts=targetDate.split("-").map(Number);
+      const d=new Date(parts[0],parts[1]-1,parts[2]);
+      d.setDate(d.getDate()-1);
+      return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+    })();
+    const cfrSummaryDateOnly=value=>{
+      const raw=String(value??"").trim();
+      if(!raw)return "";
+      const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if(iso)return iso[1]+"-"+iso[2]+"-"+iso[3];
+      const parsed=new Date(raw);
+      if(Number.isNaN(parsed.getTime()))return "";
+      return [parsed.getFullYear(),String(parsed.getMonth()+1).padStart(2,"0"),String(parsed.getDate()).padStart(2,"0")].join("-");
+    };
+    const redeliverySeen=new Set();
+    let redelivery=0;
+    allParcelRows.forEach(row=>{
+      // Exclude exception tracking numbers before calculating Redelivery too.
+      if(typeof isExceptionRow==="function"&&isExceptionRow(row))return;
+      const tn=cfrSummaryTN(row),key=cfrSummaryTNKey(tn);
+      if(!key||redeliverySeen.has(key))return;
+      const status=cfrSummaryStatus(row);
+      if(status!=="LMHUB RECEIVED")return;
+      const onHoldTime=row?.["OnHold Time"]??row?.["On Hold Time"]??row?.["Onhold Time"]??row?.["On hold time"]??"";
+      if(cfrSummaryDateOnly(onHoldTime)!==yesterdayDate)return;
+      redeliverySeen.add(key);
+      redelivery++;
+    });
+    // No official Backlog field is exposed by the loaded EOD dashboard. Keep
+    // the agreed CFR-derived backlog: volume not currently in a cleared status.
+    const backlogs=unclearedParcels;
+    return {
+      date:targetDate,
+      asOf4am:asOf4am,
+      from4to11:from4to11,
+      from11to3:from11to3,
+      redelivery:redelivery,
+      backlogs:backlogs,
+      cfrRate:cfrRate,
+      totalVolume:todayVolume,
+      clearedParcels:clearedParcels,
+      unclearedParcels:unclearedParcels,
+      capturedAt:phTimestamp()
+    };
+  }
+  window.__badocBuildCfrDailySummary=buildCfrDailySummary;
+  window.__badocCaptureCfrSummary=async function(date=dayKey(new Date())){
+    const summary=buildCfrDailySummary(date);
+    const result=await googleSheetsRequest("saveCfrSummary",{summary});
+    console.log("BADOC CFR Daily Summary saved to Google Sheets:",summary.date,result.result||result);
+    return summary;
+  };
+
   window.__badocRefreshDailyHistory=async function(){
     const dates=await refreshDates();
     if(dates.length)await refreshSelected();
@@ -14890,18 +15074,26 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
       if(captureBtn.disabled)return;
       const old=captureBtn.textContent;
       captureBtn.disabled=true;
-      captureBtn.textContent="⬆ Capturing…";
-      try{
-        const d=todayDate();
-        await window.__badocCaptureDailyHistory?.("manual",d);
-        captureBtn.textContent="✓ Captured";
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},1400);
-      }catch(e){
-        console.warn("Daily History manual capture failed:",e);
-        captureBtn.textContent="✕ Capture Failed";
-        const reason=String(e&&e.message||e||"Unknown error");
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},2200);
-        alert("Daily History capture failed:\n\n"+reason);
+      captureBtn.textContent="⬆ Capturing both…";
+      const d=todayDate();
+      const outcomes=await Promise.allSettled([
+        (async()=>{if(typeof window.__badocCaptureDailyHistory!=="function")throw new Error("Original DailySnapshots capture function is unavailable.");return await window.__badocCaptureDailyHistory("manual",d);})(),
+        (async()=>{if(typeof window.__badocCaptureCfrSummary!=="function")throw new Error("CFR summary capture function is unavailable.");return await window.__badocCaptureCfrSummary(d);})()
+      ]);
+      const original=outcomes[0],cfr=outcomes[1];
+      const originalOk=original.status==="fulfilled",cfrOk=cfr.status==="fulfilled";
+      const describe=(label,outcome)=>outcome.status==="fulfilled"?label+": saved":label+": FAILED — "+String(outcome.reason?.message||outcome.reason||"Unknown error");
+      if(originalOk&&cfrOk){
+        captureBtn.textContent="✓ Both Saved";
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},1700);
+      }else if(originalOk||cfrOk){
+        captureBtn.textContent=originalOk?"⚠ CFR Save Failed":"⚠ Snapshot Save Failed";
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},3000);
+        alert("Capture partly completed.\n\n"+describe("DailySnapshots",original)+"\n"+describe("CFR Daily Summary",cfr));
+      }else{
+        captureBtn.textContent="✕ Both Saves Failed";
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;},3000);
+        alert("Both Capture saves failed.\n\n"+describe("DailySnapshots",original)+"\n"+describe("CFR Daily Summary",cfr));
       }
     });
         setTimeout(()=>window.__badocRefreshDailyHistory?.(),700);
