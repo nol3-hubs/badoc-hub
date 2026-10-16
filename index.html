@@ -10005,9 +10005,26 @@ window.DASHBOARD_V2_READY = true;
       // Keep the current operational day. For the same day, merge by parcel
       // key so one device's live status updates do not erase other members.
       if(cloud&&cloudToday===today&&cloud.records&&ledger.records){
-        const merged={...cloud,...ledger,records:{...(cloud.records||{}),...(ledger.records||{})}};
+        // Only merge cloud membership that still passes today's hard cutoff.
+        // Otherwise an old cloud record removed by local eligibility cleanup
+        // would be reintroduced on every publish and could poison recovery.
+        const cutoff=Number(ledger.cutoff)||new Date().setHours(4,0,0,0);
+        const day=today;
+        const validForToday=rec=>{
+          const ms=Number(rec?.receivedMs);
+          if(!Number.isFinite(ms)||ms<=0||ms>cutoff)return false;
+          const d=new Date(ms);
+          const key=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+          return key===day;
+        };
+        const cloudRecords=Object.fromEntries(Object.entries(cloud.records||{}).filter(([,rec])=>validForToday(rec)));
+        const localRecords=Object.fromEntries(Object.entries(ledger.records||{}).filter(([,rec])=>validForToday(rec)));
+        const merged={...cloud,...ledger,records:{...cloudRecords,...localRecords}};
         await uploadLedger(merged);
       }else{
+        // Do not upload a blank ledger before parcel batches have loaded.
+        // A later dashboard refresh will publish once the data is available.
+        if(!ledger.records||Object.keys(ledger.records).length===0) return;
         await uploadLedger(ledger);
       }
     }catch(e){
@@ -11166,11 +11183,29 @@ window.updateOperationProgress=function(){
         d=new Date(y,Number(m[1])-1,Number(m[2]),Number(m[4]),Number(m[5]),Number(m[6]||0),0);
       }
     }
+    if(Number.isNaN(d.getTime())){
+      const isoLocal=raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+      if(isoLocal){
+        let hour=Number(isoLocal[4]);
+        const mer=String(isoLocal[7]||"").toUpperCase();
+        if(mer==="AM"&&hour===12)hour=0; else if(mer==="PM"&&hour<12)hour+=12;
+        d=new Date(Number(isoLocal[1]),Number(isoLocal[2])-1,Number(isoLocal[3]),hour,Number(isoLocal[5]),Number(isoLocal[6]||0),0);
+      }
+    }
     return Number.isNaN(d.getTime())?null:d;
   };
-  const cfr1ReceivedTime=r=>cfr1ParseTime(
-    r?.["Current Station Received Time"] ?? r?.["Current Station Received time"] ?? r?.["Current station received time"]
-  );
+  const cfr1ReceivedTime=r=>{
+    if(!r || typeof r!=="object") return null;
+    // CSV/header spelling varies between exports. Resolve the received-time
+    // column case-insensitively and tolerate punctuation/spacing differences.
+    const direct = r["Current Station Received Time"] ?? r["Current Station Received time"] ?? r["Current station received time"];
+    if(direct!==undefined && direct!==null && String(direct).trim()!=="") return cfr1ParseTime(direct);
+    const normHeader=v=>String(v??"").toLowerCase().replace(/[^a-z0-9]/g,"");
+    const wanted=new Set(["currentstationreceivedtime","stationreceivedtime","currentreceivedtime"]);
+    const k=Object.keys(r).find(key=>wanted.has(normHeader(key)));
+    if(k && r[k]!==undefined && r[k]!==null && String(r[k]).trim()!=="") return cfr1ParseTime(r[k]);
+    return null;
+  };
   const cfr1Key=r=>{
     const oid=exceptionKey(r?.["Order ID"]);
     if(oid)return "OID:"+oid;
@@ -11238,32 +11273,26 @@ window.updateOperationProgress=function(){
   }
 
   // Read every currently available upload.
-  // Standard CFR1 eligibility remains Current Station = BADOC HUB with a
-  // Current Station Received Time dated TODAY and at or before today's 4:00 AM
-  // cutoff. Records received yesterday or earlier are not eligible for today's CFR1.
-  // Additional CFR1 TOTAL eligibility:
-  //   1) SOC_LHTransported at CAGAYAN DC
-  //   2) SOC TRANSPORTED with Destination Station = BADOC HUB
-  // Standard CFR1 and CAGAYAN DC + SOC_LHTransported remain restricted to
-  // towns configured under BADOC and PINILI.
-  // The SOC TRANSPORTED + CAGAYAN DC + Destination BADOC HUB population
-  // bypasses the town filter and is TOTAL-only, not scanned.
-  // All rules use the same 4:00 AM cutoff.
-  // Once admitted, the eligibility timestamp is retained permanently for
-  // today's CFR1 cycle. At 7:00 AM, only the daily eligible parcel ID set is
-  // frozen; latest statuses and SCANNED/UNSCANNED classification still update.
+  // Rule A: Current Station = BADOC HUB, received timestamp at or before
+  // today's 4:00 AM cutoff; do not require the received date to be today.
+  // Rule B: Status = SOC_LHTransported, Current Station = CAGAYAN DC,
+  // Destination Station = BADOC HUB, observed in an upload timestamped by 4:00 AM.
+  // These rows have no received timestamp; display "Transported before 4AM" in exports.
+  // This path is UNscanned-only. No separate Rule C.
+  // Rule A keeps the configured BADOC/PINILI town restriction.
+  // The 7:00 AM freeze locks daily eligible parcel IDs while statuses remain live.
   // Live exceptions can still remove a parcel from CFR1.
   const cfr1AllowedTowns=new Set([
     ...(Array.isArray(towns?.badoc)?towns.badoc:[]),
     ...(Array.isArray(towns?.pinili)?towns.pinili:[])
   ].map(v=>norm(v)).filter(Boolean));
 
-  const cfr1TownOf=r=>norm(
-    r?.["Town Name"] ??
-    r?.["Town"] ??
-    r?.["town"] ??
-    ""
-  );
+  const cfr1TownOf=r=>{
+    const direct=r?.["Town Name"] ?? r?.["Town"] ?? r?.["town"];
+    if(direct!==undefined && direct!==null && String(direct).trim()!=="") return norm(direct);
+    const entry=Object.entries(r||{}).find(([k,v])=>/^(town name|town)$/i.test(String(k).trim())&&String(v??"").trim()!=="");
+    return norm(entry?.[1]??"");
+  };
 
   const cfr1Rows=(Array.isArray(batches)?batches:[]).flatMap(b=>
     Array.isArray(b?.rows)?b.rows.map((r,i)=>({r,btime:Number(b?.time||0),ri:i})):[]
@@ -11275,19 +11304,9 @@ window.updateOperationProgress=function(){
     if(!prev || x.btime>prev.btime || (x.btime===prev.btime && x.ri>prev.ri)) latestByKey.set(key,x);
   });
 
-  // Correct legacy/current-day ledgers that may contain parcels received on
-  // yesterday's date. Such rows are not members of today's CFR1 population.
-  // Keep the explicit transported-to-BADOC exception when no received time exists.
-  Object.keys(cfr1Ledger.records||{}).forEach(key=>{
-    const rec=cfr1Ledger.records[key];
-    const receivedMs=rec?.receivedMs;
-    if(receivedMs===null || receivedMs===undefined || receivedMs==="") return;
-    const receivedDate=new Date(Number(receivedMs));
-    if(Number.isNaN(receivedDate.getTime())) { delete cfr1Ledger.records[key]; return; }
-    const receivedDateKey=[receivedDate.getFullYear(),String(receivedDate.getMonth()+1).padStart(2,"0"),String(receivedDate.getDate()).padStart(2,"0")].join("-");
-    if(receivedDateKey!==cfr1DateKey) delete cfr1Ledger.records[key];
-  });
-
+  // Do not delete existing CFR1 members solely because their received date
+  // is not today. Rule A uses the existing 4:00 AM cutoff without a same-day
+  // date restriction. Rule B does not depend on a received timestamp.
   // Snapshot whether this refresh is recovering an empty post-7 AM ledger.
   // Keep this decision constant for the whole pass so finding the first parcel
   // does not accidentally stop the rest of the eligible batch from being added.
@@ -11296,30 +11315,39 @@ window.updateOperationProgress=function(){
 
   // First pass: discover eligible CFR1 parcels only while the daily ledger
   // is not frozen. After 7:00 AM, later uploads cannot add new parcel IDs.
-  // Standard BADOC HUB and CAGAYAN DC transported-town rules require a valid
-  // Current Station Received Time dated today and at or before 4:00 AM.
-  // EXCEPTION: any transported parcel currently at CAGAYAN DC and destined
-  // for BADOC HUB qualifies without a Received Time or 4:00 AM cutoff.
+  // Rule A uses the existing received-time cutoff without a same-day restriction.
+  // Rule B uses the uploaded status/station fields and requires the upload batch
+  // timestamp to be at or before 4:00 AM because no received timestamp exists.
+  // Export received-time label is "Transported before 4AM". No separate Rule C exists.
   cfr1Rows.forEach(x=>{
     // Before 7 AM, build the daily list normally. After 7 AM, only an empty
     // ledger may recover from currently available batches; once populated it
     // freezes and cannot accept later additions.
     if(cfr1Ledger.frozen===true || (cfr1Now>=cfr1Seven && !cfr1RecoveringEmptyLedger))return;
     const r=x.r,key=cfr1Key(r); if(!key || cfr1IsExempt(r))return;
-    const station=norm(r?.["Current Station"]||"");
+    const stationRaw=r?.["Current Station"] ?? r?.["Current station"] ?? r?.["CURRENT STATION"] ?? Object.entries(r||{}).find(([k,v])=>/^(current\s*station)$/i.test(String(k).trim())&&String(v??"").trim()!=="")?.[1] ?? "";
+    const station=norm(stationRaw);
     const status=cfr1Status(r);
-    const isTransported= status.includes("TRANSPORTED");
-    const transportedToBadocEligible=
-      isTransported && station==="CAGAYAN DC" && destination(r)==="BADOC HUB";
+    const isRuleB=
+      status==="SOC LHTRANSPORTED" &&
+      station==="CAGAYAN DC" &&
+      destination(r)==="BADOC HUB" &&
+      x.btime>0 &&
+      x.btime<=cfr1Four.getTime();
     const cfr1Town=cfr1TownOf(r);
     const townEligible=!!cfr1Town && cfr1AllowedTowns.has(cfr1Town);
-    if(!transportedToBadocEligible && !townEligible)return;
-    const rt=cfr1ReceivedTime(r);
-    const receivedDateKey=rt?[rt.getFullYear(),String(rt.getMonth()+1).padStart(2,"0"),String(rt.getDate()).padStart(2,"0")].join("-"):"";
-    if(!transportedToBadocEligible && (!rt || receivedDateKey!==cfr1DateKey || rt>cfr1Four))return;
-    const standardEligible=station==="BADOC HUB";
-    const lhTransportedTotalEligible=station==="CAGAYAN DC" && status==="SOC LHTRANSPORTED";
-    if(!transportedToBadocEligible && ((!standardEligible && !lhTransportedTotalEligible) || !townEligible))return;
+    let rt=null;
+    if(isRuleB){
+      // Rule B is unscanned-only. Evaluate the status and station fields
+      // from the uploaded file; do not require or check a received timestamp.
+      rt=null;
+    }else{
+      // Rule A: BADOC HUB station and received timestamp <= today's 4 AM.
+      // Keep the original cutoff behavior; do not require the date to be today.
+      if(station!=="BADOC HUB" || !townEligible)return;
+      rt=cfr1ReceivedTime(r);
+      if(!rt || rt>cfr1Four)return;
+    }
     const prev=cfr1Ledger.records[key];
     const rtMs=rt?rt.getTime():null;
     const prevHasRt=!!(prev && prev.receivedMs!==null && prev.receivedMs!==undefined && prev.receivedMs!=="" && Number.isFinite(Number(prev.receivedMs)));
@@ -11334,8 +11362,9 @@ window.updateOperationProgress=function(){
         latestBatchTime:x.btime,
         latestRowTime:x.btime,
         status:String(statusTo(r)||r?.["Status"]||"").trim(),
-        scannedTime:cfr1IsScannedStatus(r)?cfr1PickUpTime(r):"",
-        noTownFilter:!!transportedToBadocEligible
+        scannedTime:isRuleB?"":(cfr1IsScannedStatus(r)?cfr1PickUpTime(r):""),
+        noTownFilter:isRuleB,
+        ruleBUnscanned:isRuleB
       };
     }
   });
@@ -11363,7 +11392,9 @@ window.updateOperationProgress=function(){
         rec.status=String(statusTo(r)||r?.["Status"]||r?.["Parcel Status"]||r?.["Current Status"]||"").trim();
         // Capture Pick Up Time only once, when the parcel is first observed
         // in a scanned status. Later status updates must not overwrite it.
-        if(!String(rec.scannedTime||"").trim() && cfr1IsScannedStatus(r)){
+        if(rec.ruleBUnscanned===true){
+          rec.scannedTime="";
+        }else if(!String(rec.scannedTime||"").trim() && cfr1IsScannedStatus(r)){
           rec.scannedTime=cfr1PickUpTime(r);
         }
         const latestStation=norm(r?.["Current Station"]||"");
@@ -11406,7 +11437,7 @@ window.updateOperationProgress=function(){
         orderId:rec.orderId||rec.tn||"",
         town:rec.town||"",
         status:rawStatus,
-        receivedTime:rec.receivedMs!==null && rec.receivedMs!==undefined && rec.receivedMs!=="" && Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):"",
+        receivedTime:rec.ruleBUnscanned===true?"Transported before 4AM":(rec.receivedMs!==null && rec.receivedMs!==undefined && rec.receivedMs!=="" && Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):""),
         scannedTime:rec.scannedTime||""
       });
     }else{
@@ -11418,7 +11449,7 @@ window.updateOperationProgress=function(){
         orderId:rec.orderId||rec.tn||"",
         town:rec.town||"",
         status:rawStatus,
-        receivedTime:rec.receivedMs!==null && rec.receivedMs!==undefined && rec.receivedMs!=="" && Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):""
+        receivedTime:rec.ruleBUnscanned===true?"Transported before 4AM":(rec.receivedMs!==null && rec.receivedMs!==undefined && rec.receivedMs!=="" && Number.isFinite(Number(rec.receivedMs))?new Date(Number(rec.receivedMs)).toLocaleString("en-PH", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}):"")
       });
     }
   });
