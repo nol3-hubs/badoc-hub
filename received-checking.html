@@ -100,6 +100,10 @@ main{padding:20px;max-width:1500px;margin:auto}.sync{display:flex;justify-conten
   .secondary-notification #secondaryStatus { flex: 1 1 100% !important; flex-basis: 100% !important; width: 100% !important; }
 }
 
+
+.town-option-search{position:sticky;top:0;display:block;width:100%;box-sizing:border-box;margin:0 0 6px;padding:9px 8px;border:1px solid #d9e0e8;border-radius:7px;background:#fff;color:#1f2937;z-index:3}
+.town-option-search:focus{outline:2px solid #168cff;outline-offset:-1px}
+#townOptions{display:block}
 </style></head>
 <body>
 <script>
@@ -132,7 +136,7 @@ main{padding:20px;max-width:1500px;margin:auto}.sync{display:flex;justify-conten
 <div class="sync" aria-live="polite"><div class="notification-stack"><b id="conn">Waiting for SPX Bridge</b><div class="sync-messages"><div class="primary-notification"><div class="status" id="syncStatus" title="Import the sample/export or connect the Chrome extension.">Import the sample/export or connect the Chrome extension.</div><div class="status" id="lastSync" aria-label="Last Received sync time"></div></div><div class="secondary-notification"><div class="status" id="secondaryStatus" title="Transported / RTS: Not synced yet.">Transported / RTS: Not synced yet.</div><div class="status" id="secondaryLastSync" aria-label="Last Transported / RTS sync time"></div></div></div></div></div>
 <section class="secondary-panel" id="secondaryPanel" hidden><div class="secondary-panel-head"><div><h2>Transported and RTS</h2></div><button class="primary" id="syncSecondary" type="button">↻ Sync Transported / RTS</button></div><div id="secondaryContent"><div class="value" id="secondaryCount">0</div><div class="tablewrap secondary-table"><table><thead id="secondaryThead"></thead><tbody id="secondaryTbody"><tr><td class="empty">Click Sync Transported / Returned to load these statuses.</td></tr></tbody></table></div></div></section>
 <section class="grid" id="cards"></section>
-<div class="filters"><input id="q" placeholder="Search Order ID, tracking, town..."><div class="multi-select" id="statusWrap"><button class="multi-select-btn" type="button">Status</button><div class="multi-select-menu" id="statusMenu"></div></div><div class="multi-select" id="townWrap"><button class="multi-select-btn" type="button">Town</button><div class="multi-select-menu" id="townMenu"></div></div><div class="multi-select" id="highValueWrap"><button class="multi-select-btn" type="button">High Value</button><div class="multi-select-menu" id="highValueMenu"></div></div><div class="multi-select" id="bulkyWrap"><button class="multi-select-btn" type="button">Bulky</button><div class="multi-select-menu" id="bulkyMenu"></div></div><button class="secondary" id="clearFilters" type="button">Clear Filters</button></div>
+<div class="filters"><input id="q" placeholder="Search Order ID, tracking, town..."><div class="multi-select" id="statusWrap"><button class="multi-select-btn" type="button">Status</button><div class="multi-select-menu" id="statusMenu"></div></div><div class="multi-select" id="townWrap"><button class="multi-select-btn" type="button">Town</button><div class="multi-select-menu" id="townMenu"><input class="town-option-search" id="townOptionSearch" type="search" placeholder="Search town..." autocomplete="off" aria-label="Search town options"><div id="townOptions"></div></div></div><div class="multi-select" id="highValueWrap"><button class="multi-select-btn" type="button">High Value</button><div class="multi-select-menu" id="highValueMenu"></div></div><div class="multi-select" id="bulkyWrap"><button class="multi-select-btn" type="button">Bulky</button><div class="multi-select-menu" id="bulkyMenu"></div></div><button class="secondary" id="clearFilters" type="button">Clear Filters</button></div>
 <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
 </main>
 <script>
@@ -253,7 +257,6 @@ function renderFilterMenu(id,values){
   const counts=new Map();
   for(const row of applyExemptions(state.rows)){
     let raw=row[key];
-    // Keep the High Value display/count consistent with the filter values.
     if(id==='highValue'){
       const n=String(raw??'').trim().toUpperCase();
       raw=(n==='Y'||n==='1'||n==='TRUE'||n==='YES')?'Y':'N';
@@ -263,23 +266,30 @@ function renderFilterMenu(id,values){
   }
   const unique=[...new Map(values.map(v=>[filterNorm(v),String(v).trim()])).entries()]
     .filter(([k,v])=>k&&v).sort((a,b)=>a[1].localeCompare(b[1]));
-  if(!unique.length){
-    menu.innerHTML='<div class="multi-empty">No options</div>';
-    updateFilterButton(id);
-    return;
-  }
-  menu.innerHTML=unique.map(([norm,v])=>{
+  const search=id==='town'?filterNorm(document.getElementById('townOptionSearch')?.value||''):'';
+  const visible=unique.filter(([k,v])=>!search||k.includes(search)||filterState[id].has(k));
+  const target=id==='town'?document.getElementById('townOptions'):menu;
+  if(!target)return;
+  if(!visible.length){target.innerHTML='<div class="multi-empty">No options</div>';updateFilterButton(id);return;}
+  target.innerHTML=visible.map(([norm,v])=>{
     const count=counts.get(norm)||0;
     const label=optionLabel(id,v);
     return `<label class="multi-option"><input type="checkbox" data-filter-id="${id}" value="${esc(v)}" ${filterState[id].has(norm)?'checked':''}><span>${esc(label)} <span class="filter-count">(${count})</span></span></label>`;
   }).join('');
-  menu.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
-    const set=filterState[id];
-    if(cb.checked)set.add(filterNorm(cb.value)); else set.delete(filterNorm(cb.value));
-    updateFilterButton(id);
-    render();
+  target.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
+    const set=filterState[id]; if(cb.checked)set.add(filterNorm(cb.value)); else set.delete(filterNorm(cb.value));
+    updateFilterButton(id); render();
   }));
   updateFilterButton(id);
+}
+const townOptionSearch=document.getElementById('townOptionSearch');
+if(townOptionSearch){
+  townOptionSearch.addEventListener('input',()=>{
+    const values=[...new Set(state.rows.map(r=>String(r['Town Name']??'').trim()).filter(Boolean))];
+    renderFilterMenu('town',values);
+  });
+  townOptionSearch.addEventListener('click',e=>e.stopPropagation());
+  townOptionSearch.addEventListener('keydown',e=>e.stopPropagation());
 }
 function setupFilterDropdowns(){
   Object.keys(filterConfig).forEach(id=>{
