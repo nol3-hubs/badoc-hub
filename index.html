@@ -14910,9 +14910,18 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     // No official Backlog field is exposed by the loaded EOD dashboard. Keep
     // the agreed CFR-derived backlog: volume not currently in a cleared status.
     const backlogs=unclearedParcels;
+    // For today's capture, AS OF 4AM must reflect the actual eligible CFR1
+    // parcel membership shown by the CFR1 card, not a separate received-time bucket.
+    // The CFR1 ledger already enforces Rule A and the transported-before-4AM Rule B.
+    // Historical dates retain the existing time-bucket calculation because the
+    // live CFR1 ledger only represents the current day's membership.
+    const liveCfr1Total=Number(window.__badocCfr1Details?.totalCount);
+    const cfr1AsOf4am=(targetDate===dayKey(new Date()) && Number.isFinite(liveCfr1Total))
+      ? liveCfr1Total
+      : asOf4am;
     return {
       date:targetDate,
-      asOf4am:asOf4am,
+      asOf4am:cfr1AsOf4am,
       from4to11:from4to11,
       from11to3:from11to3,
       redelivery:redelivery,
