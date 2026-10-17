@@ -9967,6 +9967,18 @@ window.DASHBOARD_V2_READY = true;
   const KEY="badoc_cfr1_ledger_v5_cagayan_lh_total";
   const PATH="current/cfr1-ledger.json";
   let client=null, busy=false, lastCloudStamp="";
+  // Remember the last local ledger snapshot successfully published. CFR1 is
+  // recalculated often, so skip cloud reads/writes when its data did not change.
+  let lastPublishedSourceSignature="";
+  function sourceSignature(ledger){
+    try{
+      const snapshot={...(ledger||{})};
+      // The server timestamp changes on every successful upload and is not a
+      // change to the local CFR1 data itself.
+      delete snapshot._cloudUpdatedAt;
+      return JSON.stringify(snapshot);
+    }catch(_){return ""}
+  }
   function getClient(){
     const cfg=window.BADOC_SHARED_CONFIG||{};
     if(!window.supabase||!cfg.url||!cfg.key)throw Error("Cloud sync configuration unavailable");
@@ -9997,6 +10009,8 @@ window.DASHBOARD_V2_READY = true;
   }
   async function publish(key,ledger){
     if(key!==KEY||busy)return;
+    const sourceSig=sourceSignature(ledger);
+    if(sourceSig && sourceSig===lastPublishedSourceSignature)return;
     busy=true;
     try{
       const cloud=await downloadLedger();
@@ -10021,11 +10035,13 @@ window.DASHBOARD_V2_READY = true;
         const localRecords=Object.fromEntries(Object.entries(ledger.records||{}).filter(([,rec])=>validForToday(rec)));
         const merged={...cloud,...ledger,records:{...cloudRecords,...localRecords}};
         await uploadLedger(merged);
+        lastPublishedSourceSignature=sourceSig;
       }else{
         // Do not upload a blank ledger before parcel batches have loaded.
         // A later dashboard refresh will publish once the data is available.
         if(!ledger.records||Object.keys(ledger.records).length===0) return;
         await uploadLedger(ledger);
+        lastPublishedSourceSignature=sourceSig;
       }
     }catch(e){
       console.warn("CFR1 cloud sync failed:",e);
@@ -10369,7 +10385,7 @@ window.DASHBOARD_V2_READY = true;
         if(Number(s.notes_version||0)>seen.notes)await applyNotes();
         seen.notes=Number(s.notes_version||0);
       }else if(kind==="riderSelections"){
-        await applyRiderSelections();
+        if(Number(s.notes_version||0)>seen.notes)await applyRiderSelections();
         seen.notes=Math.max(seen.notes,Number(s.notes_version||0));
       }else{
         if(!pendingCloudWrites.has("upload")&&!uploadLocalDirty){
@@ -10380,8 +10396,10 @@ window.DASHBOARD_V2_READY = true;
         }
         if(Number(s.settings_version||0)>seen.settings)await applySettings();
         if(Number(s.layout_version||0)>seen.layout)await applyLayout();
-        if(Number(s.notes_version||0)>seen.notes)await applyNotes();
-        await applyRiderSelections();
+        if(Number(s.notes_version||0)>seen.notes){
+          await applyNotes();
+          await applyRiderSelections();
+        }
         seen={upload:Number(s.upload_version||0),linehaul:Number(s.linehaul_version||0),settings:Number(s.settings_version||0),layout:Number(s.layout_version||0),notes:Number(s.notes_version||0)};
       }
       status("All devices synced");
