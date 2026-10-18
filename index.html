@@ -10712,16 +10712,57 @@ window.DASHBOARD_V2_READY = true;
 
   // Sync the movable town layout and per-group notes to the same shared Supabase state.
   // These are separate files so the existing towns/settings format remains backward compatible.
-  if(typeof saveTownLayouts==="function"&&!window.__badocSharedTownLayoutSyncV1){
-    const originalLayoutSave=saveTownLayouts;window.__badocSharedTownLayoutSyncV1=true;
+  if(typeof saveTownLayouts==="function"&&!window.__badocSharedTownLayoutSyncV2){
+    const originalLayoutSave=saveTownLayouts;
+    window.__badocSharedTownLayoutSyncV2=true;
+    let townLayoutSyncQueue=Promise.resolve();
+    let townLayoutSyncRevision=0;
+    const TOWN_LAYOUT_DIRTY_KEY="badoc_town_layout_dirty_v2";
+    async function syncTownLayoutSnapshot(){
+      // Wait briefly for cloud initialization if a town was moved during startup.
+      const deadline=Date.now()+15000;
+      while(!started&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
+      if(!started)throw Error("Cloud sync is not ready; town layout remains saved locally and will retry.");
+      const revision=townLayoutSyncRevision;
+      const payload=JSON.stringify(loadTownLayouts()||{});
+      await put(P.layout,new Blob([payload],{type:"application/json"}),"application/json");
+      const version=Date.now();
+      await setState({layout_version:version});
+      seen.layout=version;
+      await announce("layout","update");
+      if(revision===townLayoutSyncRevision){
+        try{localStorage.removeItem(TOWN_LAYOUT_DIRTY_KEY)}catch{}
+        status("Town layout synced");
+      }else{
+        // A newer move occurred during the upload; queue another authoritative snapshot.
+        return syncTownLayoutSnapshot();
+      }
+      return true;
+    }
+    window.__badocSyncTownLayoutNow=async function(){
+      townLayoutSyncQueue=townLayoutSyncQueue.catch(()=>{}).then(syncTownLayoutSnapshot);
+      try{return await townLayoutSyncQueue}catch(e){
+        console.warn("Town layout sync failed; local layout preserved:",e);
+        try{localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1")}catch{}
+        status("Town layout sync failed — saved locally, retrying");
+        return false;
+      }
+    };
     saveTownLayouts=function(layouts){
       originalLayoutSave.apply(this,arguments);
-      if(!started)return;
-      put(P.layout,new Blob([JSON.stringify(layouts||{})],{type:"application/json"}),"application/json")
-        .then(()=>setState({layout_version:Date.now()}))
-        .then(()=>announce("layout","update"))
-        .catch(e=>console.warn("Town layout sync:",e));
+      townLayoutSyncRevision++;
+      try{localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1")}catch{}
+      window.__badocSyncTownLayoutNow();
     };
+    // Retry unsynced local town moves after the shared client starts and on later fallback polls.
+    const previousStart=start;
+    start=async function(){
+      await previousStart.apply(this,arguments);
+      try{if(localStorage.getItem(TOWN_LAYOUT_DIRTY_KEY)==="1")window.__badocSyncTownLayoutNow()}catch{}
+    };
+    setInterval(()=>{
+      try{if(started&&localStorage.getItem(TOWN_LAYOUT_DIRTY_KEY)==="1")window.__badocSyncTownLayoutNow()}catch{}
+    },15000);
   }
   if(typeof saveTownNotes==="function"&&!window.__badocSharedTownNotesSyncV2){
     const originalNotesSave=saveTownNotes;window.__badocSharedTownNotesSyncV2=true;
@@ -13026,12 +13067,10 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 <script id="badoc-daily-operational-reset">
 /*
   BADOC daily operational reset
-  - Regular Clear Floor Rate: resets at 12:00 AM local time.
+  - Regular Clear Floor Rate: clears its saved daily peak at 2:00 AM local time.
   - Uploaded Parcel + Linehaul working data: resets at 2:00 AM local time.
-  - CFR1 is deliberately NOT cleared/reset by the 2:00 AM operation. Its own
-    date-based CFR1 population continues to read newly uploaded data, including
-    uploads made after 4:00 AM, using the parcel's actual Current Station
-    Received Time and the existing CFR1 rules.
+  - CFR1 cloud ledger: reset at 2:00 AM local time after Daily History is captured.
+    CFR1 then rebuilds from newly available parcel data using the existing rules.
 
   The reset marker is stored in the shared Storage bucket so the 2:00 AM reset
   can still happen when the app was closed at the exact time. Local data is
@@ -13051,14 +13090,11 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   function twoAmReached(d=new Date()){
     return d.getHours()>2 || (d.getHours()===2 && d.getMinutes()>=0);
   }
-  function clearRegularCfrAtMidnight(){
+  function clearRegularCfrAt2AM(){
     try{
-      const today=dayKey();
-      const saved=JSON.parse(localStorage.getItem(CLEAR_FLOOR_KEY)||"null");
-      if(saved?.date!==today){
-        localStorage.removeItem(CLEAR_FLOOR_KEY);
-        localStorage.setItem(CLEAR_FLOOR_DATE_KEY,today);
-      }
+      localStorage.removeItem(CLEAR_FLOOR_KEY);
+      localStorage.setItem(CLEAR_FLOOR_DATE_KEY,dayKey());
+      localStorage.removeItem("badoc_cfr_peak_v2");
     }catch(e){}
     if(typeof window.updateOperationProgress==="function") window.updateOperationProgress();
   }
@@ -13137,6 +13173,13 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
           }
         }catch(e){console.warn("Daily History reset-marker recovery:",e)}
         if(localMarker!==today)try{localStorage.setItem(RESET_MARKER_LOCAL,today)}catch(e){}
+        // Reset this device's regular CFR and in-memory CFR1 even when another
+        // device already completed the shared cloud reset.
+        clearRegularCfrAt2AM();
+        window.__badocCfr1LedgerMemory=null;
+        // Reload once on this device so the CFR1 closure is rebuilt from the
+        // now-empty cloud ledger and cleared working dataset.
+        if(localMarker!==today){ try{window.location.reload()}catch(e){} }
         return;
       }
       // v206: capture the exact live projected dashboard state BEFORE any reset.
@@ -13168,6 +13211,13 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         const up=await c.from("badoc_shared_state").upsert(patch,{onConflict:"id"});
         if(up.error)throw Error(up.error.message||"Shared state reset failed");
       }
+      // Clear Clear Floor Rate and CFR1 after Daily History is safely captured.
+      clearRegularCfrAt2AM();
+      if(window.__badocCfr1CloudSync && typeof window.__badocCfr1CloudSync.resetCloud==="function"){
+        await window.__badocCfr1CloudSync.resetCloud();
+      }
+      // CFR1 remains cloud-only; clear this device's in-memory copy too.
+      window.__badocCfr1LedgerMemory=null;
       await clearLocalWorkingData();
       // Marker is written LAST, so a failed reset will be retried.
       try{
@@ -13178,14 +13228,15 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         }
       }catch(e){console.warn("Daily reset marker:",e)}
       try{localStorage.setItem(RESET_MARKER_LOCAL,today)}catch(e){}
-      console.log("BADOC 2:00 AM daily upload/exemption reset completed for",today);
+      console.log("BADOC 2:00 AM daily upload/exemption/CFR/CFR1 reset completed for",today);
+      // Reinitialize CFR1's in-memory closure after its shared cloud ledger is cleared.
+      try{window.location.reload()}catch(e){}
     }catch(e){
       console.warn("BADOC 2:00 AM daily reset failed; will retry:",e);
     }finally{busy=false;}
   }
 
   function tick(){
-    clearRegularCfrAtMidnight();
     resetAt2AM(false);
   }
   // Check immediately and then frequently enough to catch 12:00 AM / 2:00 AM
