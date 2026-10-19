@@ -14325,6 +14325,15 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
     const eodOnhold=eodNum(eodVal("total onhold","total on hold"));
     const eodRedelivery=eodNum(eodVal("total redelivery"));
     const eodRts=eodNum(eodVal("total rts"));
+    // EOD Sheet values can arrive after Daily History's first render. If the
+    // sheet has not populated yet, use loaded parcel data instead of false zeros.
+    const parcelStatusForHistory=statusCounts(rows);
+    const eodHasPerformance=[eodDispatched,eodDelivered,eodOnhold,eodRedelivery,eodRts].some(v=>v!==0);
+    const historyDispatched=eodHasPerformance?eodDispatched:(rows.length+n(incoming.total));
+    const historyDelivered=eodHasPerformance?eodDelivered:parcelStatusForHistory.delivered;
+    const historyOnhold=eodHasPerformance?eodOnhold:parcelStatusForHistory.hold;
+    const historyRedelivery=eodHasPerformance?eodRedelivery:parcelStatusForHistory.redelivery;
+    const historyRts=eodHasPerformance?eodRts:parcelStatusForHistory.rts;
     const eodFleet3w=eodNum(eodVal("fleet 3w","3w"));
     const eodFleet2w=eodNum(eodVal("fleet 2w","2w"));
     const eodFleetFlexi=eodNum(eodVal("fleet flexi","flexi"));
@@ -14376,12 +14385,12 @@ body{scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
         cfr1:"Current CFR1 ledger and scanned/unscanned details, including source Received Time and first Scanned Time"
       },
       metrics:{
-        totalVolume:eodDispatched,
-        delivered:eodDelivered,
-        onHold:eodOnhold,
-        redelivery:eodRedelivery,
-        rts:eodRts,
-        successRate:eodRate,
+        totalVolume:historyDispatched,
+        delivered:historyDelivered,
+        onHold:historyOnhold,
+        redelivery:historyRedelivery,
+        rts:historyRts,
+        successRate:eodHasPerformance?eodRate:pct(historyDelivered,historyDelivered+historyOnhold+parcelStatusForHistory.delivering+parcelStatusForHistory.received),
         threeWcRiders:eodFleet3w,
         twoWhRiders:eodFleet2w,
         flexiRiders:eodFleetFlexi,
