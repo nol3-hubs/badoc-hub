@@ -5315,6 +5315,24 @@ body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-b .kpi-target-r
 body:not(.dark-mode) #kpi #kpiCategories .v3-kpi-card.kpi-status-a .kpi-target-row span{color:#166534!important;opacity:1!important}
 </style>
 
+
+<style id="v184-print-towns-option1-preview-and-print">
+/* Option 1 test: three town cards across per row in both preview and printed output. */
+#townPrintPreview .town-grid,
+#townPrintArea .town-grid {
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:2mm !important;
+  align-items:start !important;
+}
+#townPrintPreview .town-column,
+#townPrintArea .town-column { display:contents !important; min-width:0 !important; }
+#townPrintPreview .town-card,
+#townPrintArea .town-card {
+  width:100% !important; min-width:0 !important; max-width:100% !important;
+  box-sizing:border-box !important;
+}
+</style>
 </head>
 <body data-app-version="6.0" data-app-version="5.0">
 
@@ -10024,19 +10042,12 @@ window.DASHBOARD_V2_READY = true;
         // would be reintroduced on every publish and could poison recovery.
         const cutoff=Number(ledger.cutoff)||new Date().setHours(4,0,0,0);
         const day=today;
-        // CFR1 Rule A deliberately allows received timestamps from prior days,
-        // provided they are at or before today's 4:00 AM cutoff. The old
-        // same-day-only filter silently deleted yesterday's eligible parcels
-        // during cloud merges (for example, 418 locally became 40 in cloud).
-        // Rule B has no received timestamp; retain it only when its uploaded
-        // batch time met the 4:00 AM cutoff.
         const validForToday=rec=>{
-          if(rec?.ruleBUnscanned===true){
-            const batchMs=Number(rec?.latestBatchTime||rec?.latestRowTime||0);
-            return Number.isFinite(batchMs)&&batchMs>0&&batchMs<=cutoff;
-          }
           const ms=Number(rec?.receivedMs);
-          return Number.isFinite(ms)&&ms>0&&ms<=cutoff;
+          if(!Number.isFinite(ms)||ms<=0||ms>cutoff)return false;
+          const d=new Date(ms);
+          const key=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+          return key===day;
         };
         const cloudRecords=Object.fromEntries(Object.entries(cloud.records||{}).filter(([,rec])=>validForToday(rec)));
         const localRecords=Object.fromEntries(Object.entries(ledger.records||{}).filter(([,rec])=>validForToday(rec)));
@@ -10068,34 +10079,11 @@ window.DASHBOARD_V2_READY = true;
         lastCloudStamp=cloudStamp;
         if(!memory||memory.date!==cloud.date||
           Number(cloud._cloudUpdatedAt||0)>Number(memory._cloudUpdatedAt||0)){
-          // A newer cloud timestamp does NOT mean its CFR1 membership is more
-          // complete: another device can publish a partial 40-row ledger after
-          // this device has already calculated the full 418-row eligible set.
-          // For the same operational date, union members and prefer local rows
-          // on key collisions so a partial cloud snapshot cannot shrink totals.
-          let accepted=cloud;
-          if(memory && memory.date===cloud.date && memory.records && cloud.records){
-            const localRecords=memory.records||{};
-            const cloudRecords=cloud.records||{};
-            const mergedRecords={...cloudRecords,...localRecords};
-            accepted={...cloud,...memory,records:mergedRecords,
-              cutoff:Number(memory.cutoff||cloud.cutoff||0),
-              frozen:!!(memory.frozen||cloud.frozen),
-              schemaVersion:Math.max(Number(memory.schemaVersion||0),Number(cloud.schemaVersion||0)),
-              _cloudUpdatedAt:Math.max(Number(memory._cloudUpdatedAt||0),Number(cloud._cloudUpdatedAt||0))};
-            // If the merge added/preserved members, publish the union back to
-            // cloud so other devices converge on the complete membership set.
-            if(Object.keys(mergedRecords).length>Object.keys(cloudRecords).length){
-              window.__badocCfr1LedgerMemory=accepted;
-              publish(KEY,accepted).catch(e=>console.warn("CFR1 merged ledger publish failed",e));
-            }else{
-              window.__badocCfr1LedgerMemory=accepted;
-            }
-          }else{
-            window.__badocCfr1LedgerMemory=accepted;
-          }
+          window.__badocCfr1LedgerMemory=cloud;
           // Refresh the CFR1 view when the shared ledger changes for today's date.
           if(cloud.date===new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0")+"-"+String(new Date().getDate()).padStart(2,"0")){
+            // Do not reload the entire dashboard during background CFR1 polling.
+            // The existing periodic refresh/recalculation handles the visible state.
             window.dispatchEvent(new CustomEvent("badoc-cfr1-cloud-ledger-updated",{detail:{date:cloud.date}}));
           }
         }
@@ -11320,15 +11308,14 @@ window.updateOperationProgress=function(){
     cfr1Ledger.records && typeof cfr1Ledger.records==="object"
   );
   if(!cfr1HasStoredRecords){
-    cfr1Ledger={date:cfr1DateKey,cutoff:cfr1Four.getTime(),records:{},frozen:false,schemaVersion:2};
+    cfr1Ledger={date:cfr1DateKey,cutoff:cfr1Four.getTime(),records:{},frozen:false};
   }else if(Array.isArray(cfr1Ledger.records)){
     const o={}; cfr1Ledger.records.forEach(x=>{if(x?.key)o[x.key]=x}); cfr1Ledger.records=o;
   }
-  // One-time membership repair for older/partial ledgers. Schema v3 performs
-  // one full reconciliation against all eligible rows currently loaded. This
-  // recovers a partial cloud ledger (e.g. 40) to the eligible set (e.g. 418)
-  // while preserving existing records and scanned metadata, then freezes again.
-  const cfr1NeedsMembershipRepair=Number(cfr1Ledger.schemaVersion||0)<3;
+  // Recovery guard: an older version may have persisted frozen=true with an
+  // empty record set. That empty lock must not block rebuilding from batches.
+  // Only clear the freeze when there are zero records; populated daily ledgers
+  // retain their hard freeze exactly as before.
   if(cfr1Ledger.records && Object.keys(cfr1Ledger.records).length===0){
     cfr1Ledger.frozen=false;
     delete cfr1Ledger.frozenAt;
@@ -11415,7 +11402,7 @@ window.updateOperationProgress=function(){
     // Before 7 AM, build the daily list normally. After 7 AM, only an empty
     // ledger may recover from currently available batches; once populated it
     // freezes and cannot accept later additions.
-    if((cfr1Ledger.frozen===true && !cfr1NeedsMembershipRepair) || (cfr1Now>=cfr1Seven && !cfr1RecoveringEmptyLedger && !cfr1NeedsMembershipRepair))return;
+    if(cfr1Ledger.frozen===true || (cfr1Now>=cfr1Seven && !cfr1RecoveringEmptyLedger))return;
     const r=x.r,key=cfr1Key(r); if(!key || cfr1IsExempt(r))return;
     const stationRaw=r?.["Current Station"] ?? r?.["Current station"] ?? r?.["CURRENT STATION"] ?? Object.entries(r||{}).find(([k,v])=>/^(current\s*station)$/i.test(String(k).trim())&&String(v??"").trim()!=="")?.[1] ?? "";
     const station=norm(stationRaw);
@@ -11461,10 +11448,9 @@ window.updateOperationProgress=function(){
     }
   });
 
-  // Complete the one-time legacy membership repair from all currently loaded
-  // eligible batches. Do not drop existing members; add only missing eligible
-  // tracking keys, then return to the usual frozen-membership behavior.
-  cfr1Ledger.schemaVersion=3;
+  // If a post-7 AM recovery found eligible parcels, freeze the recovered list
+  // now. If no eligible parcels are currently available, leave the ledger
+  // unfrozen and retry on the next dashboard refresh instead of locking zero.
   if(cfr1Now>=cfr1Seven && cfr1Ledger.frozen!==true && Object.keys(cfr1Ledger.records).length>0){
     cfr1FreezeLedger();
   }
