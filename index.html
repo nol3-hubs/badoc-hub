@@ -10339,13 +10339,18 @@ window.DASHBOARD_V2_READY = true;
     }catch(e){console.warn("Riders data parse:",e)}
     if(typeof render==="function")render();
   }
-  async function applyLayout(){
-    // A pending local town move is authoritative until its cloud upload succeeds.
-    // Do not let the initial/background cloud pull overwrite that unsynced move.
+  async function applyLayout(cloudVersion=0){
+    // Preserve a local move only while it is genuinely newer than the cloud copy.
+    // A stale dirty flag from a previous failed build must not block syncing forever.
     try{
       if(localStorage.getItem("badoc_town_layout_dirty_v2")==="1"){
-        console.info("Town layout cloud pull skipped: local layout has a pending upload.");
-        return;
+        const localMoveAt=Number(localStorage.getItem("badoc_town_layout_dirty_at_v2")||0);
+        if(!cloudVersion || localMoveAt>=Number(cloudVersion)){
+          console.info("Town layout cloud pull skipped: local layout is newer or awaiting upload.");
+          return;
+        }
+        localStorage.removeItem("badoc_town_layout_dirty_v2");
+        localStorage.removeItem("badoc_town_layout_dirty_at_v2");
       }
     }catch{}
     const b=await get(P.layout);
@@ -10405,7 +10410,7 @@ window.DASHBOARD_V2_READY = true;
         if(Number(s.settings_version||0)>seen.settings)await applySettings();
         seen.settings=Number(s.settings_version||0);
       }else if(kind==="layout"){
-        if(Number(s.layout_version||0)>seen.layout)await applyLayout();
+        if(Number(s.layout_version||0)>seen.layout)await applyLayout(Number(s.layout_version||0));
         seen.layout=Number(s.layout_version||0);
       }else if(kind==="notes"){
         if(Number(s.notes_version||0)>seen.notes)await applyNotes();
@@ -10421,7 +10426,7 @@ window.DASHBOARD_V2_READY = true;
           if(!s.linehaul_exists)await clearLocalLinehaul();else if(Number(s.linehaul_version||0)>seen.linehaul)await applyLinehaul();
         }
         if(Number(s.settings_version||0)>seen.settings)await applySettings();
-        if(Number(s.layout_version||0)>seen.layout)await applyLayout();
+        if(Number(s.layout_version||0)>seen.layout)await applyLayout(Number(s.layout_version||0));
         if(Number(s.notes_version||0)>seen.notes){
           await applyNotes();
           await applyRiderSelections();
@@ -10752,12 +10757,18 @@ window.DASHBOARD_V2_READY = true;
       const revision=townLayoutSyncRevision;
       const payload=JSON.stringify(loadTownLayouts()||{});
       await put(P.layout,new Blob([payload],{type:"application/json"}),"application/json");
-      const version=Date.now();
+      // Use a monotonically increasing version so device clock skew cannot make
+      // a newer town layout look older to another device.
+      const currentState=await state();
+      const version=Math.max(Date.now(),Number(currentState?.layout_version||0)+1);
       await setState({layout_version:version});
       seen.layout=version;
       await announce("layout","update");
       if(revision===townLayoutSyncRevision){
-        try{localStorage.removeItem(TOWN_LAYOUT_DIRTY_KEY)}catch{}
+        try{
+          localStorage.removeItem(TOWN_LAYOUT_DIRTY_KEY);
+          localStorage.removeItem("badoc_town_layout_dirty_at_v2");
+        }catch{}
         status("Town layout synced to cloud");
       }else{
         // A newer move occurred during the upload; queue another authoritative snapshot.
@@ -10769,7 +10780,10 @@ window.DASHBOARD_V2_READY = true;
       townLayoutSyncQueue=townLayoutSyncQueue.catch(()=>{}).then(syncTownLayoutSnapshot);
       try{return await townLayoutSyncQueue}catch(e){
         console.error("Town layout sync failed; local layout preserved:",e);
-        try{localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1")}catch{}
+        try{
+          localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1");
+          if(!localStorage.getItem("badoc_town_layout_dirty_at_v2"))localStorage.setItem("badoc_town_layout_dirty_at_v2",String(Date.now()));
+        }catch{}
         status("Town layout sync failed: "+String(e?.message||e)+" — saved locally, retrying");
         return false;
       }
@@ -10777,7 +10791,10 @@ window.DASHBOARD_V2_READY = true;
     saveTownLayouts=function(layouts){
       originalLayoutSave.apply(this,arguments);
       townLayoutSyncRevision++;
-      try{localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1")}catch{}
+      try{
+        localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1");
+        localStorage.setItem("badoc_town_layout_dirty_at_v2",String(Date.now()));
+      }catch{}
       window.__badocSyncTownLayoutNow();
     };
     // Retry unsynced local town moves after the shared client starts and on later fallback polls.
