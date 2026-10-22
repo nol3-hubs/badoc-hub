@@ -10340,6 +10340,14 @@ window.DASHBOARD_V2_READY = true;
     if(typeof render==="function")render();
   }
   async function applyLayout(){
+    // A pending local town move is authoritative until its cloud upload succeeds.
+    // Do not let the initial/background cloud pull overwrite that unsynced move.
+    try{
+      if(localStorage.getItem("badoc_town_layout_dirty_v2")==="1"){
+        console.info("Town layout cloud pull skipped: local layout has a pending upload.");
+        return;
+      }
+    }catch{}
     const b=await get(P.layout);
     if(!b)return;
     try{
@@ -10760,9 +10768,9 @@ window.DASHBOARD_V2_READY = true;
     window.__badocSyncTownLayoutNow=async function(){
       townLayoutSyncQueue=townLayoutSyncQueue.catch(()=>{}).then(syncTownLayoutSnapshot);
       try{return await townLayoutSyncQueue}catch(e){
-        console.warn("Town layout sync failed; local layout preserved:",e);
+        console.error("Town layout sync failed; local layout preserved:",e);
         try{localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1")}catch{}
-        status("Town layout saved locally — cloud sync retrying");
+        status("Town layout sync failed: "+String(e?.message||e)+" — saved locally, retrying");
         return false;
       }
     };
