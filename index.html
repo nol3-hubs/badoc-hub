@@ -10750,7 +10750,7 @@ window.DASHBOARD_V2_READY = true;
       await announce("layout","update");
       if(revision===townLayoutSyncRevision){
         try{localStorage.removeItem(TOWN_LAYOUT_DIRTY_KEY)}catch{}
-        status("Town layout synced");
+        status("Town layout synced to cloud");
       }else{
         // A newer move occurred during the upload; queue another authoritative snapshot.
         return syncTownLayoutSnapshot();
@@ -10762,7 +10762,7 @@ window.DASHBOARD_V2_READY = true;
       try{return await townLayoutSyncQueue}catch(e){
         console.warn("Town layout sync failed; local layout preserved:",e);
         try{localStorage.setItem(TOWN_LAYOUT_DIRTY_KEY,"1")}catch{}
-        status("Town layout sync failed — saved locally, retrying");
+        status("Town layout saved locally — cloud sync retrying");
         return false;
       }
     };
@@ -10778,9 +10778,21 @@ window.DASHBOARD_V2_READY = true;
       await previousStart.apply(this,arguments);
       try{if(localStorage.getItem(TOWN_LAYOUT_DIRTY_KEY)==="1")window.__badocSyncTownLayoutNow()}catch{}
     };
-    setInterval(()=>{
-      try{if(started&&localStorage.getItem(TOWN_LAYOUT_DIRTY_KEY)==="1")window.__badocSyncTownLayoutNow()}catch{}
-    },15000);
+    // Keep pending town-layout edits moving to cloud after transient network or
+    // startup failures. The dirty flag is cleared only after Storage upload,
+    // shared-state version update, and broadcast all succeed.
+    const retryPendingTownLayoutSync=()=>{
+      try{
+        if(started&&localStorage.getItem(TOWN_LAYOUT_DIRTY_KEY)==="1"){
+          window.__badocSyncTownLayoutNow();
+        }
+      }catch(e){console.warn("Town layout retry scheduling failed:",e)}
+    };
+    setInterval(retryPendingTownLayoutSync,5000);
+    window.addEventListener("online",retryPendingTownLayoutSync);
+    document.addEventListener("visibilitychange",()=>{
+      if(document.visibilityState==="visible")retryPendingTownLayoutSync();
+    });
   }
   if(typeof saveTownNotes==="function"&&!window.__badocSharedTownNotesSyncV2){
     const originalNotesSave=saveTownNotes;window.__badocSharedTownNotesSyncV2=true;
