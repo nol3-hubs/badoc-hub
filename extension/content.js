@@ -83,11 +83,13 @@
       "BADOC_START_PARCEL_INBOUND_SYNC",
       "BADOC_START_RECEIVED_CHECKING_INBOUND_SYNC",
       "BADOC_START_PARCEL_SECONDARY_SYNC",
-      "BADOC_ABORT_SYNC"
+      "BADOC_ABORT_SYNC",
+      "BADOC_LOOKUP_RECIPIENT_NAMES"
     ]);
     if (!supported.has(data.type)) return;
     if (!port) {
-      const errorKind = data.type === "BADOC_START_DELIVERING_RECONCILE" ? "delivering-reconcile" :
+      const errorKind = data.type === "BADOC_LOOKUP_RECIPIENT_NAMES" ? "recipient-names" :
+        data.type === "BADOC_START_DELIVERING_RECONCILE" ? "delivering-reconcile" :
         data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" :
         data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
         data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
@@ -110,6 +112,11 @@
         for (const key of ["hubId","hubName","hubCode","trackingStatus","bulkyType","assignedStartUnix","assignedEndUnix","assignedStart","assignedEnd","assignedLabel","createdEndUnix"]) {
           if (data[key] !== undefined) payload[key] = data[key];
         }
+      }
+      if (data.type === "BADOC_LOOKUP_RECIPIENT_NAMES") {
+        payload.shipmentIds = Array.isArray(data.shipmentIds)
+          ? [...new Set(data.shipmentIds.map(v => String(v || "").trim()).filter(v => /^[A-Za-z0-9_-]{6,80}$/.test(v)))].slice(0, 2000)
+          : [];
       }
       port.postMessage(payload);
     } catch (error) {

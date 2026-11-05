@@ -134,7 +134,7 @@ main{padding:20px;max-width:1500px;margin:auto}.sync{display:flex;justify-conten
 <div class="sync" aria-live="polite"><div class="notification-stack"><b id="conn">Waiting for SPX Bridge</b><div class="sync-messages"><div class="primary-notification"><div class="status" id="syncStatus" title="Import the sample/export or connect the Chrome extension.">Import the sample/export or connect the Chrome extension.</div><div class="status" id="lastSync" aria-label="Last Received sync time"></div></div><div class="secondary-notification"><div class="status" id="secondaryStatus" title="Transported / RTS: Not synced yet.">Transported / RTS: Not synced yet.</div><div class="status" id="secondaryLastSync" aria-label="Last Transported / RTS sync time"></div></div></div></div></div>
 <section class="secondary-panel" id="secondaryPanel" hidden><div class="secondary-panel-head"><div><h2>Transported and RTS</h2></div><button class="primary" id="syncSecondary" type="button">↻ Sync Transported / RTS</button></div><div id="secondaryContent"><div class="value" id="secondaryCount">0</div><div class="tablewrap secondary-table"><table><thead id="secondaryThead"></thead><tbody id="secondaryTbody"><tr><td class="empty">Click Sync Transported / Returned to load these statuses.</td></tr></tbody></table></div></div></section>
 <section class="grid" id="cards"></section>
-<div class="filters"><input id="q" placeholder="Search Order ID, tracking, town..."><div class="multi-select" id="statusWrap"><button class="multi-select-btn" type="button">Status</button><div class="multi-select-menu" id="statusMenu"></div></div><div class="multi-select" id="townWrap"><button class="multi-select-btn" type="button">Town</button><div class="multi-select-menu" id="townMenu"><input id="townOptionSearch" class="town-option-search" type="search" placeholder="Search town..." autocomplete="off" aria-label="Search town options"><div id="townOptions"></div></div></div><div class="multi-select" id="highValueWrap"><button class="multi-select-btn" type="button">High Value</button><div class="multi-select-menu" id="highValueMenu"></div></div><div class="multi-select" id="bulkyWrap"><button class="multi-select-btn" type="button">Bulky</button><div class="multi-select-menu" id="bulkyMenu"></div></div><button class="secondary" id="clearFilters" type="button">Clear Filters</button></div>
+<div class="filters"><input id="q" placeholder="Search Order ID, recipient name, tracking, town..."><div class="multi-select" id="statusWrap"><button class="multi-select-btn" type="button">Status</button><div class="multi-select-menu" id="statusMenu"></div></div><div class="multi-select" id="townWrap"><button class="multi-select-btn" type="button">Town</button><div class="multi-select-menu" id="townMenu"><input id="townOptionSearch" class="town-option-search" type="search" placeholder="Search town..." autocomplete="off" aria-label="Search town options"><div id="townOptions"></div></div></div><div class="multi-select" id="highValueWrap"><button class="multi-select-btn" type="button">High Value</button><div class="multi-select-menu" id="highValueMenu"></div></div><div class="multi-select" id="bulkyWrap"><button class="multi-select-btn" type="button">Bulky</button><div class="multi-select-menu" id="bulkyMenu"></div></div><button class="secondary" id="clearFilters" type="button">Clear Filters</button></div>
 <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
 </main>
 <script>
@@ -191,7 +191,7 @@ function clearExemptions(){
     render();
   }
 }
-const cols=['Order ID','Town Name','Bulky Type','High Value','Chargeable Weight','Current Station','Destination Station','Received Time'];
+const cols=['Order ID','Recipient Name','Town Name','Bulky Type','High Value','Chargeable Weight','Current Station','Destination Station','Received Time'];
 function num(v){let n=parseFloat(String(v??'').replace(/,/g,''));return Number.isFinite(n)?n:0}
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function isBadocHub(v){return String(v??'').trim().toLowerCase()==='badoc hub'}
@@ -217,7 +217,7 @@ function normalizeSecondaryRows(rows){
   });
 }
 function renderSecondaryRows(){
-  const secondaryCols=['Order ID','SLS Tracking Number','Status','Current Station','Destination Station','Town Name','Bulky Type','High Value','Chargeable Weight'];
+  const secondaryCols=['Order ID','Recipient Name','SLS Tracking Number','Status','Current Station','Destination Station','Town Name','Bulky Type','High Value','Chargeable Weight'];
   document.getElementById('secondaryCount').textContent=state.secondaryRows.length.toLocaleString();
   document.getElementById('secondaryThead').innerHTML='<tr>'+secondaryCols.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr>';
   document.getElementById('secondaryTbody').innerHTML=state.secondaryRows.length?state.secondaryRows.map(r=>'<tr>'+secondaryCols.map(c=>`<td>${c==='Status'?`<span class="pill">${esc(r[c])}</span>`:esc(r[c])}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${secondaryCols.length}" class="empty">No SOC_LHTransported or Return_LMHub_Received parcels for Badoc Hub were found.</td></tr>`;
@@ -320,7 +320,7 @@ function searchHaystack(r){
   // Search only useful parcel-identifying fields. Hidden/internal fields are
   // intentionally excluded so unrelated values do not create false matches.
   return [
-    r['Order ID'], r['SLS Tracking Number'], r['Shopee Order SN'],
+    r['Order ID'], r['Recipient Name'], r['SLS Tracking Number'], r['Shopee Order SN'],
     r['Town Name'], r['High Value'], r['Bulky Type'],
     r['Chargeable Weight'], r['Current Station'], r['Destination Station'],
     r['Received Time']
@@ -335,13 +335,14 @@ function matchesSearch(r, rawQuery){
 
   // Support simple field-aware searches such as: order:12345, town:badoc,
   // tracking:SPX..., while still allowing normal free-text search.
-  const fieldMatch=normalized.match(/^(order|tracking|town|sn|hv|highvalue|bulky):\s*(.+)$/i);
+  const fieldMatch=normalized.match(/^(order|tracking|town|sn|hv|highvalue|bulky|name|recipient):\s*(.+)$/i);
   if(fieldMatch){
     const key=fieldMatch[1].toLowerCase(), term=fieldMatch[2];
     let values=[];
     if(key==='order') values=[r['Order ID']];
     else if(key==='tracking') values=[r['SLS Tracking Number']];
     else if(key==='town') values=[r['Town Name']];
+    else if(key==='name'||key==='recipient') values=[r['Recipient Name']];
     else if(key==='sn') values=[r['Shopee Order SN']];
     else if(key==='hv'||key==='highvalue') values=[r['High Value']];
     else if(key==='bulky') values=[r['Bulky Type']];
@@ -388,8 +389,65 @@ async function copyOrderIds(){
   btn.textContent=`Copied ${ids.length} Order IDs`;
   setTimeout(()=>btn.textContent='Copy Order IDs',1400);
 }
+let recipientLookupTimer=null;
+let recipientLookupInFlight=false;
+function scheduleRecipientNameLookup(){
+  if(recipientLookupTimer)clearTimeout(recipientLookupTimer);
+  recipientLookupTimer=setTimeout(async()=>{
+    recipientLookupTimer=null;
+    if(recipientLookupInFlight)return;
+    const rowSets=[state.rows,state.secondaryRows];
+    const rows=rowSets.flat();
+    const rowIds=new Map();
+    for(const row of rows){
+      const id=orderIdFromRow(row);
+      if(!id)continue;
+      if(!rowIds.has(id))rowIds.set(id,[]);
+      rowIds.get(id).push(row);
+    }
+    const ids=[...rowIds.entries()]
+      .filter(([,matches])=>matches.some(row=>!String(row['Recipient Name']||'').trim()&&!row.__recipientNameChecked))
+      .map(([id])=>id).slice(0,2000);
+    if(!ids.length)return;
+    recipientLookupInFlight=true;
+    try{
+      if(!(await ensureReceivedCheckingBridge('recipient names'))){recipientLookupInFlight=false;return;}
+      document.getElementById('syncStatus').textContent=`Retrieving recipient names for ${ids.length.toLocaleString()} orders…`;
+      window.postMessage({source:'BADOC_PAGE',type:'BADOC_LOOKUP_RECIPIENT_NAMES',shipmentIds:ids},'*');
+    }catch(error){
+      recipientLookupInFlight=false;
+      document.getElementById('syncStatus').textContent='Recipient-name lookup could not start: '+(error?.message||String(error));
+    }
+  },250);
+}
+function applyRecipientNames(data){
+  const names=data?.names&&typeof data.names==='object'?data.names:{};
+  const requested=new Set((Array.isArray(data?.shipmentIds)?data.shipmentIds:[]).map(normTracking));
+  const rowSets=[state.rows,state.secondaryRows];
+  for(const rows of rowSets){
+    for(const row of rows){
+      const id=orderIdFromRow(row);
+      if(!id||!requested.has(id))continue;
+      if(Object.prototype.hasOwnProperty.call(names,id)&&String(names[id]||'').trim()){
+        row['Recipient Name']=String(names[id]).trim();
+      }
+      row.__recipientNameChecked=true;
+    }
+  }
+  recipientLookupInFlight=false;
+  render();
+  renderSecondaryRows();
+  const total=Number(data?.total||0);
+  const found=Number(data?.found??Object.keys(names).length);
+  const failed=Number(data?.failed||0);
+  const note=failed&&!found?`Recipient-name lookup failed: ${data?.error||'SPX did not return recipient details.'}`:`Recipient names found: ${found.toLocaleString()} of ${total.toLocaleString()}${failed?` · ${failed.toLocaleString()} lookup failures`:''}.`;
+  document.getElementById('syncStatus').textContent=note;
+  if(data?.error&&failed)document.getElementById('conn').textContent='SPX Bridge connected · recipient lookup needs refresh';
+  // If the latest import contained more than one lookup batch, queue the rest.
+  if([...state.rows,...state.secondaryRows].some(row=>orderIdFromRow(row)&&!row['Recipient Name']&&!row.__recipientNameChecked))scheduleRecipientNameLookup();
+}
 function parseCSV(text){let lines=[];let row=[],cell='',quote=false;for(let i=0;i<text.length;i++){let ch=text[i],n=text[i+1];if(ch==='"'){if(quote&&n==='"'){cell+='"';i++}else quote=!quote}else if(ch===','&&!quote){row.push(cell);cell=''}else if((ch==='\n'||ch==='\r')&&!quote){if(ch==='\r'&&n==='\n')i++;row.push(cell);if(row.some(x=>x!==''))lines.push(row);row=[];cell=''}else cell+=ch}if(cell||row.length){row.push(cell);lines.push(row)}let h=lines.shift().map(x=>x.trim());return lines.map(a=>Object.fromEntries(h.map((k,i)=>[k,a[i]??''])))}
-async function loadText(text){let rows=await parseCSV(text);setRows(rows);document.getElementById('syncStatus').textContent=`Loaded ${rows.length.toLocaleString()} parcels.`}
+async function loadText(text){let rows=await parseCSV(text);setRows(rows);document.getElementById('syncStatus').textContent=`Loaded ${rows.length.toLocaleString()} parcels. Retrieving recipient names…`;scheduleRecipientNameLookup()}
 document.getElementById('q').addEventListener('input',render);
 setupFilterDropdowns();
 document.getElementById('clearFilters').onclick=()=>{
@@ -495,6 +553,7 @@ window.addEventListener('message',e=>{
     state.secondaryRows=[...new Map(Object.values(state.secondaryCsvByStatus).flat().map(r=>[String(r['SLS Tracking Number']||r['Order ID']||JSON.stringify(r)),r])).values()];
     renderSecondaryRows();
     document.getElementById('secondaryStatus').textContent=`Loaded ${state.secondaryRows.length.toLocaleString()} parcels.`;
+    scheduleRecipientNameLookup();
   }
   if(d.type==='BADOC_SPX_SECONDARY_PARCEL_DONE'){
     document.getElementById('secondaryStatus').textContent=`Loaded ${state.secondaryRows.length.toLocaleString()} parcels.`;
@@ -502,6 +561,16 @@ window.addEventListener('message',e=>{
   }
   if(d.type==='BADOC_SPX_ERROR' && d.kind==='parcel-secondary'){
     document.getElementById('secondaryStatus').textContent='Separate sync failed: '+(d.message||'Unknown error');
+  }
+  if(d.type==='BADOC_SPX_RECIPIENT_NAMES_PROGRESS'){
+    document.getElementById('syncStatus').textContent=`Retrieving recipient names ${Number(d.completed||0).toLocaleString()} / ${Number(d.total||0).toLocaleString()} · found ${Number(d.found||0).toLocaleString()}…`;
+  }
+  if(d.type==='BADOC_SPX_RECIPIENT_NAMES_RESULTS'){
+    applyRecipientNames(d);
+  }
+  if(d.type==='BADOC_SPX_RECIPIENT_NAMES_ERROR'){
+    recipientLookupInFlight=false;
+    document.getElementById('syncStatus').textContent='Recipient-name lookup failed: '+(d.message||'SPX did not return recipient details.');
   }
   if(d.type==='BADOC_SPX_PARCEL_DONE'){
     document.getElementById('syncStatus').textContent=document.getElementById('syncStatus').textContent || 'Sync Received complete.';
