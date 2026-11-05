@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-round-logo-v3';
+const CACHE_NAME = 'badoc-hub-pwa-blue-v69-3-4';
 const APP_SHELL = [
   './index.html',
   './manifest-badoc-hub-round-v3.webmanifest',

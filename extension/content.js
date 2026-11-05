@@ -95,7 +95,7 @@
         data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
         data.type === "BADOC_START_RIDER_SYNC" ? "rider" : "parcel-inbound";
       emit("BADOC_SPX_ERROR", {
-        message: "SPX BRIDGE v69 is not connected. Reload the extension and refresh BADOC HUB.",
+        message: "SPX BRIDGE v69.3.4 is not connected. Reload the extension and refresh BADOC HUB.",
         kind: errorKind
       });
       return;

@@ -7,8 +7,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f4f6f8",
-  "theme_color": "#ee4d2d",
+  "background_color": "#f5f7fb",
+  "theme_color": "#1683ff",
   "icons": [
     {
       "src": "./icons/badoc-hub-spx-round-v3-192.png",
