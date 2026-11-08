@@ -2010,3 +2010,283 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     active: activeJobs.size > 0
   });
 });
+
+
+// ───────── Integrated POD/POOH Checker background actions ─────────
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.target !== "POD_CHECKER_BACKGROUND") return false;
+
+  // Run Google Sheets requests from the MV3 service worker. This avoids the
+  // extension-page CORS failure seen when calling docs.google.com directly.
+  if (message.action === "FETCH_GOOGLE_TEXT") {
+    (async () => {
+      let requested;
+      try {
+        requested = new URL(String(message.url || ""));
+        if (requested.protocol !== "https:" || requested.hostname !== "docs.google.com" || !requested.pathname.startsWith("/spreadsheets/")) {
+          throw new Error("Blocked Google request: only Google Sheets spreadsheet URLs are allowed.");
+        }
+        const response = await fetch(requested.href, {
+          method: "GET",
+          credentials: "include",
+          redirect: "follow",
+          cache: "no-store"
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          const diagnostic = text
+            .replace(/<script[\s\S]*?<\/script>/gi, " ")
+            .replace(/<style[\s\S]*?<\/style>/gi, " ")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&nbsp;|&#160;/gi, " ")
+            .replace(/&amp;/gi, "&")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 260);
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(`Google returned HTTP ${response.status}. Confirm this Chrome profile is signed in and has Viewer access to the selected Daily Ops Dashboard.${diagnostic ? ` Google detail: ${diagnostic}` : ""}`);
+          }
+          throw new Error(`Google returned HTTP ${response.status} while reading the selected dashboard.${diagnostic ? ` Google detail: ${diagnostic}` : ""}`);
+        }
+        sendResponse({ ok: true, status: response.status, finalUrl: response.url, text });
+      } catch (error) {
+        const messageText = error?.message || String(error);
+        if (/Failed to fetch|NetworkError|fetch failed/i.test(messageText)) {
+          sendResponse({ ok: false, error: "Google Sheets could not be reached from the extension. Check your internet connection, sign-in, and Google access, then reload the extension and try again." });
+        } else {
+          sendResponse({ ok: false, error: messageText });
+        }
+      }
+    })();
+    return true;
+  }
+
+  if (message.action !== "OPEN_SPX_PORTAL") return false;
+
+  (async () => {
+    const proofOfOnHoldUrl = "https://spx.shopee.ph/#/orderDetail/PROOF_OF_ONHOLD/proof_of_onhold?originUrl=%2ForderTracking&module=am_hubDeliveryManagement&stationType=AM_HUB";
+    const isProofPage = url => /PROOF_OF_ONHOLD/i.test(String(url || "")) && /proof_of_onhold/i.test(String(url || ""));
+
+    // Reuse a Proof of On Hold tab if it already exists. Otherwise reuse another
+    // SPX tab and route it to the required page. Create a background tab only
+    // when SPX is completely closed; never activate the tab or switch the user away.
+    const spxTabs = await chrome.tabs.query({ url: `${SPX_ORIGIN}/*` });
+    const preferredWindowId = sender?.tab?.windowId;
+    const sortTabs = (a, b) => {
+      const aSameWindow = a.windowId === preferredWindowId ? 1 : 0;
+      const bSameWindow = b.windowId === preferredWindowId ? 1 : 0;
+      if (aSameWindow !== bSameWindow) return bSameWindow - aSameWindow;
+      return (b.lastAccessed || 0) - (a.lastAccessed || 0);
+    };
+    const existingProofTabs = spxTabs.filter(tab => isProofPage(tab.url)).sort(sortTabs);
+    const otherSpxTabs = spxTabs.filter(tab => !isProofPage(tab.url)).sort(sortTabs);
+    let tab = existingProofTabs[0] || otherSpxTabs[0] || null;
+    let created = false;
+    let navigated = false;
+
+    if (!tab) {
+      tab = await chrome.tabs.create({ url: proofOfOnHoldUrl, active: false });
+      created = true;
+    } else if (!isProofPage(tab.url)) {
+      tab = await chrome.tabs.update(tab.id, { url: proofOfOnHoldUrl, active: false });
+      navigated = true;
+    }
+    if (!tab?.id) throw new Error("Chrome could not prepare an SPX tab.");
+
+    // Wait for navigation to finish without activating the background tab.
+    const navDeadline = Date.now() + 60000;
+    let tabState = await chrome.tabs.get(tab.id);
+    while (tabState.status !== "complete" && Date.now() < navDeadline) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      tabState = await chrome.tabs.get(tab.id);
+    }
+    if (tabState.status !== "complete") throw new Error("SPX navigation timed out. The background tab is still loading.");
+
+    // A tab may have been open before Badoc Hub Extesion was reloaded. Chrome
+    // does not retroactively run manifest content_scripts in an existing tab.
+    // Inject both POD bridge halves explicitly. Each has an installation guard,
+    // so this is safe for newly opened tabs and repeat checks too.
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "ISOLATED",
+        files: ["pod-checker/content.js"]
+      });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "MAIN",
+        files: ["pod-checker/page_bridge.js"]
+      });
+    } catch (injectionError) {
+      const detail = injectionError?.message || String(injectionError);
+      throw new Error(`Badoc Hub Extesion could not attach its SPX checker scripts to this tab: ${detail}. Check that the extension has site access to https://spx.shopee.ph, then reload SPX and try again.`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 180));
+
+    // Confirm the receiver exists before requesting SPA route readiness. This
+    // returns a targeted error instead of the generic Chrome messaging error.
+    // First wait for the extension content script / page-world bridge to answer
+    // a fast PING. Retry only connection-startup failures, never queue repeated
+    // long WAIT_FMS_READY commands against the same page.
+    const bridgeDeadline = Date.now() + 12000;
+    let bridgePing = null;
+    let bridgeError = null;
+    while (Date.now() < bridgeDeadline) {
+      try {
+        bridgePing = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "PING" });
+        if (bridgePing?.ok) break;
+        bridgeError = new Error(bridgePing?.error || "SPX page bridge did not answer its readiness ping.");
+      } catch (error) {
+        bridgeError = error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    if (!bridgePing?.ok) {
+      throw new Error(bridgeError?.message || "Badoc Hub Extesion could not connect to the SPX page. Reload the extension and try again.");
+    }
+
+    // SPX is a SPA. Ask once for bounded route/content readiness.
+    let readiness;
+    try {
+      readiness = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "WAIT_FMS_READY" });
+    } catch (error) {
+      throw new Error(error?.message || "SPX Proof of On Hold page did not respond. Reload SPX and try again.");
+    }
+    if (!readiness?.ok) {
+      throw new Error(readiness?.error || "SPX Proof of On Hold page is not ready. Check your SPX sign-in and try again.");
+    }
+
+    sendResponse({
+      ok: true,
+      created,
+      reused: !created,
+      navigated,
+      loaded: true,
+      pageReady: true,
+      waitedMs: readiness.waitedMs,
+      background: true,
+      tabId: tab.id,
+      windowId: tab.windowId,
+      url: proofOfOnHoldUrl
+    });
+  })().catch(error => {
+    console.error("POD Checker could not prepare the SPX Proof of On Hold page:", error);
+    sendResponse({ ok: false, error: error?.message || String(error) });
+  });
+
+  return true;
+});
+
+// Dashboard-hosted POD/POOH Checker RPC. The website UI never receives Chrome APIs
+// directly; its content-script bridge requests these tightly-scoped operations.
+async function podDiscoverWorksheetGidsOnPage() {
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const labelOf = el => String(el.getAttribute('aria-label') || el.getAttribute('data-tooltip') || el.getAttribute('title') || el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+  const getTabs = () => {
+    const selectors = ['.docs-sheet-tab', '[role="tab"]', '[data-sheet-id]', '[data-sheetid]'];
+    const raw = selectors.flatMap(selector => Array.from(document.querySelectorAll(selector)));
+    const seen = new Set();
+    const nodes = raw.filter(el => {
+      const target = el.closest('.docs-sheet-tab,[role="tab"]') || el;
+      if (seen.has(target)) return false;
+      seen.add(target);
+      const rect = target.getBoundingClientRect();
+      if (rect.height < 8) return false;
+      const cls = String(target.className || '');
+      const isSheetClass = /docs-sheet-tab/i.test(cls);
+      const isBottomRole = target.getAttribute('role') === 'tab' && rect.top > window.innerHeight * 0.55;
+      const hasSheetId = target.hasAttribute('data-sheet-id') || target.hasAttribute('data-sheetid');
+      if (!isSheetClass && !isBottomRole && !hasSheetId) return false;
+      const label = labelOf(target);
+      return !!label && label.length < 100;
+    });
+    if (nodes.length) return nodes;
+    return Array.from(document.querySelectorAll('button,[role="button"],[aria-label]')).filter(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.height < 8 || rect.top < window.innerHeight * 0.68) return false;
+      const label = labelOf(el);
+      return !!label && label.length < 70 && !/add sheet|all sheets|explore|keyboard|status|comments|share/i.test(label);
+    });
+  };
+  const gidFromUrl = () => {
+    const url = new URL(location.href);
+    return url.hash.match(/(?:^|[&#])gid=(\d+)/)?.[1] || url.search.match(/[?&]gid=(\d+)/)?.[1] || '';
+  };
+  const directGid = el => {
+    const values = [el.getAttribute('data-sheet-id'), el.getAttribute('data-sheetid'), el.getAttribute('data-gid')];
+    for (const value of values) if (value && /^\d+$/.test(value)) return value;
+    const html = String(el.outerHTML || '');
+    return html.match(/(?:sheetId|sheet_id|gridId|data-sheet-id|data-sheetid|data-gid)["'\s:=]+(\d+)/i)?.[1] || '';
+  };
+  const beforeGid = gidFromUrl();
+  const initialTabs = getTabs();
+  if (!initialTabs.length) return { gids: beforeGid ? [beforeGid] : [], labels: [], activeGid: beforeGid, method: 'url-only', error: 'Google Sheets worksheet tabs were not exposed in the page DOM.' };
+  const labels = initialTabs.map(labelOf);
+  const direct = initialTabs.map(directGid);
+  const inventoryIndex = labels.findIndex(label => /\binventory\b/i.test(label));
+  let activeIndex = initialTabs.findIndex(el => el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-pressed') === 'true' || /selected|active/i.test(String(el.className || '')));
+  if (activeIndex < 0) activeIndex = initialTabs.findIndex(el => el.getAttribute('tabindex') === '0');
+  if (activeIndex < 0 && beforeGid) activeIndex = initialTabs.findIndex(el => directGid(el) === beforeGid);
+  const gids = new Set(direct.filter(Boolean));
+  if (beforeGid) gids.add(beforeGid);
+  let inventoryGid = inventoryIndex >= 0 ? (direct[inventoryIndex] || '') : '';
+  const order = inventoryIndex >= 0 ? [inventoryIndex] : initialTabs.map((_, index) => index);
+  for (const index of order) {
+    const current = getTabs();
+    const el = current[index];
+    if (!el) continue;
+    const knownGid = directGid(el);
+    if (knownGid) gids.add(knownGid);
+    if (index === activeIndex) {
+      if (index === inventoryIndex) inventoryGid = beforeGid || knownGid || inventoryGid;
+      continue;
+    }
+    try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); el.click(); } catch (_) { continue; }
+    let gid = '';
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await sleep(80);
+      gid = gidFromUrl();
+      if (gid && gid !== beforeGid) break;
+    }
+    if (!gid) gid = gidFromUrl();
+    if (gid) gids.add(gid);
+    const now = getTabs()[index];
+    const attrGid = now ? directGid(now) : knownGid;
+    if (attrGid) gids.add(attrGid);
+    if (index === inventoryIndex) inventoryGid = gid || attrGid || inventoryGid;
+  }
+  const restoreTabs = getTabs();
+  let restore = activeIndex >= 0 ? restoreTabs[activeIndex] : null;
+  if (!restore && beforeGid) restore = restoreTabs.find(el => directGid(el) === beforeGid) || null;
+  if (restore) { try { restore.click(); await sleep(220); } catch (_) {} }
+  const restoredGid = gidFromUrl();
+  return { gids: [...gids], labels, activeGid: beforeGid || restoredGid, inventoryGid, method: 'tab-strip-scan', restored: !beforeGid || restoredGid === beforeGid };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.target !== "POD_CHECKER_RPC") return false;
+  (async () => {
+    const args = Array.isArray(message.args) ? message.args : [];
+    if (message.method === "tabs.query") return await chrome.tabs.query(args[0] || {});
+    if (message.method === "tabs.sendMessage") {
+      const tabId = Number(args[0]);
+      if (!Number.isInteger(tabId)) throw new Error("Invalid SPX tab ID.");
+      return await chrome.tabs.sendMessage(tabId, args[1] || {});
+    }
+    if (message.method === "scripting.discoverWorksheetGids") {
+      const tabId = Number(args[0]);
+      if (!Number.isInteger(tabId)) throw new Error("Invalid Google Sheets tab ID.");
+      const tab = await chrome.tabs.get(tabId);
+      const url = new URL(String(tab.url || ""));
+      if (url.protocol !== "https:" || !["docs.google.com", "sheets.google.com"].includes(url.hostname) || !/\/spreadsheets(?:\/|$)/i.test(url.pathname)) {
+        throw new Error("Selected tab is not a Google Sheets spreadsheet.");
+      }
+      const injected = await chrome.scripting.executeScript({ target: { tabId }, world: "ISOLATED", func: podDiscoverWorksheetGidsOnPage });
+      const result = injected?.[0]?.result;
+      if (!result) throw new Error("The Google Sheets page did not return worksheet information.");
+      return result;
+    }
+    throw new Error(`Unsupported POD Checker RPC method: ${String(message.method || "")}`);
+  })().then(result => sendResponse({ ok: true, result })).catch(error => sendResponse({ ok: false, error: error?.message || String(error) }));
+  return true;
+});

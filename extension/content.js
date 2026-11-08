@@ -85,6 +85,43 @@
       return;
     }
 
+    if (data.type === "BADOC_POD_RPC") {
+      const rpcId = String(data.rpcId || "");
+      const method = String(data.method || "");
+      const args = Array.isArray(data.args) ? data.args : [];
+      const reply = (ok, result, error) => emit("BADOC_POD_RPC_RESULT", { rpcId, ok, result, error });
+      (async () => {
+        try {
+          let result;
+          if (method === "storage.local.get") result = await chrome.storage.local.get(args[0]);
+          else if (method === "storage.local.set") result = await chrome.storage.local.set(args[0] || {});
+          else if (method === "storage.local.remove") result = await chrome.storage.local.remove(args[0]);
+          else if (method === "runtime.sendMessage") result = await chrome.runtime.sendMessage(args[0] || {});
+          else if (method === "tabs.query" || method === "tabs.sendMessage" || method === "scripting.discoverWorksheetGids") {
+            result = await chrome.runtime.sendMessage({ target: "POD_CHECKER_RPC", method, args });
+            if (!result?.ok) throw new Error(result?.error || "Extension request failed.");
+            result = result.result;
+          } else {
+            throw new Error(`Unsupported POD Checker bridge method: ${method}`);
+          }
+          reply(true, result, "");
+        } catch (error) {
+          reply(false, null, error?.message || String(error));
+        }
+      })();
+      return;
+    }
+
+    if (data.type === "BADOC_GET_POD_CHECKER_URL") {
+      // Serve the checker from this extension's own origin so it can use
+      // chrome.tabs, chrome.storage, and chrome.scripting inside the iframe.
+      emit("BADOC_POD_CHECKER_URL", {
+        url: chrome.runtime.getURL("pod-checker/app.html"),
+        checkerVersion: "1.5.47"
+      });
+      return;
+    }
+
     const supported = new Set([
       "BADOC_START_LINEHAUL_SYNC",
       "BADOC_START_DELIVERING_RECONCILE",

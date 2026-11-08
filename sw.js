@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-app-v11-dispatch-bridge-v1-20261108';
+const CACHE_NAME = 'badoc-hub-pwa-app-v18-pod-receiver-injection-20261108';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
