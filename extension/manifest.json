@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SPX BRIDGE",
-  "version": "69.3.7",
-  "description": "Unified SPX BRIDGE for BADOC HUB operations and isolated Received Checking exports.",
+  "name": "Badoc Hub Extesion",
+  "version": "1",
+  "description": "Badoc Hub browser extension for SPX operations.",
   "permissions": [
     "cookies",
     "scripting",
@@ -35,5 +35,5 @@
       "match_about_blank": true
     }
   ],
-  "short_name": "SPX BRIDGE"
+  "short_name": "Badoc Hub Extesion"
 }
