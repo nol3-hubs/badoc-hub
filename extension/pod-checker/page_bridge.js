@@ -1,10 +1,9 @@
 
 (() => {
-  if (window.__POOD_CHECKER_BRIDGE_INSTALLED__) return;
-  window.__POOD_CHECKER_BRIDGE_INSTALLED__ = true;
+  if (window.__POOD_CHECKER_BRIDGE_INSTALLED_V19__) return;
 
-  const SOURCE = "POOD_CHECKER_PAGE_BRIDGE";
-  const COMMAND_SOURCE = "POOD_CHECKER_EXTENSION";
+  const SOURCE = "POOD_CHECKER_PAGE_BRIDGE_V19";
+  const COMMAND_SOURCE = "POOD_CHECKER_EXTENSION_V19";
   const captures = [];
   let targetOids = [];
   let nextId = 1;
@@ -955,6 +954,7 @@
       if (msg.command === "PING") {
         payload = {
           ok: true,
+          bridgeVersion: "19",
           route: String(location.hash || ""),
           title: String(document.title || ""),
           bodyLength: String(document.body?.innerText || "").trim().length
@@ -1014,5 +1014,6 @@
     window.postMessage({source:SOURCE, requestId:msg.requestId, payload}, location.origin);
   });
 
-  window.postMessage({source:SOURCE, type:"READY", payload:{ok:true}}, location.origin);
+  window.__POOD_CHECKER_BRIDGE_INSTALLED_V19__ = true;
+  window.postMessage({source:SOURCE, type:"READY", payload:{ok:true, bridgeVersion:"19"}}, location.origin);
 })();

@@ -54,14 +54,14 @@ async function pageCommand(command,data={}) {
     tab = await getSpxTab();
   }
   try {
-    return await chrome.tabs.sendMessage(tab.id,{target:"pood-page",command,data});
+    return await chrome.tabs.sendMessage(tab.id,{target:"pood-page-v19",command,data});
   } catch (error) {
     const message = String(error?.message || error || "");
     if (!/no tab with id|receiving end does not exist|could not establish connection|no response from the spx page|cannot connect to the spx tab/i.test(message)) throw error;
     // Recover once if SPX was closed or its content script was disconnected mid-run.
     await ensureSpxReady();
     tab = await getSpxTab();
-    return await chrome.tabs.sendMessage(tab.id,{target:"pood-page",command,data});
+    return await chrome.tabs.sendMessage(tab.id,{target:"pood-page-v19",command,data});
   }
 }
 function esc(x){return String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}

@@ -2133,22 +2133,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     let bridgeError = null;
     while (Date.now() < bridgeDeadline) {
       try {
-        bridgePing = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "PING" });
-        if (bridgePing?.ok) break;
-        bridgeError = new Error(bridgePing?.error || "SPX page bridge did not answer its readiness ping.");
+        bridgePing = await chrome.tabs.sendMessage(tab.id, { target: "pood-page-v19", command: "PING" });
+        if (bridgePing?.ok && String(bridgePing.bridgeVersion || "") === "19") break;
+        bridgeError = new Error(bridgePing?.error || (bridgePing?.ok ? "A stale SPX POD receiver answered instead of receiver v19." : "SPX page bridge did not answer its readiness ping."));
       } catch (error) {
         bridgeError = error;
       }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    if (!bridgePing?.ok) {
-      throw new Error(bridgeError?.message || "Badoc Hub Extesion could not connect to the SPX page. Reload the extension and try again.");
+    if (!bridgePing?.ok || String(bridgePing.bridgeVersion || "") !== "19") {
+      throw new Error(bridgeError?.message || "Badoc Hub Extesion could not connect to the SPX page receiver v19. Reload the extension and try again.");
     }
 
     // SPX is a SPA. Ask once for bounded route/content readiness.
     let readiness;
     try {
-      readiness = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "WAIT_FMS_READY" });
+      readiness = await chrome.tabs.sendMessage(tab.id, { target: "pood-page-v19", command: "WAIT_FMS_READY" });
     } catch (error) {
       throw new Error(error?.message || "SPX Proof of On Hold page did not respond. Reload SPX and try again.");
     }
