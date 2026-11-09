@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v19">
+<meta name="badoc-app-version" content="v20">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -7798,7 +7798,7 @@ html body #dashboard .btn,html body #linehaul .btn,html body #linehaul .lh-uploa
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v19</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v20</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -8331,7 +8331,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v19</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v20</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -13849,10 +13849,22 @@ window.updateOperationProgress=function(){
   };
   const cfr1Status=r=>norm(statusTo(r));
   // Pick Up Time is the source of truth for the first scanned time.
-  const cfr1PickUpTime=r=>String(r?.["Pick Up Time"]??r?.["Pick up time"]??r?.["PICK UP TIME"]??"").trim();
-  // SOC_LHTransported is part of the CFR1 TOTAL when it is at CAGAYAN DC;
-  // it is NOT a scanned status.
-  const cfr1IsScannedStatus=r=>["DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD"].includes(cfr1Status(r));
+  // Accept export headers such as "Pick Up Time", "First Pick Up Time",
+  // and "At Pick Up Time" because SPX exports may label the same field differently.
+  const cfr1PickUpTime=r=>{
+    const directKeys=["Pick Up Time","Pick up time","PICK UP TIME","First Pick Up Time","At Pick Up Time","pickUpTime","scannedTime"];
+    for(const key of directKeys){const value=r?.[key];if(value!==undefined&&value!==null&&String(value).trim()!=="")return String(value).trim();}
+    const dynamicKey=Object.keys(r||{}).find(key=>String(key).toLowerCase().replace(/[^a-z0-9]/g,"").includes("pickuptime")&&String(r[key]??"").trim()!=="");
+    return dynamicKey?String(r[dynamicKey]).trim():"";
+  };
+  // A populated Pick Up Time means the parcel has physically been picked up,
+  // even when its current SPX status remains LMHub_Received. The special
+  // SOC_LHTransported-before-4AM Rule B is always unscanned and overrides this.
+  const cfr1IsScannedStatus=r=>{
+    if(r?.ruleBUnscanned===true)return false;
+    const statusScanned=["DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD"].includes(cfr1Status(r));
+    return statusScanned || !!cfr1PickUpTime(r);
+  };
 
   // CFR1 ledger is memory-only on this device; shared persistence is cloud-only.
   let cfr1Ledger=window.__badocCfr1LedgerMemory||null;
@@ -13882,7 +13894,7 @@ window.updateOperationProgress=function(){
     Object.values(cfr1Ledger.records||{}).forEach(rec=>{
       if(!Object.prototype.hasOwnProperty.call(rec,"frozenStatus")) rec.frozenStatus=String(rec.status||"").trim();
       if(!Object.prototype.hasOwnProperty.call(rec,"frozenScannedTime")) rec.frozenScannedTime=String(rec.scannedTime||"").trim();
-      if(!Object.prototype.hasOwnProperty.call(rec,"frozenScanned")) rec.frozenScanned=cfr1IsScannedStatus({Status:rec.frozenStatus});
+      if(!Object.prototype.hasOwnProperty.call(rec,"frozenScanned")) rec.frozenScanned=cfr1IsScannedStatus({Status:rec.frozenStatus,scannedTime:rec.scannedTime,ruleBUnscanned:rec.ruleBUnscanned});
     });
     cfr1Ledger.frozen=true;
     cfr1Ledger.frozenAt=cfr1Seven.getTime();
@@ -13903,7 +13915,7 @@ window.updateOperationProgress=function(){
     Object.values(cfr1Ledger.records||{}).forEach(rec=>{
       if(!Object.prototype.hasOwnProperty.call(rec,"frozenStatus")) rec.frozenStatus=String(rec.status||"").trim();
       if(!Object.prototype.hasOwnProperty.call(rec,"frozenScannedTime")) rec.frozenScannedTime=String(rec.scannedTime||"").trim();
-      if(!Object.prototype.hasOwnProperty.call(rec,"frozenScanned")) rec.frozenScanned=cfr1IsScannedStatus({Status:rec.frozenStatus});
+      if(!Object.prototype.hasOwnProperty.call(rec,"frozenScanned")) rec.frozenScanned=cfr1IsScannedStatus({Status:rec.frozenStatus,scannedTime:rec.scannedTime,ruleBUnscanned:rec.ruleBUnscanned});
     });
   }
 
@@ -13997,7 +14009,7 @@ window.updateOperationProgress=function(){
         latestBatchTime:x.btime,
         latestRowTime:x.btime,
         status:String(statusTo(r)||r?.["Status"]||"").trim(),
-        scannedTime:isRuleB?"":(cfr1IsScannedStatus(r)?cfr1PickUpTime(r):""),
+        scannedTime:isRuleB?"":cfr1PickUpTime(r),
         noTownFilter:isRuleB,
         ruleBUnscanned:isRuleB
       };
@@ -14029,7 +14041,9 @@ window.updateOperationProgress=function(){
         // in a scanned status. Later status updates must not overwrite it.
         if(rec.ruleBUnscanned===true){
           rec.scannedTime="";
-        }else if(!String(rec.scannedTime||"").trim() && cfr1IsScannedStatus(r)){
+        }else if(!String(rec.scannedTime||"").trim() && cfr1PickUpTime(r)){
+          // A timestamp in Pick Up Time is sufficient evidence that the parcel
+          // was picked up, even while SPX still reports LMHub_Received.
           rec.scannedTime=cfr1PickUpTime(r);
         }
         const latestStation=norm(r?.["Current Station"]||"");
@@ -14064,7 +14078,7 @@ window.updateOperationProgress=function(){
     // Always show the latest synced status. The daily freeze is for count
     // membership only; it must not pin a parcel to its 7:00 AM status.
     const rawStatus=String(rec.status||"").trim();
-    const scanned=cfr1IsScannedStatus({Status:rawStatus});
+    const scanned=cfr1IsScannedStatus({...rec,Status:rawStatus});
     cfr1Total++;
     if(scanned){
       cfr1Scanned++;
