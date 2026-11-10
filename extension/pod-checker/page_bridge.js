@@ -3,31 +3,97 @@
   const SOURCE = "POOD_CHECKER_PAGE_BRIDGE_V19";
   const COMMAND_SOURCE = "POOD_CHECKER_EXTENSION_V19";
 
-  // Install the tiny health-check receiver before any fetch/XHR instrumentation
-  // or other page setup. This lets the extension distinguish a live receiver
-  // from a page bridge that failed partway through initialization.
+  // Install a lightweight receiver for both the health check and FMS readiness
+  // before fetch/XHR instrumentation. This must remain available even if the
+  // heavier SPX instrumentation is already installed, stale, or fails to start.
   const PING_LISTENER_KEY = "__POOD_CHECKER_PING_LISTENER_V19__";
   try {
     const previousPingListener = window[PING_LISTENER_KEY];
     if (previousPingListener) window.removeEventListener("message", previousPingListener);
   } catch (_) {}
-  const pingListener = event => {
+
+  const sendBridgeReply = (requestId, payload) => {
+    try {
+      window.postMessage({ source: SOURCE, requestId, payload }, location.origin);
+    } catch (_) {}
+  };
+
+  const isProofOfOnHoldRoute = () => {
+    const address = `${location.href || ""} ${location.hash || ""}`;
+    return /PROOF_OF_ONHOLD/i.test(address) && /proof_of_onhold/i.test(address);
+  };
+
+  const pingListener = async event => {
     const msg = event.data;
     if (event.source !== window || event.origin !== location.origin || !msg ||
-        msg.source !== COMMAND_SOURCE || !msg.requestId || msg.command !== "PING") return;
-    window.postMessage({
-      source: SOURCE,
-      requestId: msg.requestId,
-      payload: {
+        msg.source !== COMMAND_SOURCE || !msg.requestId) return;
+
+    if (msg.command === "PING") {
+      sendBridgeReply(msg.requestId, {
         ok: true,
         bridgeVersion: "19",
         route: String(location.hash || ""),
         title: String(document.title || ""),
-        bodyLength: String(document.body?.innerText || "").trim().length,
+        bodyLength: String(document.body?.textContent || "").trim().length,
         receiverReady: true
+      });
+      return;
+    }
+
+    if (msg.command !== "WAIT_FMS_READY") return;
+
+    // Do not rely on DOM text becoming perfectly stable. FMS is a live SPA and
+    // background widgets can update continuously. The tab navigation has
+    // already completed before this command is sent, so require the target
+    // route plus meaningful body content on two consecutive probes only.
+    const startedAt = Date.now();
+    const maxWaitMs = 22000;
+    const pollMs = 350;
+    let consecutiveReadyChecks = 0;
+    let payload = null;
+
+    try {
+      while (Date.now() - startedAt < maxWaitMs) {
+        const routeReady = isProofOfOnHoldRoute();
+        const bodyLength = String(document.body?.textContent || "").replace(/\s+/g, " ").trim().length;
+        const documentReady = document.readyState !== "loading";
+
+        if (routeReady && documentReady && bodyLength > 40) {
+          consecutiveReadyChecks += 1;
+          if (consecutiveReadyChecks >= 2) {
+            payload = {
+              ok: true,
+              ready: true,
+              waitedMs: Date.now() - startedAt,
+              message: "SPX Proof of On Hold page is ready."
+            };
+            break;
+          }
+        } else {
+          consecutiveReadyChecks = 0;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollMs));
       }
-    }, location.origin);
+
+      if (!payload) {
+        const routeReady = isProofOfOnHoldRoute();
+        const bodyLength = String(document.body?.textContent || "").trim().length;
+        if (!routeReady) {
+          throw new Error("SPX did not reach the Proof of On Hold page. Check your SPX session and try again.");
+        }
+        if (bodyLength <= 40) {
+          throw new Error("SPX opened, but the Proof of On Hold page has not rendered its content. Check your SPX sign-in and try again.");
+        }
+        throw new Error("SPX Proof of On Hold is still loading. Wait a moment and click Check OIDs again.");
+      }
+    } catch (error) {
+      payload = { ok: false, error: error?.message || String(error) };
+    }
+
+    sendBridgeReply(msg.requestId, payload);
   };
+
   window.addEventListener("message", pingListener);
   window[PING_LISTENER_KEY] = pingListener;
 
@@ -980,7 +1046,7 @@
   window.addEventListener("message", async event => {
     const msg = event.data;
     if (event.source !== window || event.origin !== location.origin || !msg || msg.source !== COMMAND_SOURCE || !msg.requestId) return;
-    if (msg.command === "PING") return; // handled by the early health-check listener
+    if (msg.command === "PING" || msg.command === "WAIT_FMS_READY") return; // handled by the early health/readiness listener
     let payload;
     try {
       if (msg.command === "PING") {
@@ -1023,7 +1089,7 @@
         }
         if (!payload) {
           const routeReady = location.hash.includes("PROOF_OF_ONHOLD") || location.href.includes("PROOF_OF_ONHOLD");
-          const bodyLength = String(document.body?.innerText || "").trim().length;
+          const bodyLength = String(document.body?.textContent || "").trim().length;
           if (!routeReady) throw new Error("SPX did not reach the Proof of On Hold page. Check your SPX session and try again.");
           if (bodyLength <= 120) throw new Error("SPX opened, but the Proof of On Hold page has not loaded its content. Check your SPX sign-in and try again.");
           throw new Error("SPX is still updating the Proof of On Hold page. Wait a moment and click Check OIDs again.");

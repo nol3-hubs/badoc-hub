@@ -39,7 +39,7 @@
     };
 
     const timeoutMs = msg.command === "PING" ? 2500 :
-      msg.command === "WAIT_FMS_READY" ? 32000 :
+      msg.command === "WAIT_FMS_READY" ? 28000 :
       msg.command === "REPLAY" ? 30000 : 5000;
     const timer = setTimeout(() => {
       finish({
