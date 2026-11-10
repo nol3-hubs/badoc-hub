@@ -1,9 +1,40 @@
 
 (() => {
-  if (window.__POOD_CHECKER_BRIDGE_INSTALLED_V19__) return;
-
   const SOURCE = "POOD_CHECKER_PAGE_BRIDGE_V19";
   const COMMAND_SOURCE = "POOD_CHECKER_EXTENSION_V19";
+
+  // Install the tiny health-check receiver before any fetch/XHR instrumentation
+  // or other page setup. This lets the extension distinguish a live receiver
+  // from a page bridge that failed partway through initialization.
+  const PING_LISTENER_KEY = "__POOD_CHECKER_PING_LISTENER_V19__";
+  try {
+    const previousPingListener = window[PING_LISTENER_KEY];
+    if (previousPingListener) window.removeEventListener("message", previousPingListener);
+  } catch (_) {}
+  const pingListener = event => {
+    const msg = event.data;
+    if (event.source !== window || event.origin !== location.origin || !msg ||
+        msg.source !== COMMAND_SOURCE || !msg.requestId || msg.command !== "PING") return;
+    window.postMessage({
+      source: SOURCE,
+      requestId: msg.requestId,
+      payload: {
+        ok: true,
+        bridgeVersion: "19",
+        route: String(location.hash || ""),
+        title: String(document.title || ""),
+        bodyLength: String(document.body?.innerText || "").trim().length,
+        receiverReady: true
+      }
+    }, location.origin);
+  };
+  window.addEventListener("message", pingListener);
+  window[PING_LISTENER_KEY] = pingListener;
+
+  // If the full bridge is already present, keep its existing API handlers but
+  // still refresh the health-check listener above (important after extension
+  // reloads, when an SPX tab can remain open).
+  if (window.__POOD_CHECKER_BRIDGE_INSTALLED_V19__) return;
   const captures = [];
   let targetOids = [];
   let nextId = 1;
@@ -948,7 +979,8 @@
 
   window.addEventListener("message", async event => {
     const msg = event.data;
-    if (event.source !== window || !msg || msg.source !== COMMAND_SOURCE || !msg.requestId) return;
+    if (event.source !== window || event.origin !== location.origin || !msg || msg.source !== COMMAND_SOURCE || !msg.requestId) return;
+    if (msg.command === "PING") return; // handled by the early health-check listener
     let payload;
     try {
       if (msg.command === "PING") {

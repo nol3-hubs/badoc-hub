@@ -2106,43 +2106,56 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // does not retroactively run manifest content_scripts in an existing tab.
     // Inject both POD bridge halves explicitly. Each has an installation guard,
     // so this is safe for newly opened tabs and repeat checks too.
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        world: "ISOLATED",
-        files: ["pod-checker/content.js"]
-      });
+    const injectPodCheckerBridge = async () => {
+      // Install the MAIN-world receiver first, then its isolated-world Chrome
+      // message relay. Both scripts are safe to reinject by design.
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         world: "MAIN",
         files: ["pod-checker/page_bridge.js"]
       });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "ISOLATED",
+        files: ["pod-checker/content.js"]
+      });
+    };
+
+    try {
+      await injectPodCheckerBridge();
     } catch (injectionError) {
       const detail = injectionError?.message || String(injectionError);
       throw new Error(`Badoc Hub Extesion could not attach its SPX checker scripts to this tab: ${detail}. Check that the extension has site access to https://spx.shopee.ph, then reload SPX and try again.`);
     }
-    await new Promise(resolve => setTimeout(resolve, 180));
 
-    // Confirm the receiver exists before requesting SPA route readiness. This
-    // returns a targeted error instead of the generic Chrome messaging error.
-    // First wait for the extension content script / page-world bridge to answer
-    // a fast PING. Retry only connection-startup failures, never queue repeated
-    // long WAIT_FMS_READY commands against the same page.
-    const bridgeDeadline = Date.now() + 12000;
+    // Confirm the receiver before requesting SPA route readiness. If its first
+    // handshake fails, reinject both bridge halves once to replace stale
+    // listeners left behind by an extension reload, then retry the quick PING.
     let bridgePing = null;
     let bridgeError = null;
-    while (Date.now() < bridgeDeadline) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt === 1) {
+        try {
+          await injectPodCheckerBridge();
+        } catch (repairError) {
+          const detail = repairError?.message || String(repairError);
+          bridgeError = new Error(`SPX bridge recovery injection failed: ${detail}`);
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
       try {
         bridgePing = await chrome.tabs.sendMessage(tab.id, { target: "pood-page-v19", command: "PING" });
         if (bridgePing?.ok && String(bridgePing.bridgeVersion || "") === "19") break;
-        bridgeError = new Error(bridgePing?.error || (bridgePing?.ok ? "A stale SPX POD receiver answered instead of receiver v19." : "SPX page bridge did not answer its readiness ping."));
+        bridgeError = new Error(bridgePing?.error || (bridgePing?.ok
+          ? "A stale SPX POD receiver answered instead of receiver v19."
+          : "SPX page bridge did not answer its readiness ping."));
       } catch (error) {
         bridgeError = error;
       }
-      await new Promise(resolve => setTimeout(resolve, 500));
     }
     if (!bridgePing?.ok || String(bridgePing.bridgeVersion || "") !== "19") {
-      throw new Error(bridgeError?.message || "Badoc Hub Extesion could not connect to the SPX page receiver v19. Reload the extension and try again.");
+      throw new Error(`Could not connect to the SPX POD receiver v19 after automatic recovery. ${bridgeError?.message || "The SPX tab did not return a receiver response."} Check SPX site access and sign-in, then reload the SPX tab once.`);
     }
 
     // SPX is a SPA. Ask once for bounded route/content readiness.
