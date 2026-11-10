@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v31">
+<meta name="badoc-app-version" content="v32">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -689,11 +689,18 @@ window.DASHBOARD_V2 = {
 .planning-board-submenu button:hover,.planning-board-submenu button.active{background:var(--c-101f2f-bg)!important;color:var(--c-ffffff-text)!important;box-shadow:inset 2px 0 var(--c-38bdf8-shadow)!important}
 .planning-board-submenu .sub-ico{display:inline-block;width:14px;color:var(--c-38bdf8-text);font-size:12px}
 .planning-board-nav.open .planning-board-primary{background:var(--c-101f2f-bg)!important;color:var(--c-ffffff-text)!important}
+#volumeForecastBoard .forecast-board-sync-toolbar{display:flex;justify-content:flex-end;align-items:center;margin:0 0 12px;width:100%}#volumeForecastBoard .forecast-board-sync-toolbar #syncVolumeForecastFromSPX{white-space:nowrap}
 #volumeForecastBoard .forecast-board-intro{display:flex;justify-content:space-between;align-items:center;gap:16px}
 #volumeForecastBoard .forecast-board-kicker{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--c-38bdf8-text);margin-bottom:5px}
 #volumeForecastBoard .forecast-board-intro h2{margin:0 0 5px;font-size:17px}
 #volumeForecastBoard .forecast-board-intro p{margin:0;color:var(--muted);font-size:11px;line-height:1.45}
 #volumeForecastBoard .forecast-board-intro-meta{font-size:11px;color:var(--muted);text-align:right;max-width:250px}
+#volumeForecastBoard .forecast-board-intro-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:230px}
+#volumeForecastBoard #syncVolumeForecastFromSPX{white-space:nowrap}
+#volumeForecastBoard #forecastBoardSyncStatus{font-size:10px;color:var(--muted);text-align:right;min-height:14px}
+#volumeForecastBoard #forecastBoardSyncStatus.is-working{color:var(--accent-ink)}
+#volumeForecastBoard #forecastBoardSyncStatus.is-success{color:#067647}
+#volumeForecastBoard #forecastBoardSyncStatus.is-error{color:#b42318}
 #volumeForecastBoard .forecast-board-kpis{grid-template-columns:repeat(6,minmax(0,1fr));margin-top:12px}
 #volumeForecastBoard .forecast-board-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:0 0 16px}
 #volumeForecastBoard .forecast-board-status-manager{margin-top:12px;margin-bottom:12px}
@@ -743,9 +750,16 @@ window.DASHBOARD_V2 = {
 #volumeForecastBoard .forecast-board-pagination button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:6px;padding:6px 10px;cursor:pointer}
 #volumeForecastBoard .forecast-board-empty{padding:18px;text-align:center;color:var(--muted);font-size:11px}
 @media(max-width:1050px){#volumeForecastBoard .forecast-board-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}#volumeForecastBoard .forecast-board-status-grid{grid-template-columns:repeat(3,minmax(0,1fr))}#volumeForecastBoard .forecast-board-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:700px){#volumeForecastBoard .forecast-board-status-manager-head{flex-direction:column}#volumeForecastBoard .forecast-board-status-manager-actions{align-self:flex-end}#volumeForecastBoard .forecast-board-intro{align-items:flex-start;flex-direction:column}#volumeForecastBoard .forecast-board-intro-meta{text-align:left}#volumeForecastBoard .forecast-board-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#volumeForecastBoard .forecast-board-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#volumeForecastBoard .forecast-board-town-grid{grid-template-columns:1fr}#volumeForecastBoard .forecast-board-records-head{align-items:flex-start;flex-direction:column}#volumeForecastBoard .forecast-board-filters{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){#volumeForecastBoard .forecast-board-status-manager-head{flex-direction:column}#volumeForecastBoard .forecast-board-status-manager-actions{align-self:flex-end}#volumeForecastBoard .forecast-board-intro{align-items:flex-start;flex-direction:column}#volumeForecastBoard .forecast-board-intro-actions{align-items:flex-start;min-width:0;width:100%}#volumeForecastBoard #forecastBoardSyncStatus{text-align:left}#volumeForecastBoard .forecast-board-intro-meta{text-align:left}#volumeForecastBoard .forecast-board-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#volumeForecastBoard .forecast-board-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#volumeForecastBoard .forecast-board-town-grid{grid-template-columns:1fr}#volumeForecastBoard .forecast-board-records-head{align-items:flex-start;flex-direction:column}#volumeForecastBoard .forecast-board-filters{grid-template-columns:1fr 1fr}}
 </style>
 
+
+<style id="forecast-board-cleanup-v34">
+/* Volume Forecast submenu: remove explanatory KPI subtext and generated status-count cards only.
+   Keep the KPI values/labels, manual station-status selectors, and their underlying calculations. */
+#volumeForecastBoard .forecast-board-kpis .desc { display: none !important; }
+#volumeForecastBoard #forecastBoardStatusStats { display: none !important; }
+</style>
 </head>
 <body data-app-version="20">
 
@@ -827,7 +841,7 @@ window.DASHBOARD_V2 = {
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v31</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v32</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -890,7 +904,7 @@ window.DASHBOARD_V2 = {
         <div class="dashboard-summary-card volume"><strong id="opTodayVolume">0</strong><span>TODAY'S VOLUME</span><small></small></div>
 
 <div class="dashboard-summary-card clear"><strong id="opClearFloorRate">0.0%</strong><span>CLEAR FLOOR RATE</span><small></small></div>
-        <div class="dashboard-summary-card incoming" id="incomingVolumeCard" role="button" tabindex="0" title="Click to view forecast by current station and status"><strong id="opIncomingVolume">0</strong><span>VOLUME FORECAST</span><small>Expected final by 3 AM</small></div>
+        <div class="dashboard-summary-card incoming" id="incomingVolumeCard" role="button" tabindex="0" title="Click to open the all-day Volume Forecast board"><strong id="opIncomingVolume">0</strong><span>VOLUME FORECAST</span><small>Expected final by 3 AM</small></div>
       </div>
       <div id="volumeCutoffStatus" style="margin-top:8px;color:#8fa0ad;font-size:12px">Volume period: checking local time…</div>
       <label title="Add Linehaul Task ID volume to Today's Volume" style="display:inline-flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:#8fa0ad;cursor:pointer;opacity:.75">
@@ -1043,13 +1057,10 @@ window.DASHBOARD_V2 = {
   </section>
 
 <section id="volumeForecastBoard" class="page" aria-label="Volume Forecast Planning Board">
-  <div class="section forecast-board-intro">
-    <div>
-      <div class="forecast-board-kicker">PLANNING BOARD · ALL-DAY VOLUME SOURCE</div>
-      <h2>All-Day Volume Planning Board</h2>
-      <p>Shows eligible parcels at any time of day. It uses the same destination, town, exception, and manual station/status filters, without the Dashboard Volume Forecast's 3:00 PM–3:00 AM time window.</p>
-    </div>
-    <div class="forecast-board-intro-meta" id="forecastBoardState">Loading all-day parcel data…</div>
+  <div class="forecast-board-sync-toolbar">
+    <button class="btn primary" id="syncVolumeForecastFromSPX" type="button" title="Run the same SPX inbound import used by Planning Board: Received, Transporting, Transported, LH Packed, and Packing">↻ Sync Volume Forecast</button>
+    <span id="forecastBoardSyncStatus" class="hint" aria-live="polite" hidden>Not yet synced</span>
+    <span id="forecastBoardState" hidden>Loading all-day parcel data…</span>
   </div>
   <div class="kpis forecast-board-kpis">
     <div class="kpi"><div class="num" id="forecastBoardTotal">0</div><div class="lab">TOTAL PARCELS</div><div class="desc">Unique SPX tracking numbers · all day</div></div>
@@ -1062,9 +1073,7 @@ window.DASHBOARD_V2 = {
   <div class="section forecast-board-status-manager">
     <div class="forecast-board-status-manager-head">
       <div>
-        <h2>All-Day Status Breakdown</h2>
-        <p>Manually include or remove each current station/status group. Changes are shared with the Dashboard Volume Forecast Breakdown.</p>
-        <small id="forecastBoardStatusSelectionSummary">Loading status groups…</small>
+        <h2>Status Breakdown</h2>
       </div>
       <div class="forecast-board-status-manager-actions">
         <button class="btn" type="button" id="forecastBoardStatusAll">ALL</button>
@@ -1423,7 +1432,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v31</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v32</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -1782,6 +1791,7 @@ async function importParcelCsvText(text,fileName="export_forward_order.csv",sour
   saveTownSettings();
   await saveBatches();
   render();
+  window.__badocRenderForecastBoard?.();
   // Keep the user's current section selected after automatic SPX imports.
   // Manual/file imports retain the original behavior of returning to Planning Board.
   if(!/^spx-(?:inbound|delivery)$/i.test(String(source||"")))showPage("dashboard");
@@ -5051,7 +5061,7 @@ const BADOC_PAGE_SOURCE="BADOC_PAGE";
 
 // Persist independent last-success timestamps for the three Parcel Count SPX actions.
 const BADOC_PARCEL_SYNC_STAMPS = {
-  inbound: {key:"badoc_parcel_count_received_transported_last_sync_v69", element:"parcelInboundSpxSyncStatus", label:"Received / Transported / LH Packed / Packing", verb:"Last synced"},
+  inbound: {key:"badoc_parcel_count_received_transported_last_sync_v69", element:"parcelInboundSpxSyncStatus", mirrorElements:["forecastBoardSyncStatus"], label:"Received / Transported / LH Packed / Packing", verb:"Last synced"},
   delivery: {key:"badoc_parcel_count_delivery_status_last_sync_v69", element:"parcelDeliverySpxSyncStatus", label:"Delivering / Delivered / On-Hold", verb:"Last synced"},
   batch: {key:"badoc_parcel_count_delivering_batch_search_last_sync_v69", element:"deliveringBatchReconcileStatus", label:"Delivering Batch Search", verb:"Last checked"}
 };
@@ -5072,30 +5082,45 @@ function badocParcelSyncStatusText(kind,recordNow=false){
 }
 function badocRestoreParcelSyncStatuses(){
   for(const [kind,cfg] of Object.entries(BADOC_PARCEL_SYNC_STAMPS)){
-    const el=$(cfg.element);if(!el)continue;
-    el.textContent=badocParcelSyncStatusText(kind,false);
-    el.classList.remove("is-working","is-success","is-error");
-    try{if(Number(localStorage.getItem(cfg.key)||0))el.classList.add("is-success");}catch(_){}
+    const ids=[cfg.element,...(cfg.mirrorElements||[])];
+    for(const id of ids){
+      const el=$(id);if(!el)continue;
+      el.textContent=badocParcelSyncStatusText(kind,false);
+      el.classList.remove("is-working","is-success","is-error");
+      try{if(Number(localStorage.getItem(cfg.key)||0))el.classList.add("is-success");}catch(_){}
+    }
   }
 }
 
+const BADOC_INBOUND_SYNC_BUTTON_IDS=["syncParcelInboundFromSPX","syncVolumeForecastFromSPX"];
+function setBadocInboundSyncButtonsBusy(busy){
+  BADOC_INBOUND_SYNC_BUTTON_IDS.forEach(id=>{
+    const btn=$(id);if(!btn)return;
+    btn.dataset.busy=busy?"1":"0";
+    btn.disabled=!!busy;
+  });
+}
 function setParcelInboundSpxSyncStatus(message,state="") {
   if(state==="success")message=badocParcelSyncStatusText("inbound",true);
-  const el=$("parcelInboundSpxSyncStatus");
-  if(el){
+  const cfg=BADOC_PARCEL_SYNC_STAMPS.inbound;
+  [cfg.element,...(cfg.mirrorElements||[])].forEach(id=>{
+    const el=$(id);if(!el)return;
     el.textContent=message||"";
     el.classList.remove("is-working","is-success","is-error");
     if(state)el.classList.add("is-"+state);
-  }
+  });
   if(state==="working")window.__badocOperationModalUpdate?.(message||"Working…");
 }
 
-async function beginParcelInboundSpxBridgeSync(){
+let badocInboundSyncContext="planning";
+async function beginParcelInboundSpxBridgeSync(event){
+  const requestedContext=event?.currentTarget?.id==="syncVolumeForecastFromSPX"?"forecast":"planning";
   if(!(await window.__badocEnsureSpxBridge?.()))return;
-  const btn=$("syncParcelInboundFromSPX");
-  if(btn?.dataset.busy==="1")return;
-  if(btn){btn.dataset.busy="1";btn.disabled=true;}
-  window.__badocOperationModalStart?.("Sync Received / Transported / LH Packed / Packing","Connecting to SPX and requesting the inbound export, including SOC_LHPacked and SOC_LHPacking…");
+  if(BADOC_INBOUND_SYNC_BUTTON_IDS.some(id=>$(id)?.dataset.busy==="1"))return;
+  badocInboundSyncContext=requestedContext;
+  setBadocInboundSyncButtonsBusy(true);
+  const modalTitle=requestedContext==="forecast"?"Sync Volume Forecast":"Sync Received / Transported / LH Packed / Packing";
+  window.__badocOperationModalStart?.(modalTitle,"Connecting to SPX and requesting the same inbound export used by Planning Board (Received, Transporting, Transported, LH Packed, and Packing)…");
   setParcelInboundSpxSyncStatus("Connecting to SPX…","working");
   postBadocSpxMessage("BADOC_START_PARCEL_INBOUND_SYNC");
 }
@@ -5419,7 +5444,6 @@ window.addEventListener("message",async event=>{
   if(data.type==="BADOC_SPX_PARCEL_DONE")return;
 
   if(data.type==="BADOC_SPX_PARCEL_CSV"){
-    const btn=$("syncParcelInboundFromSPX");
     try{
       setParcelInboundSpxSyncStatus(`Importing SPX Parcel Count export ${data.taskId||""}…`,"working");
       if(!data.csvText)throw Error("The bridge returned an empty Parcel Count CSV payload.");
@@ -5429,15 +5453,15 @@ window.addEventListener("message",async event=>{
         await window.__badocCloudUploadParcelText(data.csvText,data.fileName||"export_forward_order.csv","spx-inbound");
       }
       setParcelInboundSpxSyncStatus(`Synced ${result.total.toLocaleString()} Parcel Count rows`,`success`);
-      window.__badocOperationModalFinish?.("Sync Received Complete","Parcel Count inbound data loaded successfully.",[
+      window.__badocOperationModalFinish?.(badocInboundSyncContext==="forecast"?"Sync Volume Forecast Complete":"Sync Received Complete","Parcel Count inbound data loaded successfully.",[
         ["Rows",result.total.toLocaleString()],["New tracking numbers",result.added.toLocaleString()],["Updated tracking numbers",result.updated.toLocaleString()]
       ],"success");
     }catch(err){
       console.error("SPX Parcel Count CSV import failed:",err);
       setParcelInboundSpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
-      window.__badocOperationModalFinish?.("Sync Received Failed","Your existing Parcel Count data was not cleared.",[["Error",err.message||"Unknown error"]],"error");
+      window.__badocOperationModalFinish?.(badocInboundSyncContext==="forecast"?"Sync Volume Forecast Failed":"Sync Received Failed","Your existing Parcel Count data was not cleared.",[["Error",err.message||"Unknown error"]],"error");
     }finally{
-      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      setBadocInboundSyncButtonsBusy(false);
     }
     return;
   }
@@ -5455,10 +5479,9 @@ window.addEventListener("message",async event=>{
       setParcelDeliverySpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
       window.__badocOperationModalFinish?.("Delivery Status Sync Failed","Your existing Parcel Count data was not cleared.",[["Error",data.message||"Unknown error"]],"error");
     }else if(data.kind==="parcel-inbound"){
-      const btn=$("syncParcelInboundFromSPX");
-      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      setBadocInboundSyncButtonsBusy(false);
       setParcelInboundSpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
-      window.__badocOperationModalFinish?.("Sync Received Failed","Your existing Parcel Count data was not cleared.",[["Error",data.message||"Unknown error"]],"error");
+      window.__badocOperationModalFinish?.(badocInboundSyncContext==="forecast"?"Sync Volume Forecast Failed":"Sync Received Failed","Your existing Parcel Count data was not cleared.",[["Error",data.message||"Unknown error"]],"error");
     }else{
       const btn=$("syncLinehaulFromSPX");
       if(btn){btn.disabled=false;btn.dataset.busy="0";}
@@ -5496,6 +5519,7 @@ window.addEventListener("message",async event=>{
 });
 
 $("syncParcelInboundFromSPX")?.addEventListener("click",beginParcelInboundSpxBridgeSync);
+$("syncVolumeForecastFromSPX")?.addEventListener("click",beginParcelInboundSpxBridgeSync);
 $("syncParcelDeliveryFromSPX")?.addEventListener("click",beginParcelDeliverySpxBridgeSync);
 $("reconcileDeliveringViaBatchSearch")?.addEventListener("click",beginDeliveringBatchReconcile);
 $("syncLinehaulFromSPX")?.addEventListener("click",beginLinehaulSpxBridgeSync);
@@ -6910,7 +6934,7 @@ window.updateOperationProgress=function(){
     allDayForecastRows.push({station:station(r),status:status(r),tn,town:townName(r),record:r});
   });
   // Keep the original time-window-only population for the Dashboard card and
-  // its Volume Forecast Breakdown. This preserves its 3 PM–3 AM behavior.
+  // card. This preserves its 3 PM–3 AM behavior while the submenu remains all-day.
   const forecastDetailRows=forecastWindow?allDayForecastRows.slice():[];
   const forecastStationStatusCounts={};
   forecastDetailRows.forEach(item=>{
@@ -8802,133 +8826,25 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 })();
 </script>
 
-<div class="forecast-detail-overlay" id="forecastDetailOverlay" aria-hidden="true">
-  <div class="forecast-detail-modal" role="dialog" aria-modal="true" aria-labelledby="forecastDetailTitle">
-    <div class="forecast-detail-head">
-      <strong id="forecastDetailTitle">Volume Forecast Breakdown</strong>
-      <button class="forecast-detail-close" id="forecastDetailClose" type="button" aria-label="Close">×</button>
-    </div>
-    <div class="forecast-detail-body" id="forecastDetailBody"></div>
-  </div>
-</div>
-
-<script id="forecast-details-script">
+<script id="dashboard-volume-forecast-navigation">
 (function(){
-  const byId=id=>document.getElementById(id);
-  function renderForecastDetails(){
-    const data=window.__badocForecastDetails||{rows:[],counts:{},total:0};
-    const body=byId("forecastDetailBody");
-    if(!body)return;
-    body.textContent="";
-    const counts=data.counts||{};
-    const rows=[];
-    Object.keys(counts).forEach(st=>{
-      Object.keys(counts[st]||{}).forEach(ss=>rows.push({station:st,status:ss,count:counts[st][ss]}));
-    });
-    rows.sort((a,b)=>a.station.localeCompare(b.station)||a.status.localeCompare(b.status));
-
-    const controls=document.createElement("div");
-    controls.className="forecast-filter-controls";
-    const hint=document.createElement("span");
-    hint.textContent="Select what to add to Volume Forecast";
-    controls.appendChild(hint);
-    const allBtn=document.createElement("button");
-    allBtn.type="button"; allBtn.textContent="ALL"; allBtn.className="forecast-filter-btn";
-    allBtn.addEventListener("click",()=>{
-      rows.forEach(x=>window.__badocForecastFilterSelections[window.__badocForecastFilterKey(x.station,x.status)]=true);
-      window.__badocSaveForecastFilterSelections(); window.updateOperationProgress?.(); renderForecastDetails();
-    });
-    const noneBtn=document.createElement("button");
-    noneBtn.type="button"; noneBtn.textContent="NONE"; noneBtn.className="forecast-filter-btn";
-    noneBtn.addEventListener("click",()=>{
-      rows.forEach(x=>window.__badocForecastFilterSelections[window.__badocForecastFilterKey(x.station,x.status)]=false);
-      window.__badocSaveForecastFilterSelections(); window.updateOperationProgress?.(); renderForecastDetails();
-    });
-    controls.append(allBtn,noneBtn);
-    body.appendChild(controls);
-
-    const total=document.createElement("div");
-    total.className="forecast-detail-total";
-    total.textContent="Forecast total: "+Number(data.total||0).toLocaleString()+" unique SPX TNs";
-    body.appendChild(total);
-    if(!rows.length){
-      const empty=document.createElement("div");
-      empty.className="forecast-detail-empty";
-      empty.textContent="No qualifying forecast parcels right now.";
-      body.appendChild(empty);
+  function openAllDayVolumeForecast(){
+    if(typeof showPage === "function"){
+      showPage("volumeForecastBoard");
       return;
     }
-    const table=document.createElement("table");
-    table.className="forecast-detail-table";
-    const thead=document.createElement("thead"),hr=document.createElement("tr");
-    ["ADD","CURRENT STATION","STATUS","COUNT"].forEach(label=>{const th=document.createElement("th");th.textContent=label;hr.appendChild(th)});
-    thead.appendChild(hr);table.appendChild(thead);
-    const tbody=document.createElement("tbody");
-    rows.forEach(item=>{
-      const tr=document.createElement("tr");
-      const td0=document.createElement("td");
-      const cb=document.createElement("input");
-      cb.type="checkbox"; cb.checked=window.__badocForecastGroupEnabled(item.station,item.status);
-      cb.title="Include this station/status in Volume Forecast";
-      cb.addEventListener("change",()=>{
-        window.__badocForecastFilterSelections[window.__badocForecastFilterKey(item.station,item.status)]=cb.checked;
-        window.__badocSaveForecastFilterSelections();
-        window.updateOperationProgress?.();
-        renderForecastDetails();
-      });
-      td0.appendChild(cb);
-      const td1=document.createElement("td");td1.textContent=item.station||"—";
-      const td2=document.createElement("td");td2.textContent=item.status||"—";
-      const td3=document.createElement("td");td3.textContent=Number(item.count||0).toLocaleString();
-      if(!cb.checked) tr.style.opacity="0.45";
-      tr.append(td0,td1,td2,td3);tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);body.appendChild(table);
+    const submenuButton=document.querySelector('.planning-board-submenu [data-page="volumeForecastBoard"]');
+    if(submenuButton)submenuButton.click();
   }
-  function openForecastDetails(){
-    const overlay=byId("forecastDetailOverlay");
-    if(!overlay)return;
-    renderForecastDetails();
-    overlay.classList.add("open");overlay.setAttribute("aria-hidden","false");
-  }
-  function closeForecastDetails(){
-    const overlay=byId("forecastDetailOverlay");
-    if(!overlay)return;
-    overlay.classList.remove("open");overlay.setAttribute("aria-hidden","true");
-  }
-  function showBelow90RidersPopup(){
-    const s=window.__badocDailyHistoryCurrentSnapshot||{};
-    const groups=Array.isArray(s.riderPerformance)?s.riderPerformance:[];
-    const below=groups.filter(g=>String(g.rider||"").trim() && n(g.successRate)<90);
-    closeBadocDetailPopup();
-    const overlay=document.createElement("div");
-    overlay.id="badocDetailOverlay";
-    overlay.className="badoc-detail-overlay";
-    const body=below.length?`<div class="daily-history-below90-list">${below.map(g=>{
-      const rider=escH(String(g.rider||"").trim());
-      const area=escH(String(g.area||g.label||"").trim());
-      const sr=n(g.successRate).toFixed(1);
-      const srClass=riderRateClass(g.successRate,true);
-      const vehicle=escH(String(g.vehicleType||"—"));
-      const towns=Array.isArray(g.townDetails)?g.townDetails.map(t=>escH(t.town||"")).filter(Boolean):[];
-      return `<div class="daily-history-below90-row"><button type="button" class="daily-history-below90-rider-link" data-below90-rider="${rider}">${rider}</button><strong class="${srClass}">${sr}%</strong></div>`;
-    }).join("")}</div>`:`<div class="badoc-detail-empty">No riders below 90% success rate.</div>`;
-    overlay.innerHTML=`<div class="badoc-detail-modal" role="dialog" aria-modal="true" aria-label="Riders below 90 percent success rate"><div class="badoc-detail-head"><h3>Riders Below 90% Success Rate</h3><button type="button" class="badoc-detail-close" aria-label="Close">×</button></div><div class="badoc-detail-body"><div class="badoc-detail-count">${below.length} rider${below.length===1?"":"s"}</div>${body}</div></div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector(".badoc-detail-close").onclick=closeBadocDetailPopup;
-    overlay.addEventListener("click",e=>{if(e.target===overlay)closeBadocDetailPopup()});
-    document.addEventListener("keydown",function escClose(e){if(e.key==="Escape"){closeBadocDetailPopup();document.removeEventListener("keydown",escClose)}});
-  }
-
-  document.addEventListener("click",e=>{
-    if(e.target.closest("#incomingVolumeCard"))openForecastDetails();
-    if(e.target.closest("#forecastDetailClose"))closeForecastDetails();
-    if(e.target===byId("forecastDetailOverlay"))closeForecastDetails();
+  document.addEventListener("click",event=>{
+    if(event.target.closest("#incomingVolumeCard"))openAllDayVolumeForecast();
   });
-  document.addEventListener("keydown",e=>{
-    const card=e.target.closest&&e.target.closest("#incomingVolumeCard");
-    if(card&&(e.key==="Enter"||e.key===" ")){e.preventDefault();openForecastDetails()}
-    if(e.key==="Escape")closeForecastDetails();
+  document.addEventListener("keydown",event=>{
+    const card=event.target.closest&&event.target.closest("#incomingVolumeCard");
+    if(card&&(event.key==="Enter"||event.key===" ")){
+      event.preventDefault();
+      openAllDayVolumeForecast();
+    }
   });
 })();
 </script>
@@ -11064,7 +10980,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 })();
 
 </script>
-<script id="volume-forecast-board-v29-runtime">
+<script id="volume-forecast-board-v32-runtime">
 (function(){
   if(window.__badocForecastBoardV29)return;
   window.__badocForecastBoardV29=true;
@@ -11195,7 +11111,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
           var bulky=0,highValue=0,zones=new Set();townRows.forEach(function(x){if(typeof parcelMetricFlags==="function"){var mf=parcelMetricFlags(x.row);if(mf.bulky)bulky++;if(mf.highValue)highValue++;}var z=text(x.row["Zone ID"]??x.row["ZoneId"]??x.row["zone id"]??"").trim();if(z)zones.add(z)});
           if(bulky)merged.B=bulky;if(highValue)merged.HV=highValue;
           var zoneText=zones.size?"Zone "+Array.from(zones).sort().join(", "):"Zone not provided";
-          row.innerHTML='<span class="forecast-town-name" title="'+esc(name+' · '+zoneText)+'">'+esc(name)+'<small class="forecast-town-zone">'+esc(zoneText)+'</small></span><span class="forecast-town-statuses">'+Object.entries(merged).map(function(x){return '<span class="forecast-town-status">'+x[0]+' '+x[1]+'</span>'}).join("")+'</span><strong class="forecast-town-count">'+townRows.length.toLocaleString()+'</strong>';
+          row.innerHTML='<span class="forecast-town-name" title="'+esc(name+' · '+zoneText)+'">'+esc(name)+'<small class="forecast-town-zone">'+esc(zoneText)+'</small></span><strong class="forecast-town-count">'+townRows.length.toLocaleString()+'</strong>';
           card.appendChild(row);
         });
         col.appendChild(card);
