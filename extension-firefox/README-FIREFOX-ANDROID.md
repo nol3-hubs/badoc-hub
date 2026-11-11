@@ -1,6 +1,6 @@
 # SPX BRIDGE for BADOC HUB — Firefox Android
 
-**Package version:** 69.2.2  
+**Package version:** 69.2.3  
 **Existing Mozilla add-on ID:** `spx-bridge-badoc-hub@nol3-hubs.github.io`  
 **Minimum Firefox version:** 128.0
 
@@ -16,9 +16,9 @@ This separate Firefox-targeted build is based on the current source in the repos
 ## Download
 After the GitHub Actions package job completes, the unsigned update package is published at:
 
-`downloads/SPX-BRIDGE-BADOC-HUB-69.2.2.xpi`
+`downloads/SPX-BRIDGE-BADOC-HUB-69.2.3.xpi`
 
-[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-69.2.2.xpi)
+[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-69.2.3.xpi)
 
 ## Submit as an update to the existing Mozilla listing
 1. Download the `.xpi` package above.
@@ -35,4 +35,6 @@ Do not create a new add-on listing. Upload through the existing listing so Mozil
 - Uses Firefox's Add-ons manager instead of Chrome's extension-management page.
 - Uses Firefox's `scripting.executeScript()` MAIN world support (Firefox 128+).
 
-**Testing status:** The source package passed the repository's static packaging checks. It has not yet been tested against a live SPX session or approved/signed by Mozilla. Test with a logged-in SPX account after Mozilla signs the submitted package.
+**Firefox-specific change in 69.2.3:** Requests to the SPX origin are now executed from the already logged-in SPX tab in Firefox, rather than from the extension background origin. Signed CSV downloads from their download host still use the extension fetch path.
+
+**Testing status:** The source package must pass Mozilla WebExtension lint and still needs a live SPX login test before production use. Mozilla must approve/sign it before Firefox distributes it.
