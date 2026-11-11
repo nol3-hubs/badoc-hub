@@ -28,7 +28,7 @@ Do not create a new add-on listing. Upload through the existing listing so Mozil
 ## Compatibility notes
 - Reuses the Gecko ID from the installed 69.2.1 package.
 - Keeps Manifest V2 event-page behavior from the installed Firefox build.
-- Uses Firefox's `about:addons` page instead of Chrome's `chrome://extensions/`.
+- Uses Firefox's Add-ons manager instead of Chrome's extension-management page.
 - Uses Firefox's `scripting.executeScript()` MAIN world support (Firefox 128+).
 
 **Testing status:** The source package is prepared and statically checked by the workflow. It has not yet been tested against a live SPX session or approved/signed by Mozilla. Test with a logged-in SPX account after Mozilla signs the submitted package.

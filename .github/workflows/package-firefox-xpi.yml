@@ -37,8 +37,8 @@ jobs:
               assert (root / name).is_file(), name
           print("Manifest and packaged files validated.")
           PY
-          if grep -R -n "chrome://extensions" extension-firefox; then
-            echo "Chrome-only settings URL found in Firefox package."
+          if grep -R -n --include='*.js' --include='*.json' --include='*.html' "chrome://extensions" extension-firefox; then
+            echo "Chrome-only settings URL found in Firefox source."
             exit 1
           fi
       - name: Create XPI
