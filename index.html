@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v39">
+<meta name="badoc-app-version" content="v40">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -9824,6 +9824,25 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     throw new Error("EOD Google Sheets data has not loaded. Daily History was not saved. Check the EOD sheet connection, then try again.");
   }
 
+  // v40: preflight preview for manual Capture Now. Existing date records are updated in place (upsert), not stacked.
+  window.__badocPreviewDailyCapture=async function(date=dayKey()){
+    await waitForEodDashboard();
+    const snapshot=buildSnapshot(date);
+    const existing=await loadSnapshot(date);
+    const m=snapshot.metrics||{};
+    return {
+      date,
+      existing:!!existing,
+      capturedAt:snapshot.capturedAt||"",
+      totalVolume:Number(m.totalVolume)||0,
+      delivered:Number(m.delivered)||0,
+      onHold:Number(m.onHold)||0,
+      cfr1Total:Number(m.cfr1Total)||0,
+      cfr1Scanned:Number(m.cfr1Scanned)||0,
+      cfr1Unscanned:Number(m.cfr1Unscanned)||0
+    };
+  };
+
   window.__badocCaptureDailyHistory=async function(reason="pre-reset",date=dayKey()){
     try{
       await waitForEodDashboard();
@@ -10254,39 +10273,72 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     });
     const captureBtn=document.getElementById("dailyHistoryCaptureBtn");
     captureBtn&&captureBtn.addEventListener("click",async()=>{
-      if(captureBtn.disabled)return;
-      const old=captureBtn.textContent;captureBtn.disabled=true;captureBtn.textContent="⬆ Capturing…";
+      if(captureBtn.disabled||window.__badocCaptureInFlight)return;
+      window.__badocCaptureInFlight=true;
+      const old=captureBtn.textContent;
+      captureBtn.disabled=true;
+      captureBtn.textContent="Preparing preview…";
       const d=todayDate();
-      const outcomes=await Promise.allSettled([
-        (async()=>await window.__badocCaptureDailyHistory("manual",d))(),
-        (async()=>await window.__badocCaptureCfrSummary(d))(),
-        (async()=>{if(typeof window.__badocExportCfr1ToSheet!=="function")throw new Error("CFR1 export function is unavailable.");return await window.__badocExportCfr1ToSheet()})()
-      ]);
-      const [snap,cfr,cfr1]=outcomes,ok=o=>o.status==="fulfilled";
-      const line=(label,o,f)=>label+": "+(ok(o)?(f?f(o.value):"saved"):"FAILED — "+String(o.reason&&o.reason.message||o.reason||"Unknown error"));
-      const cfr1Description=v=>{
-        if(v&&v.skipped)return String(v.reason||"No CFR1 rows to export.");
-        const added=Number(v&&v.count)||0;
-        const duplicates=Number(v&&v.skippedAlreadyUploadedToday)||0;
-        const repeated=Number(v&&v.skippedDuplicateInRequest)||0;
-        const missing=Number(v&&v.skippedMissingOrderId)||0;
-        return "confirmed; added "+added+", already exported today "+duplicates+", duplicate in request "+repeated+", missing Order ID "+missing;
-      };
-      if(ok(snap)&&ok(cfr)&&ok(cfr1)){
-        const added=Number(cfr1.value&&cfr1.value.count)||0;
-        captureBtn.textContent=added?"✓ Saved · CFR1 +"+added:"✓ Captured";
-        captureBtn.title="Daily History and CFR summary saved to Firebase. CFR1 export confirmed by Google Apps Script: "+cfr1Description(cfr1.value);
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;captureBtn.title="Save today's snapshot to the cloud";},3500);
-      }else{
-        captureBtn.textContent=(ok(snap)||ok(cfr))?"⚠ Partly done":"✕ Capture failed";
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;captureBtn.title="Save today's snapshot to the cloud";},5000);
-        alert([
-          line("Daily History (Firebase)",snap),
-          line("CFR summary (Firebase)",cfr),
-          line("CFR1 Google Sheet export",cfr1,cfr1Description)
-        ].join("\n"));
+      try{
+        const preview=await window.__badocPreviewDailyCapture(d);
+        const previewText=[
+          "Date: "+preview.date,
+          "Daily History: "+(preview.existing?"Existing record will be UPDATED":"New daily record will be CREATED"),
+          "Total Volume: "+preview.totalVolume.toLocaleString(),
+          "Delivered: "+preview.delivered.toLocaleString(),
+          "On Hold: "+preview.onHold.toLocaleString(),
+          "CFR1: "+preview.cfr1Total.toLocaleString()+" total ("+preview.cfr1Scanned.toLocaleString()+" scanned, "+preview.cfr1Unscanned.toLocaleString()+" unscanned)",
+          "",
+          "Capture Now saves the daily snapshot and CFR summary to cloud storage, then exports CFR1 to Google Sheets.",
+          "Continue?"
+        ].join("\\n");
+        if(!window.confirm("CAPTURE NOW — REVIEW BEFORE SAVING\\n\\n"+previewText)){
+          captureBtn.textContent=old;
+          captureBtn.title="Capture cancelled. No save was started.";
+          return;
+        }
+        captureBtn.textContent="Saving snapshot + verifying CFR1…";
+        const outcomes=await Promise.allSettled([
+          (async()=>await window.__badocCaptureDailyHistory("manual",d))(),
+          (async()=>await window.__badocCaptureCfrSummary(d))(),
+          (async()=>{if(typeof window.__badocExportCfr1ToSheet!=="function")throw new Error("CFR1 export function is unavailable.");return await window.__badocExportCfr1ToSheet()})()
+        ]);
+        const [snap,cfr,cfr1]=outcomes,ok=o=>o.status==="fulfilled";
+        const line=(label,o,f)=>label+": "+(ok(o)?(f?f(o.value):"saved"):"FAILED — "+String(o.reason&&o.reason.message||o.reason||"Unknown error"));
+        const cfr1Description=v=>{
+          if(v&&v.skipped)return "confirmed; no rows exported — "+String(v.reason||"no eligible CFR1 rows");
+          const added=Number(v&&v.count)||0;
+          const received=Number(v&&v.received)||0;
+          const duplicates=Number(v&&v.skippedAlreadyUploadedToday)||0;
+          const repeated=Number(v&&v.skippedDuplicateInRequest)||0;
+          const missing=Number(v&&v.skippedMissingOrderId)||0;
+          return "Google Sheets CONFIRMED; "+added+" added / "+received+" received; "+duplicates+" already exported today; "+repeated+" duplicate rows; "+missing+" missing Order ID";
+        };
+        const detail=[
+          "Capture result for "+d,
+          line("Daily History cloud snapshot",snap,v=>"SAVED · "+(v.capturedAt||"timestamp recorded")),
+          line("CFR daily summary cloud file",cfr,v=>"SAVED · "+(v.capturedAt||"timestamp recorded")),
+          line("CFR1 Google Sheets export",cfr1,cfr1Description)
+        ].join("\\n");
+        if(ok(snap)&&ok(cfr)&&ok(cfr1)){
+          const added=Number(cfr1.value&&cfr1.value.count)||0;
+          captureBtn.textContent=added?"✓ Saved · CFR1 +"+added:"✓ Captured · CFR1 confirmed";
+          captureBtn.title=detail;
+          alert("CAPTURE CONFIRMED\\n\\n"+detail);
+        }else{
+          captureBtn.textContent=(ok(snap)||ok(cfr)||ok(cfr1))?"⚠ PARTIAL — CHECK DETAILS":"✕ CAPTURE FAILED";
+          captureBtn.title=detail;
+          alert("CAPTURE NOT FULLY COMPLETED\\n\\n"+detail+"\\n\\nDo not assume failed or unconfirmed steps were saved. A CFR1 timeout may still have reached Google Sheets; check Apps Script → Executions before retrying.");
+        }
+        snapCache.delete(d);
+      }catch(e){
+        console.warn("Capture Now preflight failed:",e);
+        captureBtn.textContent="✕ Not Captured";
+        alert("Capture Now was not started or could not complete:\\n\\n"+String(e&&e.message||e));
+      }finally{
+        window.__badocCaptureInFlight=false;
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;captureBtn.title="Review today's data, then save the snapshot and verify the CFR1 export.";},6000);
       }
-      snapCache.delete(d);
     });
     // refresh whenever the page is opened, and every 20s while viewing today
     const obs=new MutationObserver(()=>{if(page.classList.contains("active")){if(!page.__wasActive){page.__wasActive=true;window.__badocRefreshDailyHistory()}}else page.__wasActive=false});
