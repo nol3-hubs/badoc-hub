@@ -32,7 +32,7 @@
 
   const PAGE_SOURCE = "BADOC_SPX_BRIDGE";
   const BADOC_SOURCE = "BADOC_PAGE";
-  const VERSION = "1";
+  const VERSION = "69.2.3";
   let port = null;
   let reconnectTimer = null;
   let shuttingDown = false;
