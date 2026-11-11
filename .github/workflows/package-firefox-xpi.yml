@@ -1,0 +1,59 @@
+name: Package Firefox SPX Bridge
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "extension-firefox/**"
+      - ".github/workflows/package-firefox-xpi.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Validate package
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("extension-firefox")
+          manifest = json.loads((root / "manifest.json").read_text())
+          assert manifest["manifest_version"] == 2
+          assert manifest["version"] == "69.2.2"
+          assert manifest["browser_specific_settings"]["gecko"]["id"] == "spx-bridge-badoc-hub@nol3-hubs.github.io"
+          for name in manifest["background"]["scripts"]:
+              assert (root / name).is_file(), name
+          for name in manifest["web_accessible_resources"]:
+              assert (root / name).is_file(), name
+          for name in manifest["icons"].values():
+              assert (root / name).is_file(), name
+          for name in ["pod-checker/page_bridge.js", "pod-checker/content.js"]:
+              assert (root / name).is_file(), name
+          print("Manifest and packaged files validated.")
+          PY
+          if grep -R -n "chrome://extensions" extension-firefox; then
+            echo "Chrome-only settings URL found in Firefox package."
+            exit 1
+          fi
+      - name: Create XPI
+        shell: bash
+        run: |
+          cd extension-firefox
+          zip -X -qr "$GITHUB_WORKSPACE/SPX-BRIDGE-BADOC-HUB-69.2.2.xpi" .
+          cd "$GITHUB_WORKSPACE"
+          sha256sum SPX-BRIDGE-BADOC-HUB-69.2.2.xpi > SPX-BRIDGE-BADOC-HUB-69.2.2.sha256
+      - name: Upload XPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPX-BRIDGE-BADOC-HUB-69.2.2
+          path: |
+            SPX-BRIDGE-BADOC-HUB-69.2.2.xpi
+            SPX-BRIDGE-BADOC-HUB-69.2.2.sha256
+          if-no-files-found: error
+          retention-days: 30
