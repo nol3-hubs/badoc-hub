@@ -82,23 +82,6 @@ const LINEHAUL_CAPTURED_HEADERS = {
 };
 
 
-// Recipient-name lookup uses the same authenticated SPX sensitive-data request
-// captured from the logged-in FMS Portal. CSRF/device cookies are refreshed at
-// runtime; the SAP request headers are a last-known fallback and may be rotated
-// by SPX. No credentials or tokens are sent to the BADOC page.
-const RECIPIENT_SENSITIVE_DATA_PATH = "/api/fleet_order/order/detail/show_sensitive_data";
-const RECIPIENT_LOOKUP_CAPTURED_HEADERS = {
-  "PG-I": "b68rPbkERm+ECE8NjMj62mLa8AHqft7RCjaksjcRhCC4f7FzAIMp4Sq3s8gJ8KH3Re9xKXnP2/vp3zok1Tk=",
-  "X-CSRFToken": "1a935bbdfc464fb0823616b97ab5843b",
-  "x-sap-ri": "43c8eb6a9f57c3579a74f53e010103e4d154b780fdfc1c88639c",
-  "app": "FMS Portal",
-  "device-id": "3364e655404ce13752579f775532ac7f",
-  "x-sap-sec": "3SBG5VydvgyRVgyR1My6VgTR1MyRVgTRVgyQVgyRogiRVlTdVgyNVgyRHaenBPdRVgyXV8yRDgiRVi3Q+DTWBQ2oD1pECDkQjOd7QpKxrrQ36VBch2yK/JiRa+8IfPrXBQd7EdH4y/CVfRpIel6/4FJUp4oCQcDYA7892hkhdPTWl7XWWK95FtluYWryQuT/h2Vy9FjVddIWeDj/paEXDwlfBjk5Eb6oufwobYhk9D58kY1G0Lfzu/VQyHOnelcwtsDodeEb9xzJHu9XwlBl2O7s39aEpIxZbwho4dlOTGG3BdaSPAdTjiLrcfP3V69ONzJSc+emE5R/plU1kDJG4xW40N9zCcsTkf8UHTIQHSjbxVxePy3Vb01CtbstU5Q9j+gZnM9QP115OOuvSGiEpVdeixbxG2AlpaQFJ9krgxUxKHILGvErU5QtWvzCqHQ5Joeq1fIQHQsKcGSkSk2AKYq72mtvOgdRVgyX99Xy8A1WX8yRVgm2BShnUgyRVf4RVgyrVgyRaVuS/E+0R5mDBAm2ljoWBozE9Ik6VgyRzk1FXkqVXkyRVgyRUgy2VgdR1gy6VgyRUgyRVf4RVgyrVgyRP/D0MUxiPu0Rh/joBA9IRx2eGOq6VgyR9k+Xz+Xm99yRVgyR"
-};
-const recipientNameCache = new Map();
-const recipientLookupByPort = new WeakMap();
-
-
 const badocPorts = new Set();
 // Keep export jobs independent so Sync All can run the two parcel exports in
 // parallel, then start Linehaul while the delivery export is still processing.
@@ -1562,176 +1545,6 @@ async function getSpxCookieValue(names) {
   return "";
 }
 
-async function getRecipientLookupHeaders() {
-  const csrf = await getSpxCookieValue(["csrftoken", "csrf_token", "csrfToken", "X-CSRFToken"]);
-  const deviceId = await getSpxCookieValue(["spx-admin-device-id", "device-id", "device_id", "deviceId"]);
-  return {
-    "Accept": "application/json, text/plain, */*",
-    "Referer": `${SPX_ORIGIN}/`,
-    "app": RECIPIENT_LOOKUP_CAPTURED_HEADERS.app,
-    "PG-I": RECIPIENT_LOOKUP_CAPTURED_HEADERS["PG-I"],
-    "X-CSRFToken": csrf || RECIPIENT_LOOKUP_CAPTURED_HEADERS["X-CSRFToken"],
-    "x-sap-ri": RECIPIENT_LOOKUP_CAPTURED_HEADERS["x-sap-ri"],
-    "device-id": deviceId || RECIPIENT_LOOKUP_CAPTURED_HEADERS["device-id"],
-    "x-sap-sec": RECIPIENT_LOOKUP_CAPTURED_HEADERS["x-sap-sec"]
-  };
-}
-
-function extractRecipientName(payload) {
-  const invalid = /^(?:null|undefined|n\/a|none|-)$/i;
-  const nameKeys = new Set(["buyer_name", "receiver_name", "recipient_name"]);
-  const detailKeys = [
-    "data_detail", "dataDetail", "sensitive_data", "sensitive_value",
-    "data_value", "field_value", "buyer_info", "value", "detail", "text", "name"
-  ];
-  const clean = value => {
-    if (typeof value !== "string") return "";
-    const text = value.trim();
-    if (!text || invalid.test(text) || /^\*+$/.test(text)) return "";
-    return text;
-  };
-
-  // First prefer an explicitly named buyer/receiver field anywhere in the
-  // response. SPX's show_sensitive_data response may not use buyer_name;
-  // current responses can put the selected field in data.data_detail.
-  function findNamed(value, depth = 0, seen = new Set()) {
-    if (!value || typeof value !== "object" || depth > 10 || seen.has(value)) return "";
-    seen.add(value);
-    if (Array.isArray(value)) {
-      for (const item of value) { const found = findNamed(item, depth + 1, seen); if (found) return found; }
-      return "";
-    }
-    for (const [key, child] of Object.entries(value)) {
-      if (nameKeys.has(String(key).toLowerCase())) {
-        const direct = clean(child);
-        if (direct) return direct;
-        if (child && typeof child === "object") {
-          for (const candidateKey of ["value", "text", "name", "data_detail", "dataDetail"]) {
-            const candidate = clean(child[candidateKey]);
-            if (candidate) return candidate;
-          }
-        }
-      }
-    }
-    for (const child of Object.values(value)) {
-      const found = findNamed(child, depth + 1, seen);
-      if (found) return found;
-    }
-    return "";
-  }
-
-  // Unwrap the value returned for data_field=buyer_name. The endpoint's
-  // selected value is commonly carried as `data.data_detail`, rather than
-  // `data.buyer_name`. Only inspect the `data` payload, not retcode/message.
-  function unwrapSelected(value, depth = 0, seen = new Set()) {
-    if (depth > 10 || value == null) return "";
-    const direct = clean(value);
-    if (direct) {
-      // Some gateways JSON-encode the selected value inside a string.
-      if ((direct.startsWith("{") && direct.endsWith("}")) || (direct.startsWith("[") && direct.endsWith("]"))) {
-        try { return unwrapSelected(JSON.parse(direct), depth + 1, seen); } catch {}
-      }
-      return direct;
-    }
-    if (typeof value !== "object" || seen.has(value)) return "";
-    seen.add(value);
-    if (Array.isArray(value)) {
-      for (const item of value) { const found = unwrapSelected(item, depth + 1, seen); if (found) return found; }
-      return "";
-    }
-    // Prioritize the detail/value keys used by the sensitive-data endpoint.
-    for (const key of detailKeys) {
-      if (Object.prototype.hasOwnProperty.call(value, key)) {
-        const found = unwrapSelected(value[key], depth + 1, seen);
-        if (found) return found;
-      }
-    }
-    // The selected `data` subtree should contain the sensitive value only.
-    // A fallback to its first non-empty scalar handles minor SPX schema
-    // variations (e.g. data_detail_value) without reading unrelated metadata.
-    for (const [key, child] of Object.entries(value)) {
-      if (/^(?:retcode|code|message|msg|success|status|field|data_field)$/i.test(key)) continue;
-      if (child && typeof child === "object") {
-        const found = unwrapSelected(child, depth + 1, seen);
-        if (found) return found;
-      }
-    }
-    for (const [key, child] of Object.entries(value)) {
-      if (/^(?:retcode|code|message|msg|success|status|field|data_field)$/i.test(key)) continue;
-      const found = clean(child);
-      if (found) return found;
-    }
-    return "";
-  }
-
-  const explicitlyNamed = findNamed(payload);
-  if (explicitlyNamed) return explicitlyNamed;
-  return unwrapSelected(payload?.data ?? payload);
-}
-
-async function fetchRecipientName(shipmentId) {
-  const query = new URLSearchParams({ shipment_id: shipmentId, data_field: "buyer_name" });
-  const response = await extensionFetchText(`${SPX_ORIGIN}${RECIPIENT_SENSITIVE_DATA_PATH}?${query}`, {
-    method: "GET",
-    headers: await getRecipientLookupHeaders()
-  });
-  const json = parseJsonResponse(`SPX recipient-name lookup for ${shipmentId}`, response);
-  if (!response.ok || (json?.retcode !== undefined && Number(json.retcode) !== 0)) {
-    throw new Error(json?.message || `SPX recipient-name lookup failed for ${shipmentId} (HTTP ${response.status}).`);
-  }
-  return extractRecipientName(json);
-}
-
-async function runRecipientNameLookup(port, shipmentIds, lookupJob) {
-  const ids = [...new Set((Array.isArray(shipmentIds) ? shipmentIds : [])
-    .map(v => String(v || "").trim().toUpperCase())
-    .filter(v => /^[A-Z0-9_-]{6,80}$/.test(v)))].slice(0, 2000);
-  const names = {};
-  let completed = 0, found = 0, failed = 0, firstError = "";
-  const update = () => sendToPort(port, "BADOC_SPX_RECIPIENT_NAMES_PROGRESS", { completed, total: ids.length, found, failed });
-  if (!ids.length) {
-    sendToPort(port, "BADOC_SPX_RECIPIENT_NAMES_RESULTS", { names, shipmentIds: [], total: 0, found: 0, failed: 0 });
-    return;
-  }
-  let cursor = 0;
-  const worker = async () => {
-    while (!lookupJob.cancelled) {
-      const index = cursor++;
-      if (index >= ids.length) return;
-      const id = ids[index];
-      try {
-        let name = recipientNameCache.get(id) || "";
-        if (!name) {
-          name = await fetchRecipientName(id);
-          if (name) {
-            recipientNameCache.set(id, name);
-            if (recipientNameCache.size > 5000) recipientNameCache.delete(recipientNameCache.keys().next().value);
-          }
-        }
-        if (name) { names[id] = name; found++; }
-      } catch (error) {
-        failed++;
-        if (!firstError) firstError = error?.message || String(error);
-      }
-      completed++;
-      if (completed === 1 || completed % 5 === 0 || completed === ids.length) update();
-      // Keep the portal endpoint below a burst rate while letting the page remain responsive.
-      await sleep(100);
-    }
-  };
-  try {
-    await Promise.all(Array.from({ length: Math.min(3, ids.length) }, () => worker()));
-    if (!lookupJob.cancelled) {
-      sendToPort(port, "BADOC_SPX_RECIPIENT_NAMES_RESULTS", {
-        names, shipmentIds: ids, total: ids.length, found, failed,
-        error: failed && !found ? firstError : ""
-      });
-    }
-  } finally {
-    if (recipientLookupByPort.get(port) === lookupJob) recipientLookupByPort.delete(port);
-  }
-}
-
 async function getLinehaulRequestHeaders() {
   const csrf = await getSpxCookieValue(["csrftoken", "csrf_token", "csrfToken", "X-CSRFToken"]);
   const deviceId = await getSpxCookieValue(["device-id", "device_id", "deviceId"]);
@@ -1888,18 +1701,6 @@ chrome.runtime.onConnect.addListener(port => {
     const failBusy = (kind, text = "A BADOC SPX sync is already running.") =>
       sendToPort(port, "BADOC_SPX_ERROR", { message: text, ...(kind ? { kind } : {}) });
 
-    if (type === "BADOC_LOOKUP_RECIPIENT_NAMES") {
-      const previous = recipientLookupByPort.get(port);
-      if (previous) previous.cancelled = true;
-      const lookupJob = { cancelled: false };
-      recipientLookupByPort.set(port, lookupJob);
-      void runRecipientNameLookup(port, message?.shipmentIds, lookupJob).catch(error => {
-        console.error("BADOC SPX recipient-name lookup failed:", error);
-        sendToPort(port, "BADOC_SPX_RECIPIENT_NAMES_ERROR", { message: error?.message || String(error) });
-      });
-      return;
-    }
-
     if (type === "BADOC_START_PARCEL_SECONDARY_SYNC") {
       const job = reserveActiveJob("parcel-secondary", port);
       if (!job) { failBusy("parcel-secondary"); return; }
@@ -1989,8 +1790,6 @@ chrome.runtime.onConnect.addListener(port => {
   port.onDisconnect.addListener(() => {
     badocPorts.delete(port);
     for (const job of activeJobs.values()) if (job.ownerPort === port) job.cancelled = true;
-    const recipientLookup = recipientLookupByPort.get(port);
-    if (recipientLookup) recipientLookup.cancelled = true;
   });
 });
 
