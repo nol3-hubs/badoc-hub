@@ -10260,6 +10260,29 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     const k=d.getAttribute("data-dh-open");if(d.open)ui.open.add(k);else ui.open.delete(k);
   },true);
 
+  // v40.1: branded in-page Capture Now dialog.
+  function showCaptureDialog(config={}){
+    return new Promise(resolve=>{
+      const overlay=document.createElement("div");
+      overlay.style.cssText="position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(10,18,32,.62);backdrop-filter:blur(5px)";
+      const panel=document.createElement("div");
+      panel.style.cssText="width:min(560px,100%);max-height:82vh;overflow:auto;background:var(--card,#fff);color:var(--text,#172033);border:1px solid var(--line,#dbe2ea);border-radius:20px;box-shadow:0 24px 80px rgba(0,0,0,.28);padding:22px;font:inherit";
+      const head=document.createElement("div");head.style.cssText="display:flex;gap:12px;align-items:center;margin-bottom:16px";
+      const mark=document.createElement("div");mark.textContent=config.tone==="error"?"!":config.tone==="success"?"✓":"↥";mark.style.cssText="width:42px;height:42px;flex:0 0 42px;border-radius:13px;display:grid;place-items:center;background:"+(config.tone==="error"?"#fee2e2":config.tone==="success"?"#dcfce7":"#dbeafe")+";color:"+(config.tone==="error"?"#b91c1c":config.tone==="success"?"#15803d":"#1d4ed8")+";font-size:22px;font-weight:800";
+      const titles=document.createElement("div");const title=document.createElement("div");title.textContent=config.title||"Capture Now";title.style.cssText="font-size:19px;font-weight:800";
+      const sub=document.createElement("div");sub.textContent=config.subtitle||"Review the information below.";sub.style.cssText="font-size:13px;opacity:.72;margin-top:4px";
+      titles.append(title,sub);head.append(mark,titles);panel.append(head);
+      if(config.rows){const list=document.createElement("div");list.style.cssText="display:grid;gap:8px;margin:14px 0";config.rows.forEach(row=>{const item=document.createElement("div");item.style.cssText="display:flex;justify-content:space-between;gap:14px;padding:11px 12px;border:1px solid var(--line,#e2e8f0);border-radius:11px;background:var(--soft,#f8fafc)";const l=document.createElement("span");l.textContent=row.label;l.style.cssText="font-size:13px;opacity:.72";const v=document.createElement("strong");v.textContent=row.value;v.style.cssText="font-size:13px;text-align:right;max-width:65%;overflow-wrap:anywhere";item.append(l,v);list.append(item)});panel.append(list)}
+      if(config.message){const msg=document.createElement("div");msg.textContent=config.message;msg.style.cssText="white-space:pre-line;font-size:13px;line-height:1.55;margin:14px 0;padding:13px;border-radius:12px;background:var(--soft,#f8fafc);border:1px solid var(--line,#e2e8f0)";panel.append(msg)}
+      const footer=document.createElement("div");footer.style.cssText="display:flex;justify-content:flex-end;gap:10px;margin-top:20px";
+      const finish=value=>{overlay.remove();document.removeEventListener("keydown",onKey);resolve(value)};
+      const onKey=e=>{if(e.key==="Escape"&&config.confirm)finish(false)};document.addEventListener("keydown",onKey);
+      if(config.confirm){const cancel=document.createElement("button");cancel.textContent=config.cancelLabel||"Cancel";cancel.style.cssText="border:1px solid var(--line,#cbd5e1);background:transparent;color:inherit;border-radius:11px;padding:11px 17px;font:inherit;font-weight:700;cursor:pointer";cancel.onclick=()=>finish(false);footer.append(cancel)}
+      const ok=document.createElement("button");ok.textContent=config.confirm?(config.confirmLabel||"Confirm Capture"):"Close";ok.style.cssText="border:0;background:#185abd;color:white;border-radius:11px;padding:11px 19px;font:inherit;font-weight:750;cursor:pointer";ok.onclick=()=>finish(true);footer.append(ok);
+      panel.append(footer);overlay.append(panel);overlay.addEventListener("click",e=>{if(e.target===overlay&&config.confirm)finish(false)});document.body.append(overlay);ok.focus();
+    });
+  }
+
   // ───────── page wiring ─────────
   function init(){
     const page=document.getElementById("dailyHistory");
@@ -10281,18 +10304,25 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       const d=todayDate();
       try{
         const preview=await window.__badocPreviewDailyCapture(d);
-        const previewText=[
-          "Date: "+preview.date,
-          "Daily History: "+(preview.existing?"Existing record will be UPDATED":"New daily record will be CREATED"),
-          "Total Volume: "+preview.totalVolume.toLocaleString(),
-          "Delivered: "+preview.delivered.toLocaleString(),
-          "On Hold: "+preview.onHold.toLocaleString(),
-          "CFR1: "+preview.cfr1Total.toLocaleString()+" total ("+preview.cfr1Scanned.toLocaleString()+" scanned, "+preview.cfr1Unscanned.toLocaleString()+" unscanned)",
-          "",
-          "Capture Now saves the daily snapshot and CFR summary to cloud storage, then exports CFR1 to Google Sheets.",
-          "Continue?"
-        ].join("\\n");
-        if(!window.confirm("CAPTURE NOW — REVIEW BEFORE SAVING\\n\\n"+previewText)){
+        const approved=await showCaptureDialog({
+          title:"Review Capture Now",
+          subtitle:"Check today's figures before saving anything.",
+          confirm:true,
+          confirmLabel:"Confirm Capture",
+          cancelLabel:"Cancel",
+          rows:[
+            {label:"Date",value:preview.date},
+            {label:"Daily History",value:preview.existing?"Existing record will be UPDATED":"New daily record will be CREATED"},
+            {label:"Total Volume",value:preview.totalVolume.toLocaleString()},
+            {label:"Delivered",value:preview.delivered.toLocaleString()},
+            {label:"On Hold",value:preview.onHold.toLocaleString()},
+            {label:"CFR1 Total",value:preview.cfr1Total.toLocaleString()},
+            {label:"CFR1 Scanned",value:preview.cfr1Scanned.toLocaleString()},
+            {label:"CFR1 Unscanned",value:preview.cfr1Unscanned.toLocaleString()}
+          ],
+          message:"This saves the Daily History snapshot and CFR summary to cloud storage, then exports CFR1 to Google Sheets."
+        });
+        if(!approved){
           captureBtn.textContent=old;
           captureBtn.title="Capture cancelled. No save was started.";
           return;
