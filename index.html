@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v42">
+<meta name="badoc-app-version" content="v43">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -1440,7 +1440,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v42</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v43</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -10360,17 +10360,17 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
           const added=Number(cfr1.value&&cfr1.value.count)||0;
           captureBtn.textContent=added?"✓ Saved · CFR1 +"+added:"✓ Captured · CFR1 confirmed";
           captureBtn.title=detail;
-          alert("CAPTURE CONFIRMED\\n\\n"+detail);
+          await showCaptureDialog({title:"Capture Confirmed",subtitle:"All three save steps completed.",tone:"success",message:detail});
         }else{
           captureBtn.textContent=(ok(snap)||ok(cfr)||ok(cfr1))?"⚠ PARTIAL — CHECK DETAILS":"✕ CAPTURE FAILED";
           captureBtn.title=detail;
-          alert("CAPTURE NOT FULLY COMPLETED\\n\\n"+detail+"\\n\\nDo not assume failed or unconfirmed steps were saved. A CFR1 timeout may still have reached Google Sheets; check Apps Script → Executions before retrying.");
+          await showCaptureDialog({title:"Capture Needs Attention",subtitle:"At least one save step failed or was not confirmed.",tone:"error",message:detail+"\n\nDo not assume failed or unconfirmed steps were saved. A CFR1 timeout may still have reached Google Sheets; check Apps Script → Executions before retrying."});
         }
         snapCache.delete(d);
       }catch(e){
         console.warn("Capture Now preflight failed:",e);
         captureBtn.textContent="✕ Not Captured";
-        alert("Capture Now was not started or could not complete:\\n\\n"+String(e&&e.message||e));
+        await showCaptureDialog({title:"Capture Not Completed",subtitle:"The capture could not be started or completed.",tone:"error",message:String(e&&e.message||e)});
       }finally{
         window.__badocCaptureInFlight=false;
         setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;captureBtn.title="Review today's data, then save the snapshot and verify the CFR1 export.";},6000);
