@@ -41,6 +41,8 @@ jobs:
             echo "Chrome-only settings URL found in Firefox source."
             exit 1
           fi
+      - name: Mozilla WebExtension lint
+        run: npx --yes web-ext lint --source-dir extension-firefox
       - name: Create XPI
         shell: bash
         run: |
