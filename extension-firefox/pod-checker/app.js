@@ -83,16 +83,42 @@ function cleanEvidenceField(raw){
  line=line.replace(/^.*?\b(Proof of Contact:)/i,"$1");
  return line.replace(/^\s*[;·,]\s*|\s*[;·,]\s*$/g,"").trim();
 }
-function evidenceHtml(r){
- if(isDelivered(r)&&!(r.podFields||[]).length)return "PENDING";
- const fields=(r.podFields||[]).map(cleanEvidenceField)
-  .map(x=>x.replace(/\bTier\s*:\s*\d+\s*[;·]\s*/i,"" ).replace(/\bTier\s*:\s*\d+\s*/i,""))
-  .map(x=>x.replace(/\s*[;·]\s*[;·]\s*/g," · ").replace(/^\s*[;·]\s*|\s*[;·]\s*$/g,"" ).trim()).filter(Boolean);
- if(!fields.length)return isDelivered(r)?"PENDING":"Not identified";
- const colorEvidence=line=>esc(line).replace(/(Tier|Quality|Parcel|AWB|Location|Distance|Proof of Recipient|Proof of Contact):\s*(Yes|No)/g,(_,label,value)=>`${label}: <span class="evidence-${value.toLowerCase()}">${value}</span>`);
- const oneLine=fields.join(" · ");
- return `<details class="pod-evidence-dropdown"><summary title="Click to expand POD evidence">${colorEvidence(oneLine)}</summary><div class="pod-evidence-details">${fields.map(line=>`<div>${colorEvidence(line)}</div>`).join("")}</div></details>`;
+function appendColoredEvidence(container,line){
+ const pattern=/(Tier|Quality|Parcel|AWB|Location|Distance|Proof of Recipient|Proof of Contact):\\s*(Yes|No)/g;
+ let last=0,match;
+ while((match=pattern.exec(line))){
+  container.append(document.createTextNode(line.slice(last,match.index)));
+  container.append(document.createTextNode(match[1]+": "));
+  const value=document.createElement("span");
+  value.className="evidence-"+match[2].toLowerCase();
+  value.textContent=match[2];
+  container.append(value);
+  last=pattern.lastIndex;
+ }
+ container.append(document.createTextNode(line.slice(last)));
 }
+function evidenceElement(r){
+ if(isDelivered(r)&&!(r.podFields||[]).length)return document.createTextNode("PENDING");
+ const fields=(r.podFields||[]).map(cleanEvidenceField)
+  .map(x=>x.replace(/\\bTier\\s*:\\s*\\d+\\s*[;·]\\s*/i,"").replace(/\\bTier\\s*:\\s*\\d+\\s*/i,""))
+  .map(x=>x.replace(/\\s*[;·]\\s*[;·]\\s*/g," · ").replace(/^\\s*[;·]\\s*|\\s*[;·]\\s*$/g,"").trim()).filter(Boolean);
+ if(!fields.length)return document.createTextNode(isDelivered(r)?"PENDING":"Not identified");
+ const details=document.createElement("details");
+ details.className="pod-evidence-dropdown";
+ const summary=document.createElement("summary");
+ summary.title="Click to expand POD evidence";
+ appendColoredEvidence(summary,fields.join(" · "));
+ const body=document.createElement("div");
+ body.className="pod-evidence-details";
+ for(const line of fields){
+  const row=document.createElement("div");
+  appendColoredEvidence(row,line);
+  body.append(row);
+ }
+ details.append(summary,body);
+ return details;
+}
+function evidenceText(r){if(isDelivered(r)&&!(r.podFields||[]).length)return "PENDING";const lines=(r.podFields||[]).map(cleanEvidenceField).filter(Boolean);return lines.length?[...new Set(lines)].join("\\n"):(isDelivered(r)?"PENDING":"Not identified");}
 function evidenceText(r){if(isDelivered(r)&&!(r.podFields||[]).length)return "PENDING";const lines=(r.podFields||[]).map(cleanEvidenceField).filter(Boolean);return lines.length?[...new Set(lines)].join("\n"):(isDelivered(r)?"PENDING":"Not identified");}
 async function loadSaved() {
   const data=await chrome.storage.local.get(["podAppOids","podAppResults"]);
@@ -101,12 +127,47 @@ async function loadSaved() {
 }
 async function saveOids(){await chrome.storage.local.set({podAppOids:$('oids').value});}
 function renderCaptures(){
-  $('captureStatus').textContent=captures.length?`${captures.length} matching request(s) observed in SPX.`:"No matching request captured. Arm capture, search one OID in SPX, then refresh.";
-  $('captureList').innerHTML=captures.slice(0,30).map(c=>`<div class="capture-item"><b>${esc(c.method)} ${esc(c.path)}</b><br><span class="muted small">Request OID: ${esc((c.sourceOids||[]).join(", ")||"not visible in request")}<br>Response OID: ${esc((c.responseOids||[]).join(", ")||"not found")}<br>${c.hasOnHoldValidation?"Proof of On Hold response detected":"Other SPX response"}</span><br><span class="tag ${c.replayable&&c.hasOnHoldValidation?"pass":"warn"}">${c.replayable&&c.hasOnHoldValidation?"Reusable read-only template":esc(c.replayBlockReason||"Not reusable")}</span></div>`).join("");
+ $('captureStatus').textContent=captures.length?`${captures.length} matching request(s) observed in SPX.`:"No matching request captured. Arm capture, search one OID in SPX, then refresh.";
+ const list=$('captureList');
+ const fragment=document.createDocumentFragment();
+ for(const c of captures.slice(0,30)){
+  const item=document.createElement("div");
+  item.className="capture-item";
+  const heading=document.createElement("b");
+  heading.textContent=`${String(c.method||"")} ${String(c.path||"")}`.trim();
+  item.append(heading,document.createElement("br"));
+  const info=document.createElement("span");
+  info.className="muted small";
+  const sourceOids=Array.isArray(c.sourceOids)?c.sourceOids.join(", "):String(c.sourceOids||"");
+  const responseOids=Array.isArray(c.responseOids)?c.responseOids.join(", "):String(c.responseOids||"");
+  info.append("Request OID: "+(sourceOids||"not visible in request"),document.createElement("br"));
+  info.append("Response OID: "+(responseOids||"not found"),document.createElement("br"));
+  info.append(c.hasOnHoldValidation?"Proof of On Hold response detected":"Other SPX response");
+  item.append(info,document.createElement("br"));
+  const tag=document.createElement("span");
+  const reusable=!!(c.replayable&&c.hasOnHoldValidation);
+  tag.className="tag "+(reusable?"pass":"warn");
+  tag.textContent=reusable?"Reusable read-only template":String(c.replayBlockReason||"Not reusable");
+  item.append(tag);
+  fragment.append(item);
+ }
+ list.replaceChildren(fragment);
 }
-function setFilterOptions(id, values, placeholder, current){
- const el=$(id); const options=[...new Set(values.map(v=>String(v||"Not identified").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
- el.innerHTML=`<option value="ALL">${esc(placeholder)}</option>`+options.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+function setFilterOptions(id,values,placeholder,current){
+ const el=$(id);
+ const options=[...new Set(values.map(v=>String(v||"Not identified").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+ const fragment=document.createDocumentFragment();
+ const all=document.createElement("option");
+ all.value="ALL";
+ all.textContent=placeholder;
+ fragment.append(all);
+ for(const value of options){
+  const option=document.createElement("option");
+  option.value=value;
+  option.textContent=value;
+  fragment.append(option);
+ }
+ el.replaceChildren(fragment);
  el.value=options.includes(current)?current:"ALL";
 }
 function resultEvidenceValues(r){return (r.podFields||[]).map(x=>String(x).match(/Proof of Contact:.*?(?=; rule:|; SPX has not calculated|$)/)?.[0]||"").filter(Boolean).join(" ");}
@@ -122,32 +183,59 @@ function filteredResults(){
  });
 }
 function renderResults(){
-  $('resultsCount').textContent=results.length?`(${results.length})`:"";
-  $('countAll').textContent=results.length;
-  $('countPass').textContent=results.filter(r=>r.checkResult==="PASS").length;
-  $('countFail').textContent=results.filter(r=>displayResult(r)==="FAIL").length;
-  for(let tier=1;tier<=5;tier++){
-    const count=results.filter(r=>displayResult(r)===`TIER ${tier}`).length;
-    $(`countTier${tier}`).textContent=count;
-  }
-  setFilterOptions("filterStatus",results.map(r=>r.deliveryStatus),"All statuses",$('filterStatus')?.value||"ALL");
-  setFilterOptions("filterDriver",results.map(r=>r.driverName),"All drivers",$('filterDriver')?.value||"ALL");
-  const shown=filteredResults();
-  const totalPages=Math.max(1,Math.ceil(shown.length/PAGE_SIZE));
-  currentPage=Math.min(Math.max(1,currentPage),totalPages);
-  const start=(currentPage-1)*PAGE_SIZE;
-  const pageRows=shown.slice(start,start+PAGE_SIZE);
-  $('filterSummary').textContent=results.length?`Showing ${shown.length?start+1:0}–${Math.min(start+PAGE_SIZE,shown.length)} of ${shown.length} filtered results · Page ${currentPage} of ${totalPages}`:"";
-  $('pageIndicator').textContent=`Page ${currentPage} / ${totalPages}`;
-  $('prevPage').disabled=currentPage<=1;
-  $('nextPage').disabled=currentPage>=totalPages;
-  $('results').innerHTML=pageRows.length?pageRows.map(r=>`<tr>
-   <td>${esc(r.oid)}</td>
-   <td><span class="tag ${outcomeClass(r.checkResult)}">${displayResult(r)}</span></td>
-   <td>${esc(isDelivered(r)?"Delivered":r.deliveryStatus||"Not identified")}</td>
-   <td>${esc(r.driverName||"Not identified")}</td>
-   <td>${evidenceHtml(r)}</td>
-  </tr>`).join(""):'<tr><td colspan="5" class="muted">No matching results.</td></tr>';
+ $('resultsCount').textContent=results.length?`(${results.length})`:"";
+ $('countAll').textContent=results.length;
+ $('countPass').textContent=results.filter(r=>r.checkResult==="PASS").length;
+ $('countFail').textContent=results.filter(r=>displayResult(r)==="FAIL").length;
+ for(let tier=1;tier<=5;tier++){
+  const count=results.filter(r=>displayResult(r)===`TIER ${tier}`).length;
+  $(`countTier${tier}`).textContent=count;
+ }
+ setFilterOptions("filterStatus",results.map(r=>r.deliveryStatus),"All statuses",$('filterStatus')?.value||"ALL");
+ setFilterOptions("filterDriver",results.map(r=>r.driverName),"All drivers",$('filterDriver')?.value||"ALL");
+ const shown=filteredResults();
+ const totalPages=Math.max(1,Math.ceil(shown.length/PAGE_SIZE));
+ currentPage=Math.min(Math.max(1,currentPage),totalPages);
+ const start=(currentPage-1)*PAGE_SIZE;
+ const pageRows=shown.slice(start,start+PAGE_SIZE);
+ $('filterSummary').textContent=results.length?`Showing ${shown.length?start+1:0}–${Math.min(start+PAGE_SIZE,shown.length)} of ${shown.length} filtered results · Page ${currentPage} of ${totalPages}`:"";
+ $('pageIndicator').textContent=`Page ${currentPage} / ${totalPages}`;
+ $('prevPage').disabled=currentPage<=1;
+ $('nextPage').disabled=currentPage>=totalPages;
+ const tableBody=$('results');
+ const rows=[];
+ for(const r of pageRows){
+  const tr=document.createElement("tr");
+  const oid=document.createElement("td");
+  oid.textContent=String(r.oid??"");
+  tr.append(oid);
+  const outcomeCell=document.createElement("td");
+  const outcome=document.createElement("span");
+  outcome.className="tag "+outcomeClass(r.checkResult);
+  outcome.textContent=displayResult(r);
+  outcomeCell.append(outcome);
+  tr.append(outcomeCell);
+  const status=document.createElement("td");
+  status.textContent=String(isDelivered(r)?"Delivered":r.deliveryStatus||"Not identified");
+  tr.append(status);
+  const driver=document.createElement("td");
+  driver.textContent=String(r.driverName||"Not identified");
+  tr.append(driver);
+  const evidence=document.createElement("td");
+  evidence.append(evidenceElement(r));
+  tr.append(evidence);
+  rows.push(tr);
+ }
+ if(!rows.length){
+  const tr=document.createElement("tr");
+  const empty=document.createElement("td");
+  empty.colSpan=5;
+  empty.className="muted";
+  empty.textContent="No matching results.";
+  tr.append(empty);
+  rows.push(tr);
+ }
+ tableBody.replaceChildren(...rows);
 }
 async function refreshCaptures(){
  const r=await pageCommand("LIST");
@@ -671,7 +759,7 @@ async function findDashboardCandidates(){
     }
     dashboardCandidates=verifiedCandidates;
     const select=$("dashboardCandidate");
-    select.innerHTML="";
+    select.replaceChildren();
     dashboardCandidates.forEach((candidate,index)=>{
       const option=document.createElement("option");
       option.value=String(index);
