@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v37">
+<meta name="badoc-app-version" content="v38">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -458,6 +458,9 @@ window.BADOC_SHARED_CONFIG = { url: window.BADOC_FIREBASE_CONFIG.databaseURL, ke
 <script>
 /* Daily History Google Sheets Web App URL */
 window.BADOC_DAILY_HISTORY_GSHEET_URL = "https://script.google.com/a/macros/spxexpress.com/s/AKfycbxRMaXmJA_Du7wrSqDUmt2xMflAzLa7YpPCY5n74XQod1lApgXPjOJul2nJy_ld4eawWA/exec";
+// Daily History snapshots and CFR Daily Summary stay in shared cloud only.
+// Their optional Google Sheets mirror is intentionally disabled.
+window.BADOC_DAILY_HISTORY_GSHEET_MIRROR_ENABLED = false;
 </script>
 
 <script id="v2-config">
@@ -841,7 +844,7 @@ window.DASHBOARD_V2 = {
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v37</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v38</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -9405,7 +9408,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     return clean(window.BADOC_DAILY_HISTORY_GSHEET_URL||"");
   }
   function googleSheetsConfigured(){
-    return /^https:\/\/script\.google\.com\/(?:macros\/s\/[^/]+\/exec|a\/macros\/[^/]+\/s\/[^/]+\/exec)(?:\?.*)?$/i.test(googleSheetsUrl());
+    return window.BADOC_DAILY_HISTORY_GSHEET_MIRROR_ENABLED === true &&
+      /^https:\/\/script\.google\.com\/(?:macros\/s\/[^/]+\/exec|a\/macros\/[^/]+\/s\/[^/]+\/exec)(?:\?.*)?$/i.test(googleSheetsUrl());
   }
   function googleSheetsBridgeRequest(action, payload={}){
     const endpoint=googleSheetsUrl();
