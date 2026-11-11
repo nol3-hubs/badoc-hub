@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v32">
+<meta name="badoc-app-version" content="v37">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -841,7 +841,7 @@ window.DASHBOARD_V2 = {
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v32</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v37</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -8816,7 +8816,10 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     }finally{busy=false;}
   }
 
+  // GitHub Actions holds this timer until shared-cloud refresh and capture succeed.
+  window.__badocRunDailyReset = function(){ return resetAt2AM(false); };
   function tick(){
+    if(window.__BADOC_GITHUB_AUTOMATION_HOLD_RESET===true)return;
     resetAt2AM(false);
   }
   // Check immediately and then frequently enough to catch 12:00 AM / 2:00 AM
