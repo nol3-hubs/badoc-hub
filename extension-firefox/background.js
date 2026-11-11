@@ -1,9 +1,13 @@
+// Firefox uses browser.*; Chrome fallback keeps the source portable.
+const extApi = globalThis.browser || globalThis.chrome;
+if (!extApi) throw new Error("WebExtensions API is unavailable.");
+
 const SPX_ORIGIN = "https://spx.shopee.ph";
 const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
 const STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
-const VERSION = "69.2.4";
+const VERSION = "69.2.5";
 const RIDER_EXPORT_PATH = "/api/driverservice/admin/driver/export";
 const RIDER_TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const RIDER_EXPORT_NAME = "spx_driver";
@@ -171,7 +175,7 @@ async function createDedicatedSpxTab() {
   // Batch Search is part of Order Management → Order Tracking.
   // Open that route directly so the SPA does not remain on TO List when a
   // hash-only route change fails to trigger tabs.onUpdated(status=complete).
-  const tab = await chrome.tabs.create({
+  const tab = await extApi.tabs.create({
     url: `${SPX_ORIGIN}${PARCEL_ORDER_TRACKING_ROUTE}`,
     active: false
   });
@@ -187,7 +191,7 @@ async function createDedicatedSpxTab() {
     let timer = null;
 
     const cleanup = () => {
-      chrome.tabs.onUpdated.removeListener(onUpdated);
+      extApi.tabs.onUpdated.removeListener(onUpdated);
       if (timer) clearTimeout(timer);
     };
 
@@ -213,10 +217,10 @@ async function createDedicatedSpxTab() {
       }
     };
 
-    chrome.tabs.onUpdated.addListener(onUpdated);
+    extApi.tabs.onUpdated.addListener(onUpdated);
     timer = setTimeout(() => fail(new Error("Timed out opening the temporary SPX TO List tab.")), 30000);
 
-    chrome.tabs.get(tab.id).then(current => {
+    extApi.tabs.get(tab.id).then(current => {
       const url = String(current?.url || "");
       if (current?.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) finish();
     }).catch(fail);
@@ -241,7 +245,7 @@ async function withTimeout(promise, ms, label) {
 }
 
 async function fetchSpxFromLoggedInTab(url, init = {}) {
-  const tabs = await chrome.tabs.query({ url: SPX_ORIGIN + "/*" });
+  const tabs = await extApi.tabs.query({ url: SPX_ORIGIN + "/*" });
   const tab = tabs
     .filter(item => Number.isInteger(item?.id))
     .sort((a, b) => Number(b.lastAccessed || 0) - Number(a.lastAccessed || 0))[0];
@@ -258,7 +262,7 @@ async function fetchSpxFromLoggedInTab(url, init = {}) {
     ...(init.body !== undefined ? { body: init.body } : {})
   };
 
-  const injected = await chrome.scripting.executeScript({
+  const injected = await extApi.scripting.executeScript({
     target: { tabId: tab.id },
     world: "MAIN",
     args: [String(url), requestInit],
@@ -387,7 +391,7 @@ async function downloadCsv(signedUrl) {
 
 
 async function ensureToListRoute(tabId) {
-  const tab = await chrome.tabs.get(tabId);
+  const tab = await extApi.tabs.get(tabId);
   const currentUrl = String(tab?.url || "");
 
   if (/^https:\/\/spx\.shopee\.ph\/\#\/dcToManagement(?:[/?#]|$)/i.test(currentUrl)) {
@@ -402,7 +406,7 @@ async function ensureToListRoute(tabId) {
     let timer = null;
 
     const cleanup = () => {
-      chrome.tabs.onUpdated.removeListener(onUpdated);
+      extApi.tabs.onUpdated.removeListener(onUpdated);
       if (timer) clearTimeout(timer);
     };
 
@@ -432,13 +436,13 @@ async function ensureToListRoute(tabId) {
       }
     };
 
-    chrome.tabs.onUpdated.addListener(onUpdated);
+    extApi.tabs.onUpdated.addListener(onUpdated);
 
     timer = setTimeout(() => {
       fail(new Error("Timed out opening SPX Inbound → TO List."));
     }, 20000);
 
-    chrome.tabs.update(tabId, {
+    extApi.tabs.update(tabId, {
       url: `${SPX_ORIGIN}/#/dcToManagement`
     }).catch(fail);
   });
@@ -448,7 +452,7 @@ async function ensureToListRoute(tabId) {
 }
 
 async function invokeSpxNativeExport(tabId) {
-  const results = await chrome.scripting.executeScript({
+  const results = await extApi.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
     func: async () => {
@@ -583,7 +587,7 @@ async function invokeSpxNativeExport(tabId) {
 
 
 async function ensureParcelOrderTrackingRoute(tabId) {
-  const tab = await chrome.tabs.get(tabId);
+  const tab = await extApi.tabs.get(tabId);
   const currentUrl = String(tab?.url || "");
   if (/^https:\/\/spx\.shopee\.ph\/#\/orderTracking(?:[/?#]|$)/i.test(currentUrl)) {
     progress("SPX is on Order Management → Order Tracking.", { phase: "route" });
@@ -596,7 +600,7 @@ async function ensureParcelOrderTrackingRoute(tabId) {
     let settled = false;
     let timer = null;
     const cleanup = () => {
-      chrome.tabs.onUpdated.removeListener(onUpdated);
+      extApi.tabs.onUpdated.removeListener(onUpdated);
       if (timer) clearTimeout(timer);
     };
     const finish = () => {
@@ -616,9 +620,9 @@ async function ensureParcelOrderTrackingRoute(tabId) {
       const url = String(updatedTab?.url || "");
       if (changeInfo.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) finish();
     };
-    chrome.tabs.onUpdated.addListener(onUpdated);
+    extApi.tabs.onUpdated.addListener(onUpdated);
     timer = setTimeout(() => fail(new Error("Timed out opening SPX Order Tracking.")), 20000);
-    chrome.tabs.update(tabId, { url: `${SPX_ORIGIN}/${PARCEL_ORDER_TRACKING_ROUTE}` }).catch(fail);
+    extApi.tabs.update(tabId, { url: `${SPX_ORIGIN}/${PARCEL_ORDER_TRACKING_ROUTE}` }).catch(fail);
   });
 
   await sleep(2200);
@@ -1017,7 +1021,7 @@ async function runRiderJob(job) {
 async function executeSpxBatchSearch(tabId, trackingNumbers) {
   let injectionResults;
   try {
-    injectionResults = await chrome.scripting.executeScript({
+    injectionResults = await extApi.scripting.executeScript({
       target: { tabId },
       args: [trackingNumbers],
       func: async (tns) => {
@@ -1252,11 +1256,11 @@ async function executeSpxBatchSearch(tabId, trackingNumbers) {
 
   const result = injectionResults?.[0]?.result;
   if (!injectionResults?.length) {
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const tab = await extApi.tabs.get(tabId).catch(() => null);
     throw new Error(`Chrome injected no result frame. SPX tab URL: ${tab?.url || "unknown"}; status: ${tab?.status || "unknown"}.`);
   }
   if (!result) {
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const tab = await extApi.tabs.get(tabId).catch(() => null);
     throw new Error(`The SPX script returned no value (frame ${injectionResults[0]?.frameId ?? "unknown"}). Tab URL: ${tab?.url || "unknown"}; status: ${tab?.status || "unknown"}. Check the SPX tab console for a script exception.`);
   }
   if (result.__spxBatchSearchError) {
@@ -1334,7 +1338,7 @@ async function runDeliveringReconcileJob(job) {
     });
   } finally {
     if (tabId) {
-      try { await chrome.tabs.remove(tabId); } catch {}
+      try { await extApi.tabs.remove(tabId); } catch {}
     }
     releaseActiveJob(job);
   }
@@ -1608,7 +1612,7 @@ async function waitForCompletion(taskId, startSec, job, pollIntervalMs = POLL_MS
 async function getSpxCookieValue(names) {
   for (const name of names) {
     try {
-      const cookie = await chrome.cookies.get({
+      const cookie = await extApi.cookies.get({
         url: SPX_ORIGIN,
         name
       });
@@ -1914,19 +1918,24 @@ function isBadocPageUrl(url) {
 }
 
 function isBadocPageSender(sender) {
-  const url = String(sender?.url || "");
-  if (isBadocPageUrl(url)) return true;
-  // Chrome reports an iframe's inherited srcdoc URL as about:srcdoc in some versions.
-  // Validate the inherited sender origin instead of rejecting the Received Checking frame.
-  const origin = String(sender?.origin || "");
-  if (url.startsWith("about:") && origin) {
-    const originUrl = origin.endsWith("/") ? origin : origin + "/";
-    return isBadocPageUrl(originUrl);
+  // Firefox/Android and Chrome can populate different sender fields for
+  // extension content-script ports. Validate all available page identifiers.
+  const candidates = [
+    sender?.url,
+    sender?.origin,
+    sender?.tab?.url
+  ].map(value => String(value || "").trim()).filter(Boolean);
+  for (const candidate of candidates) {
+    if (isBadocPageUrl(candidate)) return true;
+    if (candidate.startsWith("about:")) {
+      const origin = String(sender?.origin || sender?.tab?.url || "").trim();
+      if (origin && isBadocPageUrl(origin.endsWith("/") ? origin : origin + "/")) return true;
+    }
   }
   return false;
 }
 
-chrome.runtime.onConnect.addListener(port => {
+extApi.runtime.onConnect.addListener(port => {
   if (port.name !== "BADOC_PAGE") return;
 
   const senderUrl = String(port.sender?.url || "");
@@ -2050,9 +2059,9 @@ chrome.runtime.onConnect.addListener(port => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "BADOC_OPEN_EXTENSIONS") {
-    chrome.tabs.create({ url: "about:addons" })
+    extApi.tabs.create({ url: "about:addons" })
       .then(() => sendResponse({ ok: true }))
       .catch(error => sendResponse({ ok: false, message: error?.message || String(error) }));
     return true;
@@ -2069,7 +2078,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 
 // ───────── Integrated POD/POOH Checker background actions ─────────
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.target !== "POD_CHECKER_BACKGROUND") return false;
 
   // Run Google Sheets requests from the MV3 service worker. This avoids the
@@ -2126,7 +2135,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Reuse a Proof of On Hold tab if it already exists. Otherwise reuse another
     // SPX tab and route it to the required page. Create a background tab only
     // when SPX is completely closed; never activate the tab or switch the user away.
-    const spxTabs = await chrome.tabs.query({ url: `${SPX_ORIGIN}/*` });
+    const spxTabs = await extApi.tabs.query({ url: `${SPX_ORIGIN}/*` });
     const preferredWindowId = sender?.tab?.windowId;
     const sortTabs = (a, b) => {
       const aSameWindow = a.windowId === preferredWindowId ? 1 : 0;
@@ -2141,20 +2150,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     let navigated = false;
 
     if (!tab) {
-      tab = await chrome.tabs.create({ url: proofOfOnHoldUrl, active: false });
+      tab = await extApi.tabs.create({ url: proofOfOnHoldUrl, active: false });
       created = true;
     } else if (!isProofPage(tab.url)) {
-      tab = await chrome.tabs.update(tab.id, { url: proofOfOnHoldUrl, active: false });
+      tab = await extApi.tabs.update(tab.id, { url: proofOfOnHoldUrl, active: false });
       navigated = true;
     }
     if (!tab?.id) throw new Error("Chrome could not prepare an SPX tab.");
 
     // Wait for navigation to finish without activating the background tab.
     const navDeadline = Date.now() + 60000;
-    let tabState = await chrome.tabs.get(tab.id);
+    let tabState = await extApi.tabs.get(tab.id);
     while (tabState.status !== "complete" && Date.now() < navDeadline) {
       await new Promise(resolve => setTimeout(resolve, 300));
-      tabState = await chrome.tabs.get(tab.id);
+      tabState = await extApi.tabs.get(tab.id);
     }
     if (tabState.status !== "complete") throw new Error("SPX navigation timed out. The background tab is still loading.");
 
@@ -2165,12 +2174,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const injectPodCheckerBridge = async () => {
       // Install the MAIN-world receiver first, then its isolated-world Chrome
       // message relay. Both scripts are safe to reinject by design.
-      await chrome.scripting.executeScript({
+      await extApi.scripting.executeScript({
         target: { tabId: tab.id },
         world: "MAIN",
         files: ["pod-checker/page_bridge.js"]
       });
-      await chrome.scripting.executeScript({
+      await extApi.scripting.executeScript({
         target: { tabId: tab.id },
         world: "ISOLATED",
         files: ["pod-checker/content.js"]
@@ -2201,7 +2210,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await new Promise(resolve => setTimeout(resolve, 250));
       }
       try {
-        bridgePing = await chrome.tabs.sendMessage(tab.id, { target: "pood-page-v19", command: "PING" });
+        bridgePing = await extApi.tabs.sendMessage(tab.id, { target: "pood-page-v19", command: "PING" });
         if (bridgePing?.ok && String(bridgePing.bridgeVersion || "") === "19") break;
         bridgeError = new Error(bridgePing?.error || (bridgePing?.ok
           ? "A stale SPX POD receiver answered instead of receiver v19."
@@ -2217,7 +2226,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // SPX is a SPA. Ask once for bounded route/content readiness.
     let readiness;
     try {
-      readiness = await chrome.tabs.sendMessage(tab.id, { target: "pood-page-v19", command: "WAIT_FMS_READY" });
+      readiness = await extApi.tabs.sendMessage(tab.id, { target: "pood-page-v19", command: "WAIT_FMS_READY" });
     } catch (error) {
       throw new Error(error?.message || "SPX Proof of On Hold page did not respond. Reload SPX and try again.");
     }
@@ -2332,25 +2341,25 @@ async function podDiscoverWorksheetGidsOnPage() {
   return { gids: [...gids], labels, activeGid: beforeGid || restoredGid, inventoryGid, method: 'tab-strip-scan', restored: !beforeGid || restoredGid === beforeGid };
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.target !== "POD_CHECKER_RPC") return false;
   (async () => {
     const args = Array.isArray(message.args) ? message.args : [];
-    if (message.method === "tabs.query") return await chrome.tabs.query(args[0] || {});
+    if (message.method === "tabs.query") return await extApi.tabs.query(args[0] || {});
     if (message.method === "tabs.sendMessage") {
       const tabId = Number(args[0]);
       if (!Number.isInteger(tabId)) throw new Error("Invalid SPX tab ID.");
-      return await chrome.tabs.sendMessage(tabId, args[1] || {});
+      return await extApi.tabs.sendMessage(tabId, args[1] || {});
     }
     if (message.method === "scripting.discoverWorksheetGids") {
       const tabId = Number(args[0]);
       if (!Number.isInteger(tabId)) throw new Error("Invalid Google Sheets tab ID.");
-      const tab = await chrome.tabs.get(tabId);
+      const tab = await extApi.tabs.get(tabId);
       const url = new URL(String(tab.url || ""));
       if (url.protocol !== "https:" || !["docs.google.com", "sheets.google.com"].includes(url.hostname) || !/\/spreadsheets(?:\/|$)/i.test(url.pathname)) {
         throw new Error("Selected tab is not a Google Sheets spreadsheet.");
       }
-      const injected = await chrome.scripting.executeScript({ target: { tabId }, world: "ISOLATED", func: podDiscoverWorksheetGidsOnPage });
+      const injected = await extApi.scripting.executeScript({ target: { tabId }, world: "ISOLATED", func: podDiscoverWorksheetGidsOnPage });
       const result = injected?.[0]?.result;
       if (!result) throw new Error("The Google Sheets page did not return worksheet information.");
       return result;

@@ -1,4 +1,8 @@
 (() => {
+  // Prefer Firefox's Promise-based WebExtensions namespace, with Chrome fallback.
+  const extApi = globalThis.browser || globalThis.chrome;
+  if (!extApi?.runtime?.connect) return;
+
   // One unified extension serves the host BADOC HUB app and its isolated Received Checking iframe.
   // Connect only when an explicit app marker is present; never connect from the temporary SPX tab.
   const receivedCheckingMarker = document.querySelector('meta[name="badoc-received-checking"]');
@@ -13,10 +17,13 @@
         /^\/badoc-hub(?:\/|$)/i.test(url.pathname);
     } catch (_) { return false; }
   })();
-  const isMainBadocApp = !!(mainBadocMarker && String(mainBadocMarker.content || '').trim()) ||
+  // This content script is only injected on the explicitly permitted
+  // nol3-hubs.github.io host from manifest.json. Do not require a DOM marker:
+  // Firefox can run document_idle before the dashboard finishes rendering.
+  const isMainBadocApp = isBadocGithubPagesApp ||
+    (!!(mainBadocMarker && String(mainBadocMarker.content || '').trim())) ||
     !!document.getElementById('badocSpxBridgeInstallModal') ||
-    !!document.getElementById('receivedCheckingFrame') ||
-    isBadocGithubPagesApp;
+    !!document.getElementById('receivedCheckingFrame');
   if (!isReceivedChecking && !isMainBadocApp) return;
 
   // about:srcdoc frames inherit their parent origin; validate that the source is an allowed BADOC host.
@@ -36,12 +43,12 @@
     /^(https?:)\/\/(localhost|127\.0\.0\.1)(?::\d+)?\//i.test(bridgeContextUrl) ||
     isGithubPagesHost(bridgeContextUrl);
   if (!isAllowedHost) return;
-  if (window.__badocSpxBridgeUnifiedV1) return;
+  if (window.__badocSpxBridgeUnifiedV2) return;
   window.__badocSpxBridgeUnifiedV1 = true;
 
   const PAGE_SOURCE = "BADOC_SPX_BRIDGE";
   const BADOC_SOURCE = "BADOC_PAGE";
-  const VERSION = "69.2.4";
+  const VERSION = "69.2.5";
   let port = null;
   let reconnectTimer = null;
   let shuttingDown = false;
@@ -55,10 +62,10 @@
   function connect() {
     if (shuttingDown || port) return;
     try {
-      port = chrome.runtime.connect({ name: "BADOC_PAGE" });
+      port = extApi.runtime.connect({ name: "BADOC_PAGE" });
       port.onMessage.addListener(msg => emit(msg.type, msg));
       port.onDisconnect.addListener(() => {
-        const reason = chrome.runtime.lastError?.message || "Bridge connection closed.";
+        const reason = extApi.runtime.lastError?.message || "Bridge connection closed.";
         port = null;
         emit("BADOC_BRIDGE_DISCONNECTED", { message: reason });
         scheduleReconnect();
@@ -83,13 +90,15 @@
 
     if (data.type === "BADOC_OPEN_EXTENSIONS") {
       try {
-        chrome.runtime.sendMessage({ type: "BADOC_OPEN_EXTENSIONS" }, response => {
-          if (chrome.runtime.lastError || !response?.ok) {
-            emit("BADOC_SPX_ERROR", { message: chrome.runtime.lastError?.message || response?.message || "Could not open Firefox Add-ons." });
-            return;
-          }
-          emit("BADOC_EXTENSIONS_OPENED", {});
-        });
+        extApi.runtime.sendMessage({ type: "BADOC_OPEN_EXTENSIONS" })
+          .then(response => {
+            if (!response?.ok) {
+              emit("BADOC_SPX_ERROR", { message: response?.message || "Could not open Firefox Add-ons." });
+              return;
+            }
+            emit("BADOC_EXTENSIONS_OPENED", {});
+          })
+          .catch(error => emit("BADOC_SPX_ERROR", { message: error?.message || String(error) }));
       } catch (error) { emit("BADOC_SPX_ERROR", { message: error?.message || String(error) }); }
       return;
     }
@@ -102,12 +111,12 @@
       (async () => {
         try {
           let result;
-          if (method === "storage.local.get") result = await chrome.storage.local.get(args[0]);
-          else if (method === "storage.local.set") result = await chrome.storage.local.set(args[0] || {});
-          else if (method === "storage.local.remove") result = await chrome.storage.local.remove(args[0]);
-          else if (method === "runtime.sendMessage") result = await chrome.runtime.sendMessage(args[0] || {});
+          if (method === "storage.local.get") result = await extApi.storage.local.get(args[0]);
+          else if (method === "storage.local.set") result = await extApi.storage.local.set(args[0] || {});
+          else if (method === "storage.local.remove") result = await extApi.storage.local.remove(args[0]);
+          else if (method === "runtime.sendMessage") result = await extApi.runtime.sendMessage(args[0] || {});
           else if (method === "tabs.query" || method === "tabs.sendMessage" || method === "scripting.discoverWorksheetGids") {
-            result = await chrome.runtime.sendMessage({ target: "POD_CHECKER_RPC", method, args });
+            result = await extApi.runtime.sendMessage({ target: "POD_CHECKER_RPC", method, args });
             if (!result?.ok) throw new Error(result?.error || "Extension request failed.");
             result = result.result;
           } else {
@@ -123,9 +132,9 @@
 
     if (data.type === "BADOC_GET_POD_CHECKER_URL") {
       // Serve the checker from this extension's own origin so it can use
-      // chrome.tabs, chrome.storage, and chrome.scripting inside the iframe.
+      // extApi.tabs, extApi.storage, and extApi.scripting inside the iframe.
       emit("BADOC_POD_CHECKER_URL", {
-        url: chrome.runtime.getURL("pod-checker/app.html"),
+        url: extApi.runtime.getURL("pod-checker/app.html"),
         checkerVersion: "1.5.47"
       });
       return;
