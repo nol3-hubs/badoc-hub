@@ -3,7 +3,7 @@ const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
 const STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
-const VERSION = "1";
+const VERSION = "69.2.3";
 const RIDER_EXPORT_PATH = "/api/driverservice/admin/driver/export";
 const RIDER_TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const RIDER_EXPORT_NAME = "spx_driver";
@@ -240,7 +240,63 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
+async function fetchSpxFromLoggedInTab(url, init = {}) {
+  const tabs = await chrome.tabs.query({ url: SPX_ORIGIN + "/*" });
+  const tab = tabs
+    .filter(item => Number.isInteger(item?.id))
+    .sort((a, b) => Number(b.lastAccessed || 0) - Number(a.lastAccessed || 0))[0];
+  if (!tab?.id) {
+    throw new Error("No SPX tab is open in Firefox. Open the SPX FMS Portal, sign in, and retry.");
+  }
+
+  const requestInit = {
+    method: String(init.method || "GET"),
+    headers: {
+      "Accept": "application/json, text/plain, */*",
+      ...(init.headers || {})
+    },
+    ...(init.body !== undefined ? { body: init.body } : {})
+  };
+
+  const injected = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    world: "MAIN",
+    args: [String(url), requestInit],
+    func: async (requestUrl, options) => {
+      const response = await window.fetch(requestUrl, {
+        ...options,
+        credentials: "include",
+        cache: "no-store",
+        redirect: "follow"
+      });
+      return {
+        status: response.status,
+        ok: response.ok,
+        contentType: response.headers.get("content-type") || "",
+        contentDisposition: response.headers.get("content-disposition") || "",
+        text: await response.text()
+      };
+    }
+  });
+
+  const response = injected?.[0]?.result;
+  if (!response || typeof response.text !== "string") {
+    throw new Error("Firefox did not return the SPX page request result. Reload the SPX tab and retry.");
+  }
+  return response;
+}
+
 async function extensionFetchText(url, init = {}) {
+  let isSpxOrigin = false;
+  try { isSpxOrigin = new URL(url).origin === SPX_ORIGIN; } catch {}
+  if (isSpxOrigin) {
+    return await withTimeout(
+      fetchSpxFromLoggedInTab(url, init),
+      FETCH_TIMEOUT_MS,
+      "SPX page request"
+    );
+  }
+
   return await withTimeout(
     fetch(url, {
       credentials: "include",
