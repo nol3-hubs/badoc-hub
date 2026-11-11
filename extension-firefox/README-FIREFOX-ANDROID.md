@@ -13,11 +13,15 @@ This separate Firefox-targeted build is based on the current source in the repos
 - Firefox Manifest V2 event-page configuration
 - Firefox Add-ons settings route (`about:addons`)
 
-## Build
-The GitHub Actions workflow **Package Firefox SPX Bridge** creates an `.xpi` artifact whenever files under `extension-firefox/` change, or when run manually.
+## Download
+After the GitHub Actions package job completes, the unsigned update package is published at:
+
+`downloads/SPX-BRIDGE-BADOC-HUB-69.2.2.xpi`
+
+[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-69.2.2.xpi)
 
 ## Submit as an update to the existing Mozilla listing
-1. Download the `.xpi` artifact produced by the workflow.
+1. Download the `.xpi` package above.
 2. Sign in to the Mozilla Add-on Developer Hub.
 3. Open the existing listing **SPX BRIDGE for BADOC HUB** (Add-on ID 3093259).
 4. Choose **Upload a New Version** and upload the generated `.xpi`.
@@ -31,4 +35,4 @@ Do not create a new add-on listing. Upload through the existing listing so Mozil
 - Uses Firefox's Add-ons manager instead of Chrome's extension-management page.
 - Uses Firefox's `scripting.executeScript()` MAIN world support (Firefox 128+).
 
-**Testing status:** The source package is prepared and statically checked by the workflow. It has not yet been tested against a live SPX session or approved/signed by Mozilla. Test with a logged-in SPX account after Mozilla signs the submitted package.
+**Testing status:** The source package passed the repository's static packaging checks. It has not yet been tested against a live SPX session or approved/signed by Mozilla. Test with a logged-in SPX account after Mozilla signs the submitted package.
