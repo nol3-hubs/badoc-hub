@@ -25,7 +25,7 @@ jobs:
           root = Path("extension-firefox")
           manifest = json.loads((root / "manifest.json").read_text())
           assert manifest["manifest_version"] == 2
-          assert manifest["version"] == "69.2.2"
+          assert manifest["version"] == "69.2.3"
           assert manifest["browser_specific_settings"]["gecko"]["id"] == "spx-bridge-badoc-hub@nol3-hubs.github.io"
           for name in manifest["background"]["scripts"]:
               assert (root / name).is_file(), name
@@ -47,28 +47,28 @@ jobs:
         shell: bash
         run: |
           cd extension-firefox
-          zip -X -qr "$GITHUB_WORKSPACE/SPX-BRIDGE-BADOC-HUB-69.2.2.xpi" .
+          zip -X -qr "$GITHUB_WORKSPACE/SPX-BRIDGE-BADOC-HUB-69.2.3.xpi" .
           cd "$GITHUB_WORKSPACE"
-          sha256sum SPX-BRIDGE-BADOC-HUB-69.2.2.xpi > SPX-BRIDGE-BADOC-HUB-69.2.2.sha256
+          sha256sum SPX-BRIDGE-BADOC-HUB-69.2.3.xpi > SPX-BRIDGE-BADOC-HUB-69.2.3.sha256
       - name: Publish unsigned XPI in repository
         shell: bash
         run: |
           mkdir -p downloads
-          cp SPX-BRIDGE-BADOC-HUB-69.2.2.xpi downloads/
-          cp SPX-BRIDGE-BADOC-HUB-69.2.2.sha256 downloads/
+          cp SPX-BRIDGE-BADOC-HUB-69.2.3.xpi downloads/
+          cp SPX-BRIDGE-BADOC-HUB-69.2.3.sha256 downloads/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads/SPX-BRIDGE-BADOC-HUB-69.2.2.xpi downloads/SPX-BRIDGE-BADOC-HUB-69.2.2.sha256
+          git add downloads/SPX-BRIDGE-BADOC-HUB-69.2.3.xpi downloads/SPX-BRIDGE-BADOC-HUB-69.2.3.sha256
           if ! git diff --cached --quiet; then
-            git commit -m "Publish unsigned Firefox SPX Bridge 69.2.2 package"
+            git commit -m "Publish unsigned Firefox SPX Bridge 69.2.3 package"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
       - name: Upload XPI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SPX-BRIDGE-BADOC-HUB-69.2.2
+          name: SPX-BRIDGE-BADOC-HUB-69.2.3
           path: |
-            SPX-BRIDGE-BADOC-HUB-69.2.2.xpi
-            SPX-BRIDGE-BADOC-HUB-69.2.2.sha256
+            SPX-BRIDGE-BADOC-HUB-69.2.3.xpi
+            SPX-BRIDGE-BADOC-HUB-69.2.3.sha256
           if-no-files-found: error
           retention-days: 30
