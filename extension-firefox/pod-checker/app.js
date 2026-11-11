@@ -84,7 +84,7 @@ function cleanEvidenceField(raw){
  return line.replace(/^\s*[;·,]\s*|\s*[;·,]\s*$/g,"").trim();
 }
 function appendColoredEvidence(container,line){
- const pattern=/(Tier|Quality|Parcel|AWB|Location|Distance|Proof of Recipient|Proof of Contact):\\s*(Yes|No)/g;
+ const pattern=/(Tier|Quality|Parcel|AWB|Location|Distance|Proof of Recipient|Proof of Contact):\s*(Yes|No)/g;
  let last=0,match;
  while((match=pattern.exec(line))){
   container.append(document.createTextNode(line.slice(last,match.index)));
@@ -100,8 +100,8 @@ function appendColoredEvidence(container,line){
 function evidenceElement(r){
  if(isDelivered(r)&&!(r.podFields||[]).length)return document.createTextNode("PENDING");
  const fields=(r.podFields||[]).map(cleanEvidenceField)
-  .map(x=>x.replace(/\\bTier\\s*:\\s*\\d+\\s*[;·]\\s*/i,"").replace(/\\bTier\\s*:\\s*\\d+\\s*/i,""))
-  .map(x=>x.replace(/\\s*[;·]\\s*[;·]\\s*/g," · ").replace(/^\\s*[;·]\\s*|\\s*[;·]\\s*$/g,"").trim()).filter(Boolean);
+  .map(x=>x.replace(/\bTier\s*:\s*\d+\s*[;·]\s*/i,"").replace(/\bTier\s*:\s*\d+\s*/i,""))
+  .map(x=>x.replace(/\s*[;·]\s*[;·]\s*/g," · ").replace(/^\s*[;·]\s*|\s*[;·]\s*$/g,"").trim()).filter(Boolean);
  if(!fields.length)return document.createTextNode(isDelivered(r)?"PENDING":"Not identified");
  const details=document.createElement("details");
  details.className="pod-evidence-dropdown";
@@ -118,7 +118,6 @@ function evidenceElement(r){
  details.append(summary,body);
  return details;
 }
-function evidenceText(r){if(isDelivered(r)&&!(r.podFields||[]).length)return "PENDING";const lines=(r.podFields||[]).map(cleanEvidenceField).filter(Boolean);return lines.length?[...new Set(lines)].join("\\n"):(isDelivered(r)?"PENDING":"Not identified");}
 function evidenceText(r){if(isDelivered(r)&&!(r.podFields||[]).length)return "PENDING";const lines=(r.podFields||[]).map(cleanEvidenceField).filter(Boolean);return lines.length?[...new Set(lines)].join("\n"):(isDelivered(r)?"PENDING":"Not identified");}
 async function loadSaved() {
   const data=await chrome.storage.local.get(["podAppOids","podAppResults"]);
