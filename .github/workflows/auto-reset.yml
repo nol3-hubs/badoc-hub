@@ -1,0 +1,26 @@
+name: Auto save & reset (2 AM Manila)
+
+on:
+  schedule:
+    - cron: '5 18 * * *'    # 02:05 Manila (UTC+8)
+    - cron: '35 18 * * *'   # backup attempt at 02:35 Manila
+  workflow_dispatch:         # lets you run it by hand from the Actions tab (after 2:00 AM Manila)
+
+jobs:
+  auto-reset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install a headless browser
+        run: |
+          npm init -y >/dev/null
+          npm i playwright@1.49.0
+          npx playwright install --with-deps chromium
+      - name: Open the hub and let it save + reset
+        run: node tools/auto-reset.mjs
+        env:
+          APP_URL: ${{ vars.APP_URL }}
