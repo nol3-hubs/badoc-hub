@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v44">
+<meta name="badoc-app-version" content="v45">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -855,7 +855,7 @@ window.DASHBOARD_V2 = {
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v44</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v45</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -1451,7 +1451,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v44</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v45</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -7172,13 +7172,25 @@ window.updateOperationProgress=function(){
   };
   // SOC_LHTransported is part of the CFR1 TOTAL when it is at CAGAYAN DC;
   // it is NOT a scanned status.
-  // A populated Pick Up Time means the parcel has physically been picked up,
-  // even when its current SPX status remains LMHub_Received. The special
-  // SOC_LHTransported-before-4AM Rule B is always unscanned and overrides this.
+  // A Pick Up Time only counts as scanned when its calendar date is TODAY
+  // in Philippine time. Yesterday's (or older) pickup timestamps must remain
+  // unscanned even when the SPX status still says LMHub_Received.
+  // SOC_LHTransported-before-4AM Rule B always remains unscanned.
+  const cfr1PickupIsToday=r=>{
+    const value=cfr1PickUpTime(r);
+    if(!value)return false;
+    const parsed=cfr1ParseTime(value);
+    if(!parsed)return false;
+    const parts=new Intl.DateTimeFormat("en-CA",{
+      timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"
+    }).formatToParts(parsed);
+    const p={};parts.forEach(x=>{if(x.type!=="literal")p[x.type]=x.value;});
+    return p.year+"-"+p.month+"-"+p.day===cfr1DateKey;
+  };
   const cfr1IsScannedStatus=r=>{
     if(r?.ruleBUnscanned===true)return false;
     const statusScanned=["DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD"].includes(cfr1Status(r));
-    return statusScanned || !!cfr1PickUpTime(r);
+    return statusScanned || cfr1PickupIsToday(r);
   };
 
   // CFR1 ledger is memory-only on this device; shared persistence is cloud-only.
@@ -7356,7 +7368,8 @@ window.updateOperationProgress=function(){
         // still reports LMHub_Received. Rule B is explicitly unscanned.
         if(rec.ruleBUnscanned===true){
           rec.scannedTime="";
-        }else if(!String(rec.scannedTime||"").trim() && cfr1PickUpTime(r)){
+        }else if(cfr1PickUpTime(r)){
+          // Refresh a stale prior-day pickup timestamp from the latest upload.
           rec.scannedTime=cfr1PickUpTime(r);
         }
         const latestStation=norm(r?.["Current Station"]||"");
