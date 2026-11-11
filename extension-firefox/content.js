@@ -6,8 +6,17 @@
   const isReceivedChecking = !!(receivedCheckingMarker && String(receivedCheckingMarker.content || '').trim());
   // The main app marker changes with dashboard releases (for example v70-*).
   // Accept the explicit marker regardless of its app build suffix/version.
+  const isBadocGithubPagesApp = (() => {
+    try {
+      const url = new URL(location.href);
+      return url.hostname === "nol3-hubs.github.io" &&
+        /^\/badoc-hub(?:\/|$)/i.test(url.pathname);
+    } catch (_) { return false; }
+  })();
   const isMainBadocApp = !!(mainBadocMarker && String(mainBadocMarker.content || '').trim()) ||
-    !!document.getElementById('badocSpxBridgeInstallModal') || !!document.getElementById('receivedCheckingFrame');
+    !!document.getElementById('badocSpxBridgeInstallModal') ||
+    !!document.getElementById('receivedCheckingFrame') ||
+    isBadocGithubPagesApp;
   if (!isReceivedChecking && !isMainBadocApp) return;
 
   // about:srcdoc frames inherit their parent origin; validate that the source is an allowed BADOC host.
@@ -32,7 +41,7 @@
 
   const PAGE_SOURCE = "BADOC_SPX_BRIDGE";
   const BADOC_SOURCE = "BADOC_PAGE";
-  const VERSION = "69.2.3";
+  const VERSION = "69.2.4";
   let port = null;
   let reconnectTimer = null;
   let shuttingDown = false;
