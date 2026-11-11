@@ -74,7 +74,7 @@ try {
     return String(saved && saved.date || '') || null;
   });
 
-  if (markerDate === today) {
+  if (IS_SCHEDULED && markerDate === today) {
     console.log('Already reset for ' + today + '; leaving data untouched.');
     process.exit(0);
   }
