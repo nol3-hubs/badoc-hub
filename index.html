@@ -997,8 +997,7 @@ window.DASHBOARD_V2 = {
             <h3>Exemption</h3>
             <small></small>
           </div>
-          <span class="badge" id="exceptionCount">0</span>
-        </div>
+          <span class="badge" id="exceptionCount">0</span>        </div>
         <div class="exception-entry">
           <input id="exceptionTrackingInput" type="text" placeholder="Enter tracking number" autocomplete="off">
           <button class="btn primary" id="addExceptionTracking" type="button">Add</button>
@@ -1997,8 +1996,7 @@ function startExemptionFallbackPoll(){
 function syncExemptionsToReceivedChecking(){
   const frame=$("receivedCheckingFrame");
   try{frame?.contentWindow?.postMessage({type:"badoc-exemptions-sync",items:[...exceptionTrackingNumbers]},"*")}catch(e){}
-}
-window.addEventListener("message",event=>{
+}window.addEventListener("message",event=>{
   const frame=$("receivedCheckingFrame");
   if(!frame||event.source!==frame.contentWindow)return;
   const d=event.data;
@@ -2997,8 +2995,7 @@ function renderParcelUploadStatus(){
   el.classList.toggle("is-open",parcelUploadStatusOpen);
 }
 
-const PARCEL_INCOMING_KEY="badoc_parcel_incoming_linehaul_v1";
-function parcelIncomingEnabled(){
+const PARCEL_INCOMING_KEY="badoc_parcel_incoming_linehaul_v1";function parcelIncomingEnabled(){
  try{return localStorage.getItem(PARCEL_INCOMING_KEY)==="1"}catch(e){return false}
 }
 function getParcelIncomingLinehaul(){
@@ -3997,8 +3994,7 @@ async function loadLiveKPI(){
     ["COST METRICS",["Fleet Productivity (Points)","Backroom Productivity","New Rider Utilization %","4WH MTD Headcount","4WH Bulky %"]],
     ["LEAD TIME METRICS",["Clear Floor Rate (FM + LM (ex. Sunday) + RTS + NSS)","Clear Floor Rate (CFR1 - Early Dispatch)","Clear Floor Rate (LM - Sunday)","Success Rate (LM + RTS + NSS)","Loss Rate"]],
     ["BUYER & SELLER EXPERIENCE METRICS",["FM No Successful Pickup","FM Partial Pickup","LM POD Tier Performance","LM Onhold Validation"]],
-    ["HUB COMPLIANCE & FRAUD METRICS",["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points","Hub BSC Additional Points"]]
-  ];
+    ["HUB COMPLIANCE & FRAUD METRICS",["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points","Hub BSC Additional Points"]]  ];
 
   const aliases={
     "Fleet Productivity (Points)":["Fleet Productivity (Points)","Fleet Productivity"],
@@ -4997,8 +4993,7 @@ async function importLinehaulCsvText(text,fileName="Uploaded TO List.csv",source
   const imported=parseLinehaulCSV(text);
   if(!imported.length)throw Error("No Line Haul Task ID / SPX TN values were found.");
   const exportedRows=imported.flatMap(t=>t.exportRows||[]);
-  const exportedRowCount=exportedRows.length;
-  const exportedUniqueSPX=new Set(exportedRows.map(r=>normJoin(r?.spxTN)).filter(Boolean)).size;
+  const exportedRowCount=exportedRows.length;  const exportedUniqueSPX=new Set(exportedRows.map(r=>normJoin(r?.spxTN)).filter(Boolean)).size;
   localStorage.setItem(LH_EXPORT_TOTAL_KEY,String(exportedRowCount));
   localStorage.setItem(LH_EXPORT_UNIQUE_KEY,String(exportedUniqueSPX));
 
@@ -5997,8 +5992,7 @@ window.DASHBOARD_V2_READY = true;
     if(typeof render==="function")render();
   }
   async function clearLocalLinehaul(){
-    if(typeof linehaulTasks!=="undefined")linehaulTasks=[];
-    if(typeof saveLinehaul==="function")saveLinehaul();
+    if(typeof linehaulTasks!=="undefined")linehaulTasks=[];    if(typeof saveLinehaul==="function")saveLinehaul();
     [
       typeof LH_KEY!=="undefined"?LH_KEY:"badoc_linehaul_tasks_town_v1",
       typeof LH_PACKED_KEY!=="undefined"?LH_PACKED_KEY:"badoc_linehaul_packed_rows_v1",
@@ -6997,8 +6991,7 @@ window.updateOperationProgress=function(){
 
   const setText=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=Number(v||0).toLocaleString()};
   const pct=(n,d)=>d?Math.min(100,Math.max(0,n/d*100)):0;
-  const setProgress=(name,n)=>{
-    setText("op"+name,n);
+  const setProgress=(name,n)=>{    setText("op"+name,n);
   };
   // Master checkbox adds Linehaul Task ID volume to the normal Today's Volume.
   const tvMaster=document.getElementById("todayVolumeAddHubStatuses");
@@ -7997,8 +7990,7 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
       if(c.num)cls.push("num");
       if(c.hold)cls.push("hold");
       if(c.rate){
-        cls.push("rate");
-        const p=percentage(value);
+        cls.push("rate");        const p=percentage(value);
         if(p!=null){
           if(p>=95)cls.push("good");
           else if(p>=90)cls.push("warn");
@@ -8934,7 +8926,11 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         fn(value);
       };
       const onMessage=event=>{
-        if(event.source!==frame.contentWindow)return;
+        // Apps Script HtmlService runs its response inside a Google sandbox
+        // frame. Its postMessage event.source can therefore be a nested frame,
+        // not the outer iframe we created in this page. Do not reject a valid
+        // response solely because event.source !== frame.contentWindow.
+        // The private per-request nonce and message marker identify this reply.
         const message=event.data||{};
         if(message.source!=="BADOC_CFR1_APPS_SCRIPT"||String(message.requestId||"")!==requestId)return;
         const result=message.result||{};
@@ -8993,8 +8989,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         frame.id="cfr1ExportFrame";
         frame.name="cfr1ExportFrame";
         frame.style.display="none";
-        document.body.appendChild(frame);
-      }
+        document.body.appendChild(frame);      }
       const requestId="badoc-cfr1-"+Date.now()+"-"+Math.random().toString(36).slice(2,10);
       const confirmation=waitForCfr1ExportConfirmation(frame,requestId);
       const form=document.createElement("form");
@@ -9993,8 +9988,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       if(!key||redeliverySeen.has(key))return;
       const status=cfrSummaryStatus(row);
       if(status!=="LMHUB RECEIVED")return;
-      const onHoldTime=row?.["OnHold Time"]??row?.["On Hold Time"]??row?.["Onhold Time"]??row?.["On hold time"]??"";
-      if(cfrSummaryDateOnly(onHoldTime)!==yesterdayDate)return;
+      const onHoldTime=row?.["OnHold Time"]??row?.["On Hold Time"]??row?.["Onhold Time"]??row?.["On hold time"]??"";      if(cfrSummaryDateOnly(onHoldTime)!==yesterdayDate)return;
       redeliverySeen.add(key);
       redelivery++;
     });
@@ -10993,8 +10987,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       var hour=window.__badocTime.manilaDate().getHours();
       var behind=last&&last<yday&&hour>=3;
       rows.push(["Daily records",row(!last?"idle":(behind?"warn":"ok"),"Daily History",last?("Newest saved day: "+last+(behind?" — yesterday ("+yday+") has not been saved yet":"")):"No days saved yet","")]);
-    }catch(e){rows.push(["Daily records",row("idle","Daily History","Could not read saved days","")])}
-    try{
+    }catch(e){rows.push(["Daily records",row("idle","Daily History","Could not read saved days","")])}    try{
       var rs=JSON.parse(localStorage.getItem("badoc_reset_status")||"null");
       if(rs){var rst=rs.state==="done"||rs.state==="already-done"?"ok":(rs.state==="failed"?"fail":"idle");
         rows.push(["Daily records",row(rst,"2 AM reset (this device)",rs.date+" · "+rs.state+(rs.reason?" — "+rs.reason:""),ago(rs.at))])}
@@ -11442,4 +11435,3 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 })();
 </script>
 <script src="./extension/pod-checker/app.js"></script>
-
