@@ -7,7 +7,8 @@ const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
 const STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
-const VERSION = "69.2.5";
+const VERSION = "69.2.6";
+const BRIDGE_PROTOCOL_VERSION = "1";
 const RIDER_EXPORT_PATH = "/api/driverservice/admin/driver/export";
 const RIDER_TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const RIDER_EXPORT_NAME = "spx_driver";
@@ -1946,7 +1947,7 @@ extApi.runtime.onConnect.addListener(port => {
   }
 
   badocPorts.add(port);
-  sendToPort(port, "BADOC_BRIDGE_READY", { version: VERSION });
+  sendToPort(port, "BADOC_BRIDGE_READY", { version: BRIDGE_PROTOCOL_VERSION });
 
   port.onMessage.addListener(message => {
     const type = message?.type;

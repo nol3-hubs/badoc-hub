@@ -1,6 +1,6 @@
 # SPX BRIDGE for BADOC HUB — Firefox Android
 
-**Package version:** 69.2.5  
+**Package version:** 69.2.6  
 **Existing Mozilla add-on ID:** `spx-bridge-badoc-hub@nol3-hubs.github.io`  
 **Minimum Firefox version:** 128.0
 
@@ -16,9 +16,9 @@ This separate Firefox-targeted build is based on the current source in the repos
 ## Download
 After the GitHub Actions package job completes, the unsigned update package is published at:
 
-`downloads/SPX-BRIDGE-BADOC-HUB-69.2.5.xpi`
+`downloads/SPX-BRIDGE-BADOC-HUB-69.2.6.xpi`
 
-[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-69.2.5.xpi)
+[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-69.2.6.xpi)
 
 ## Submit as an update to the existing Mozilla listing
 1. Download the `.xpi` package above.
@@ -35,8 +35,10 @@ Do not create a new add-on listing. Upload through the existing listing so Mozil
 - Uses Firefox's Add-ons manager instead of Chrome's extension-management page.
 - Uses Firefox's `scripting.executeScript()` MAIN world support (Firefox 128+).
 
-**Firefox bridge change in 69.2.5:** Requests to the SPX origin are now executed from the already logged-in SPX tab in Firefox, rather than from the extension background origin. Signed CSV downloads from their download host still use the extension fetch path.
+**Firefox bridge change in 69.2.6:** Requests to the SPX origin are now executed from the already logged-in SPX tab in Firefox, rather than from the extension background origin. Signed CSV downloads from their download host still use the extension fetch path.
 
-The content script now uses Firefox's `browser.*` namespace first, keeps a Chrome API fallback, connects on the exact GitHub Pages host granted by the manifest without relying on dynamically inserted DOM markers, and the background validates the sender URL/origin fields exposed by Firefox.
+The content script uses Firefox's `browser.*` namespace first and reports bridge protocol version `1`, which is the version the dashboard requires. The package version remains `69.2.6`. The content script also uses the exact GitHub Pages host granted by the manifest, and the background validates Firefox sender URL/origin fields.
+
+**Bridge handshake correction in 69.2.6:** The previous Firefox build reported its add-on package version as the bridge protocol version. The dashboard requires protocol version `1`; this build separates the two values and fixes the content-script duplicate-injection guard.
 
 **Testing status:** The source package must pass Mozilla WebExtension lint and still needs a live SPX login test before production use. Mozilla must approve/sign it before Firefox distributes it.
