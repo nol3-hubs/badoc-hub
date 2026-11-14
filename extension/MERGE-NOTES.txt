@@ -1,0 +1,43 @@
+BADOC HUB CHROME EXTENSION — v1.0.9
+First Mile Orders + Tasks integration
+
+SOURCE
+This package uses the user's current uploaded extension-chrome ZIP as the implementation source.
+It retains the current uploaded delivery export implementation and integrates First Mile Orders and Tasks.
+
+CHANGES
+- Added/retained First Mile Orders and First Mile Tasks export jobs.
+- Added the SPX First Mile export API and task discovery/download handling.
+- Added First Mile CSV/XLSX conversion support through xlsx.js.
+- Added content-script bridge forwarding for both First Mile sync commands.
+- Preserved existing Received/Transported, delivery-status, rider, linehaul, secondary parcel, Delivering reconciliation, and POD Checker workflows.
+- Removed recipient-name lookup functionality from background.js and content.js, including its message route and lookup helpers.
+- Kept POD Checker files unchanged.
+- Bumped extension manifest version to 1.0.9.
+
+DELIVERY STATUS SUPPORT
+The uploaded extension's delivery export supports tracking status IDs 2, 4, and 5:
+2 = Delivering
+4 = Delivered
+5 = OnHold
+If no trackingStatus is supplied, the extension exports all three statuses.
+If a status subset is supplied, it validates the SPX export task against that requested subset.
+
+FIRST MILE FLOW
+- Dashboard sends BADOC_START_FIRST_MILE_ORDERS_SYNC or BADOC_START_FIRST_MILE_TASKS_SYNC.
+- Extension starts the authenticated SPX export job.
+- It locates the corresponding SPX task, waits for completion, obtains a signed download URL, downloads the file, converts XLSX to CSV if needed, and returns CSV text to the dashboard.
+- Dashboard remains responsible for importing/storing the CSV data.
+
+VALIDATION
+- Node.js syntax checks passed for background.js, content.js, POD Checker app.js, POD Checker content.js, and POD Checker page_bridge.js.
+- POD Checker files app.html, app.js, content.js, page_bridge.js, and icon128.png match the current test repository blobs byte-for-byte.
+- This is static validation. Live SPX authenticated exports still require browser testing.
+
+INSTALL
+1. Extract this ZIP.
+2. Open chrome://extensions.
+3. Enable Developer mode.
+4. Remove/disable the old Badoc Hub extension version.
+5. Choose Load unpacked and select the extracted extension-chrome folder.
+6. Refresh the BADOC Hub dashboard and reload the SPX tab.

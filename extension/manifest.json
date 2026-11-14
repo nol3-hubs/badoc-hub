@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Badoc Hub Extesion",
-  "version": "1.0.3",
-  "description": "Badoc Hub extension for SPX operations and integrated POD/POOH checking.",
+  "name": "Badoc Hub Extension",
+  "version": "1.1.8",
+  "description": "Badoc Hub extension with verified bridge handshakes, disconnect recovery, delivery-status exports, and integrated First Mile sync.",
   "permissions": [
     "cookies",
     "scripting",
@@ -63,7 +63,7 @@
       "world": "ISOLATED"
     }
   ],
-  "short_name": "Badoc Hub Extesion",
+  "short_name": "Badoc Hub Extension",
   "web_accessible_resources": [
     {
       "resources": [

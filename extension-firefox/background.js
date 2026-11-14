@@ -7,7 +7,7 @@ const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
 const STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
-const VERSION = "69.2.6";
+const VERSION = extApi.runtime.getManifest().version;
 const BRIDGE_PROTOCOL_VERSION = "1";
 const RIDER_EXPORT_PATH = "/api/driverservice/admin/driver/export";
 const RIDER_TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
@@ -93,9 +93,12 @@ const badocPorts = new Set();
 // Other SPX jobs remain mutually exclusive to avoid tab/API collisions.
 const activeJobs = new Map();
 const PARALLEL_JOB_ALLOWLIST = {
-  "parcel-inbound": new Set(["parcel-delivery"]),
-  "parcel-delivery": new Set(["parcel-inbound", "linehaul"]),
-  "linehaul": new Set(["parcel-delivery"])
+  "parcel-inbound": new Set(["parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "parcel-delivery": new Set(["parcel-inbound", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "parcel-secondary": new Set(["parcel-inbound", "parcel-delivery", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "first-mile-orders": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-tasks", "linehaul"]),
+  "first-mile-tasks": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "linehaul"]),
+  "linehaul": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks"])
 };
 
 function sendToPort(port, type, data = {}) {
@@ -1770,6 +1773,10 @@ extApi.runtime.onConnect.addListener(port => {
     if (type === "BADOC_START_PARCEL_SECONDARY_SYNC") {
       const job = reserveActiveJob("parcel-secondary", port);
       if (!job) { failBusy("parcel-secondary"); return; }
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", {
+        kind: "parcel-secondary",
+        message: "Extension background accepted Received / Transported export. Preparing SPX requests…"
+      });
       void runParcelSecondaryJob(job);
       return;
     }
@@ -1839,6 +1846,9 @@ extApi.runtime.onConnect.addListener(port => {
     }
 
     if (type === "BADOC_START_PARCEL_INBOUND_SYNC") {
+      // Acknowledge receipt immediately, before reserving/starting the export job.
+      // The dashboard can now distinguish a port-delivery failure from a job-start failure.
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", { kind: "parcel-inbound", message: "Extension background received the Received sync request. Preparing SPX export…" });
       const job = reserveActiveJob("parcel-inbound", port, {
         hubName: String(message?.hubName || "").trim(),
         hubCode: String(message?.hubCode || "").trim(),

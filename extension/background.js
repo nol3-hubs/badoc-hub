@@ -1,9 +1,10 @@
+importScripts("xlsx.js");
 const SPX_ORIGIN = "https://spx.shopee.ph";
 const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
 const STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
-const VERSION = "1";
+const VERSION = chrome.runtime.getManifest().version;
 const RIDER_EXPORT_PATH = "/api/driverservice/admin/driver/export";
 const RIDER_TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const RIDER_EXPORT_NAME = "spx_driver";
@@ -23,6 +24,9 @@ const PARCEL_SECONDARY_RETURN_STATUS_ID = 10;
 const PARCEL_SECONDARY_TRANSPORT_STATUS_NAME = "SOC_LHTransported";
 const PARCEL_SECONDARY_RETURN_STATUS_NAME = "Return_LMHub_Received";
 const PARCEL_RETURN_EXPORT_PATH = "/api/admin/tracking/am_hub/return/export";
+const FM_PICKUP_ORDER_PATH = "/api/admin/pickup/fm_hub/pickup_order/export";
+const FM_PICKUP_TASK_PATH = "/api/admin/pickup/fm_hub/pickup_task/export";
+const FM_ORDER_LOOKBACK_DAYS = 14;
 const PARCEL_STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
 const PARCEL_INBOUND_STATUS_IDS = [1, 882, 35, 34, 36, 15, 928, 918, 33, 9, 7, 8, 630, 49, 50];
 const PARCEL_INBOUND_STATUS_SET = new Set(PARCEL_INBOUND_STATUS_IDS.map(String));
@@ -56,7 +60,7 @@ const PARCEL_FORWARD_EXPORT_LOOKBACK_DAYS = 14;
 // Delivering / Delivered / OnHold population.
 const PARCEL_DELIVERY_STATUS_IDS = [4, 2, 5];
 const PARCEL_DELIVERY_STATUS_NAMES = ["Delivered", "Delivering", "OnHold"];
-const PARCEL_DELIVERY_LOOKBACK_DAYS = 14;
+const PARCEL_DELIVERY_LOOKBACK_DAYS = 30;
 const PARCEL_DELIVERY_STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
 
 // Current native SPX Inbound -> TO List export endpoint captured from
@@ -82,15 +86,20 @@ const LINEHAUL_CAPTURED_HEADERS = {
 };
 
 
+
+
 const badocPorts = new Set();
 // Keep export jobs independent so Sync All can run the two parcel exports in
 // parallel, then start Linehaul while the delivery export is still processing.
 // Other SPX jobs remain mutually exclusive to avoid tab/API collisions.
 const activeJobs = new Map();
 const PARALLEL_JOB_ALLOWLIST = {
-  "parcel-inbound": new Set(["parcel-delivery"]),
-  "parcel-delivery": new Set(["parcel-inbound", "linehaul"]),
-  "linehaul": new Set(["parcel-delivery"])
+  "parcel-inbound": new Set(["parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "parcel-delivery": new Set(["parcel-inbound", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "parcel-secondary": new Set(["parcel-inbound", "parcel-delivery", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "first-mile-orders": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-tasks", "linehaul"]),
+  "first-mile-tasks": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "linehaul"]),
+  "linehaul": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks"])
 };
 
 function sendToPort(port, type, data = {}) {
@@ -224,31 +233,179 @@ async function withTimeout(promise, ms, label) {
 }
 
 async function extensionFetchText(url, init = {}) {
-  return await withTimeout(
-    fetch(url, {
-      credentials: "include",
-      cache: "no-store",
-      redirect: "follow",
-      ...init,
-      headers: {
-        "Accept": "application/json, text/plain, */*",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        ...(init.headers || {})
-      }
-    }),
-    FETCH_TIMEOUT_MS,
-    "SPX request"
-  ).then(async response => {
-    const text = await response.text();
-    return {
-      status: response.status,
-      ok: response.ok,
-      contentType: response.headers.get("content-type") || "",
-      contentDisposition: response.headers.get("content-disposition") || "",
-      text
-    };
+  const controller = new AbortController();
+  try {
+    return await withTimeout((async () => {
+      const response = await fetch(url, {
+        credentials: "include", cache: "no-store", redirect: "follow",
+        ...init, signal: controller.signal,
+        headers: {
+          "Accept": "application/json, text/plain, */*",
+          "Cache-Control": "no-cache", "Pragma": "no-cache",
+          ...(init.headers || {})
+        }
+      });
+      const text = await response.text();
+      return {
+        status: response.status, ok: response.ok,
+        contentType: response.headers.get("content-type") || "",
+        contentDisposition: response.headers.get("content-disposition") || "",
+        text
+      };
+    })(), FETCH_TIMEOUT_MS, "SPX request");
+  } catch (error) {
+    controller.abort();
+    throw error;
+  }
+}
+
+async function extensionFetchBuffer(url, init = {}) {
+  const controller = new AbortController();
+  try {
+    return await withTimeout((async () => {
+      const response = await fetch(url, {
+        credentials: "include", cache: "no-store", redirect: "follow",
+        ...init, signal: controller.signal,
+        headers: {
+          "Accept": "*/*", "Cache-Control": "no-cache", "Pragma": "no-cache",
+          ...(init.headers || {})
+        }
+      });
+      const buffer = await response.arrayBuffer();
+      return {
+        status: response.status, ok: response.ok,
+        contentType: response.headers.get("content-type") || "",
+        contentDisposition: response.headers.get("content-disposition") || "",
+        buffer
+      };
+    })(), FETCH_TIMEOUT_MS, "SPX file request");
+  } catch (error) {
+    controller.abort();
+    throw error;
+  }
+}
+
+function firstMileRowsToCsv(rows) {
+  const cell = value => {
+    const text = String(value ?? "");
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return rows.map(row => row.map(cell).join(",")).join("\n");
+}
+
+function firstMileCsvFileName(sourceName, fallbackName) {
+  const raw = String(sourceName || fallbackName || "first_mile_export.csv").split(/[\\/]/).pop().trim();
+  const stem = raw.replace(/\.(?:xlsx?|csv|txt)$/i, "").replace(/[^a-z0-9._-]+/gi, "_").replace(/^\.+|\.+$/g, "") || "first_mile_export";
+  return `${stem}.csv`;
+}
+
+async function firstMileBufferToCsv(buffer, fallbackName, contentDisposition = "") {
+  const bytes = new Uint8Array(buffer);
+  if (!bytes.length) throw new Error("SPX returned an empty First Mile export file.");
+  let csvText;
+  if (bytes.length > 3 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    const rows = await xlsxToRows(buffer);
+    if (!Array.isArray(rows) || !rows.length || !rows[0]?.some(value => String(value ?? "").trim())) {
+      throw new Error("SPX returned an Excel file, but no worksheet headers could be read.");
+    }
+    csvText = firstMileRowsToCsv(rows);
+  } else {
+    csvText = new TextDecoder("utf-8").decode(bytes);
+  }
+  csvText = String(csvText || "").replace(/^\uFEFF/, "");
+  const trimmed = csvText.trim();
+  if (!trimmed) throw new Error("SPX returned an empty First Mile export file.");
+  if (/^(\{|\[|<!doctype|<html)/i.test(trimmed)) {
+    throw new Error("SPX returned a JSON ticket or HTML page instead of the First Mile export file.");
+  }
+  let sourceName = fallbackName;
+  const match = contentDisposition.match(/filename\*?=(?:UTF-8''|\")?([^;\"\r\n]+)/i);
+  if (match?.[1]) {
+    try { sourceName = decodeURIComponent(match[1].trim()); } catch { sourceName = match[1].trim(); }
+  }
+  // SPX may name the source workbook .xlsx. The extension converts it to CSV,
+  // so the saved copy must always carry a .csv extension.
+  return { text: csvText, fileName: firstMileCsvFileName(sourceName, fallbackName) };
+}
+
+async function downloadFirstMileExportFile(signedUrl, fallbackName) {
+  const response = await extensionFetchBuffer(signedUrl, {
+    headers: { "Accept": "text/csv, text/plain, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, application/octet-stream, */*" }
   });
+  if (!response.ok) throw new Error(`First Mile export download failed (HTTP ${response.status}).`);
+  let disposition = response.contentDisposition || "";
+  if (!disposition) {
+    const signedName = fileNameFromSignedUrl(signedUrl);
+    if (signedName) disposition = `attachment; filename="${signedName.replace(/"/g, "")}"`;
+  }
+  return firstMileBufferToCsv(response.buffer, fallbackName, disposition);
+}
+
+function getFirstMileTaskId(json) {
+  const data = Array.isArray(json?.data) ? (json.data[0] || {}) : (json?.data || {});
+  const candidates = [
+    data?.task_id, data?.taskId, data?.export_task_id, data?.exportTaskId, data?.id,
+    json?.task_id, json?.taskId, json?.export_task_id, json?.exportTaskId
+  ];
+  for (const value of candidates) {
+    const id = Number(value || 0);
+    if (Number.isFinite(id) && id > 0) return id;
+  }
+  return 0;
+}
+
+function getFirstMileFileName(json) {
+  const data = Array.isArray(json?.data) ? (json.data[0] || {}) : (json?.data || {});
+  return String(data?.file_name || data?.filename || data?.fileName || json?.file_name || json?.filename || "").trim();
+}
+
+async function discoverFirstMileTask(startSec, fileName, kind, job) {
+  const wanted = kind === "first-mile-orders" ? /order/ : /task/;
+  const avoid = kind === "first-mile-orders" ? /task/ : /order/;
+  const hint = String(fileName || "").toLowerCase().replace(/\.(?:xlsx?|csv)$/i, "").replace(/^live_/, "");
+  let newestSeen = "";
+  for (let attempt = 0; attempt < 12; attempt++) {
+    if (job.cancelled) throw new Error("Sync cancelled.");
+    let tasks = [];
+    try { tasks = await listTasks(startSec); } catch (error) {
+      newestSeen = `task list: ${error?.message || String(error)}`;
+    }
+    const values = task => Object.values(task || {}).filter(value => typeof value === "string").join(" ").toLowerCase();
+    const eligible = tasks.filter(task => {
+      const id = Number(task?.task_id || 0);
+      if (!(id > 0)) return false;
+      const joined = values(task);
+      if (hint && joined.includes(hint)) return true;
+      return joined.includes("pickup") && wanted.test(joined) && !avoid.test(joined);
+    }).sort((a,b) => Number(b?.task_id || 0) - Number(a?.task_id || 0));
+    if (eligible.length) return eligible[0];
+    newestSeen = tasks.slice(0, 5).map(task => `#${task?.task_id || "?"} ${values(task).slice(0, 90)}`).join(" || ");
+    progress(`${kind === "first-mile-orders" ? "First Mile Orders" : "First Mile Tasks"}: locating the SPX export task…`, {
+      phase: "first-mile-discover-task", kind, attempt: attempt + 1
+    });
+    await sleep(2500);
+  }
+  job.firstMileTaskListPreview = newestSeen;
+  return null;
+}
+
+async function getFirstMileSignedDownloadUrl(taskId) {
+  let lastError = "";
+  for (const source of ["fms", "fm", ""]) {
+    const query = `${source ? `source=${source}&` : ""}task_id=${encodeURIComponent(taskId)}`;
+    try {
+      const response = await extensionFetchText(`${SPX_ORIGIN}${SIGNED_URL_PATH}?${query}`);
+      const json = parseJsonResponse("SPX First Mile signed download URL", response);
+      if (Number(json?.retcode) !== 0) {
+        lastError = json?.message || "SPX did not return a signed download URL.";
+        continue;
+      }
+      const url = String(json?.data?.download_url || json?.data?.url || json?.download_url || "").trim();
+      if (url) return url;
+      lastError = "SPX returned no signed download URL.";
+    } catch (error) { lastError = error?.message || String(error); }
+  }
+  throw new Error(lastError || "SPX did not return a First Mile download URL.");
 }
 
 function parseJsonResponse(label, response) {
@@ -588,10 +745,9 @@ function isParcelDeliveryTask(task, job) {
   const condition = parseTaskCondition(task);
   const trackingStatus = String(condition?.tracking_status || "");
   if (!trackingStatus) return false;
-  return setsEqual(
-    trackingStatus.split(",").map(x => x.trim()).filter(Boolean),
-    PARCEL_DELIVERY_STATUS_IDS
-  );
+  const requested = String(job?.trackingStatus || "").split(",").map(x => x.trim()).filter(x => ["2","4","5"].includes(x));
+  const expected = requested.length ? [...new Set(requested)] : PARCEL_DELIVERY_STATUS_IDS;
+  return setsEqual(trackingStatus.split(",").map(x => x.trim()).filter(Boolean), expected);
 }
 
 function isParcelInboundTask(task, job) {
@@ -729,59 +885,39 @@ function parcelDeliveryDateRange() {
 
 async function submitParcelDeliveryExport(job) {
   const range = parcelDeliveryDateRange();
+  const requestedIds = String(job?.trackingStatus || "").split(",").map(x => x.trim()).filter(x => ["2","4","5"].includes(x));
+  const statusIds = requestedIds.length ? [...new Set(requestedIds)] : PARCEL_DELIVERY_STATUS_IDS;
+  const nameById = { "2":"Delivering", "4":"Delivered", "5":"OnHold" };
+  const statusNames = statusIds.map(id => nameById[id]);
   const body = {
-    tracking_status: PARCEL_DELIVERY_STATUS_IDS.join(","),
+    tracking_status: statusIds.join(","),
     bulky_type: "1,0,2",
-    ctime: `${range.createdStartSec},${range.createdEndSec}`,
+    ctime: `${range.createdStartSec},${range.assignedEndSec}`,
     pick_up_time: `${range.assignedStartSec},${range.assignedEndSec}`,
     format_condition:
-      `Status Log= ${PARCEL_DELIVERY_STATUS_NAMES.join(",")}; ` +
+      `Status Log= ${statusNames.join(",")}; ` +
       `Bulky Type= Bulky,N/A,Non-Bulky; ` +
-      `Created Date= ${range.createdStartDate} 00:00:00,${range.todayDate} 00:00:00; ` +
+      `Created Date= ${range.createdStartDate} 00:00:00,${range.todayDate} 23:59:59; ` +
       `Assigned Time= ${range.todayDate} 00:00:00,${range.todayDate} 23:59:59; ` +
       `Driver= All`
   };
-
-  progress(
-    `Submitting direct SPX Delivering / Delivered / On-Hold export for ${range.todayDate}…`,
-    { phase: "parcel-delivery-api-export", dateStart: range.todayDate, dateEnd: range.todayDate }
-  );
-
-  const response = await extensionFetchText(
-    `${SPX_ORIGIN}${PARCEL_FORWARD_EXPORT_PATH}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/plain, */*"
-      },
-      body: JSON.stringify(body)
-    }
-  );
-
-  const json = parseJsonResponse("SPX Delivering / Delivered / On-Hold export", response);
-  if (!response.ok || Number(json?.retcode) !== 0) {
-    throw new Error(
-      json?.message ||
-      `SPX Delivering / Delivered / On-Hold export failed (HTTP ${response.status}).`
-    );
-  }
-
-  const taskId = Number(json?.data?.task_id || json?.task_id || 0);
-  if (!taskId) {
-    throw new Error("SPX accepted the delivery export request but returned no task ID.");
-  }
-
-  progress(`SPX delivery export task ${taskId} created directly.`, {
-    phase: "parcel-delivery-task",
-    taskId,
-    dateStart: range.todayDate,
-    dateEnd: range.todayDate
+  progress(`Submitting SPX ${statusNames.join(" / ")}-only export for ${range.todayDate}…`, {
+    phase: "parcel-delivery-api-export", kind: "parcel-delivery", trackingStatus: statusIds.join(","), statusName: statusNames.join(" / "), dateStart: range.todayDate, dateEnd: range.todayDate
   });
-
-  return { taskId, range, requestBody: body, apiResult: json };
+  const response = await extensionFetchText(`${SPX_ORIGIN}${PARCEL_FORWARD_EXPORT_PATH}`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json","Accept":"application/json, text/plain, */*"},
+    body: JSON.stringify(body)
+  });
+  const json = parseJsonResponse(`SPX ${statusNames.join(" / ")} export`, response);
+  if (!response.ok || Number(json?.retcode) !== 0) throw new Error(json?.message || `SPX ${statusNames.join(" / ")} export failed (HTTP ${response.status}).`);
+  const taskId = Number(json?.data?.task_id || json?.task_id || 0);
+  if (!taskId) throw new Error("SPX accepted the delivery export request but returned no task ID.");
+  progress(`SPX ${statusNames.join(" / ")} export task ${taskId} created.`, {
+    phase:"parcel-delivery-task",kind:"parcel-delivery",trackingStatus:statusIds.join(","),statusName:statusNames.join(" / "),taskId,dateStart:range.todayDate,dateEnd:range.todayDate
+  });
+  return {taskId,range,requestBody:body,apiResult:json,statusIds,statusNames};
 }
-
 
 function taskMatchesRiderExport(task) {
   return String(task?.export_name || "") === RIDER_EXPORT_NAME &&
@@ -1284,7 +1420,7 @@ async function runParcelDeliveryJob(job) {
     const completed = await waitForCompletion(taskId, waitStartSec, job);
 
     if (!isParcelDeliveryTask(completed, job)) {
-      throw new Error("The completed SPX task does not match the expected Delivering / Delivered / On-Hold export.");
+      throw new Error("The completed SPX task does not match the requested delivery-status export.");
     }
 
     progress(
@@ -1309,7 +1445,9 @@ async function runParcelDeliveryJob(job) {
 
     sendToBadoc("BADOC_SPX_PARCEL_DELIVERY_CSV", {
       taskId,
-      fileName: csv.fileName || "export_forward_order_delivery.csv",
+      trackingStatus: submitted.statusIds.join(","),
+      statusName: submitted.statusNames.join(" / "),
+      fileName: csv.fileName || `export_forward_order_${submitted.statusNames.join("_").toLowerCase()}.csv`,
       csvText: csv.text
     });
   } catch (error) {
@@ -1367,6 +1505,137 @@ async function downloadSecondaryExport(submitted, job) {
     fileName: csv.fileName || `export_${submitted.label.toLowerCase().replace(/\s+/g, "_")}.csv`, csvText: csv.text
   });
   return Math.max(0, csv.text.split(/\r?\n/).filter(Boolean).length - 1);
+}
+
+function phDateString(date = new Date()) {
+  return new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function shiftIsoDate(date, days) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmQuery(params) {
+  return Object.entries(params)
+    .map(([key, value]) => `${key}=${encodeURIComponent(value).replace(/%20/g, "+").replace(/%2C/gi, ",")}`)
+    .join("&");
+}
+
+function buildFirstMileExportUrl(kind, selectedDate) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(selectedDate || "")) ? selectedDate : phDateString();
+  const startSec = Math.floor(Date.parse(`${date}T00:00:00Z`) / 1000) - 8 * 3600;
+  const endSec = startSec + 86400 - 1;
+  if (kind === "first-mile-orders") {
+    const fromDate = shiftIsoDate(date, -FM_ORDER_LOOKBACK_DAYS);
+    const fromSec = startSec - FM_ORDER_LOOKBACK_DAYS * 86400;
+    const params = {
+      ctime: `${fromSec},${endSec}`,
+      status: "2,0,4,13",
+      bulky_type: "1,0,2",
+      format_condition: `Status= Assigned,Created,Picked up,Pickup Retry; Bulky Type= Bulky,N/A,Non-Bulky; Created Time= ${fromDate} 00:00:00,${date} 23:59:59`
+    };
+    return `${SPX_ORIGIN}${FM_PICKUP_ORDER_PATH}?${fmQuery(params)}`;
+  }
+  const params = { status: "8,2,7", format_condition: "Status= Arrived,Accepted,Pickup Done" };
+  return `${SPX_ORIGIN}${FM_PICKUP_TASK_PATH}?${fmQuery(params)}`;
+}
+
+async function runFirstMileExportJob(job) {
+  const kind = job.kind;
+  const label = kind === "first-mile-orders" ? "First Mile Orders" : "First Mile Tasks";
+  const fallbackName = kind === "first-mile-orders" ? "first_mile_orders.csv" : "first_mile_tasks.csv";
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(job.selectedDate || "")) ? job.selectedDate : phDateString();
+  try {
+    job.startedAt = Date.now();
+    progress(`Submitting SPX ${label} export…`, { phase: "first-mile-export", kind });
+    const url = buildFirstMileExportUrl(kind, date);
+    // Read the response as bytes first. SPX may return JSON, CSV, or a real XLSX
+    // workbook from this endpoint; response.text() corrupts binary XLSX payloads.
+    const response = await extensionFetchBuffer(url, { headers: { Accept: "application/json, text/plain, */*" } });
+    if (!response.ok) throw new Error(`SPX ${label} export failed (HTTP ${response.status}).`);
+
+    const responseBytes = new Uint8Array(response.buffer);
+    const responseText = new TextDecoder("utf-8").decode(response.buffer).replace(/^\uFEFF/, "");
+    const responsePreview = responseText.trim();
+    const isXlsxResponse = responseBytes.length > 3 && responseBytes[0] === 0x50 && responseBytes[1] === 0x4b;
+    const isJsonResponse = /^\s*[\[{]/.test(responsePreview);
+    const isHtmlResponse = /^<!doctype|^<html/i.test(responsePreview) || /html/i.test(response.contentType);
+    const isFileResponse = isXlsxResponse || (!isJsonResponse && !isHtmlResponse && (/csv|text|spreadsheet|excel|octet-stream/i.test(response.contentType) || responsePreview.split(/\r?\n/, 1)[0].includes(",")));
+    if (isFileResponse) {
+      const directFile = await firstMileBufferToCsv(response.buffer, fallbackName, response.contentDisposition);
+      return finishFirstMileExport(job, kind, date, 0, directFile, label);
+    }
+    if (isHtmlResponse) throw new Error(`${label}: SPX returned the web app HTML instead of an export response.`);
+
+    const json = parseJsonResponse(`SPX ${label} export`, { ...response, text: responseText });
+    if (Number(json?.retcode) !== 0) throw new Error(json?.message || `SPX ${label} export failed.`);
+
+    let taskId = getFirstMileTaskId(json);
+    const fileName = getFirstMileFileName(json);
+    let directCsv = null;
+
+    if (!taskId) {
+      // Pickup exports can respond with retcode=0 and task_id=0 plus a filename.
+      // SPX's file-mode response (Accept: */*) may then return the CSV/XLSX itself.
+      progress(`${label}: SPX accepted the request without a task ID; checking the direct export response…`, {
+        phase: "first-mile-file-mode", kind
+      });
+      try {
+        const fileResponse = await extensionFetchBuffer(url, { headers: { Accept: "*/*" } });
+        if (!fileResponse.ok) throw new Error(`HTTP ${fileResponse.status}`);
+        const head = new TextDecoder("utf-8").decode(new Uint8Array(fileResponse.buffer).slice(0, 300)).replace(/^\uFEFF/, "").trim();
+        const isJson = /^\s*[\[{]/.test(head) || /json/i.test(fileResponse.contentType);
+        const isHtml = /^<!doctype|^<html/i.test(head) || /html/i.test(fileResponse.contentType);
+        const isXlsx = new Uint8Array(fileResponse.buffer).slice(0, 2).every((v, i) => v === [0x50, 0x4b][i]);
+        if (!isJson && !isHtml && (isXlsx || /csv|text|spreadsheet|excel|octet-stream/i.test(fileResponse.contentType) || head.includes(","))) {
+          directCsv = await firstMileBufferToCsv(fileResponse.buffer, fileName || fallbackName, fileResponse.contentDisposition);
+        }
+      } catch (error) {
+        job.firstMileFileModeError = error?.message || String(error);
+      }
+    }
+
+    if (!taskId && !directCsv) {
+      const waitStartSec = Math.max(0, Math.floor((job.startedAt - 30 * 1000) / 1000));
+      const task = await discoverFirstMileTask(waitStartSec, fileName, kind, job);
+      taskId = Number(task?.task_id || 0);
+      if (!taskId) {
+        const preview = JSON.stringify(json).replace(/\s+/g, " ").slice(0, 220);
+        const details = [fileName ? `SPX file: ${fileName}` : "", job.firstMileTaskListPreview ? `Recent export tasks: ${job.firstMileTaskListPreview}` : "", job.firstMileFileModeError ? `File mode: ${job.firstMileFileModeError}` : ""].filter(Boolean).join(" | ");
+        throw new Error(`${label}: SPX accepted the export but did not return a task ID or a direct file. SPX response: ${preview}${details ? ` | ${details}` : ""}`);
+      }
+    }
+
+    if (directCsv) return finishFirstMileExport(job, kind, date, 0, directCsv, label);
+
+    progress(`${label}: export task ${taskId} found. Waiting for completion…`, { phase: "first-mile-task", kind, taskId });
+    const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
+    await waitForCompletion(taskId, waitStartSec, job);
+    progress(`${label}: export complete. Retrieving download URL…`, { phase: "first-mile-download-url", kind, taskId });
+    const signedUrl = await getFirstMileSignedDownloadUrl(taskId);
+    const csv = await downloadFirstMileExportFile(signedUrl, fallbackName);
+    return finishFirstMileExport(job, kind, date, taskId, csv, label);
+  } catch (error) {
+    console.error(`BADOC ${label} sync failed:`, error);
+    sendToBadoc("BADOC_SPX_ERROR", { message: error?.message || String(error), kind });
+  } finally {
+    releaseActiveJob(job);
+  }
+}
+
+function finishFirstMileExport(job, kind, date, taskId, csv, label) {
+  const rows = Math.max(0, String(csv?.text || "").split(/\r?\n/).filter(Boolean).length - 1);
+  progress(`${label}: downloaded ${rows.toLocaleString()} rows. Returning CSV to BADOC HUB…`, { phase: "first-mile-import", kind, taskId, rowCount: rows });
+  sendToBadoc(kind === "first-mile-orders" ? "BADOC_SPX_FIRST_MILE_ORDERS_CSV" : "BADOC_SPX_FIRST_MILE_TASKS_CSV", {
+    taskId: taskId || "direct",
+    selectedDate: date,
+    fileName: csv.fileName || (kind === "first-mile-orders" ? "first_mile_orders.csv" : "first_mile_tasks.csv"),
+    csvText: csv.text,
+    rowCount: rows
+  });
+  progress(`${label}: ${rows.toLocaleString()} rows ready for import.`, { phase: "first-mile-done", kind, taskId: taskId || 0, rowCount: rows });
 }
 
 async function runParcelSecondaryJob(job) {
@@ -1701,9 +1970,22 @@ chrome.runtime.onConnect.addListener(port => {
     const failBusy = (kind, text = "A BADOC SPX sync is already running.") =>
       sendToPort(port, "BADOC_SPX_ERROR", { message: text, ...(kind ? { kind } : {}) });
 
+    if (type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || type === "BADOC_START_FIRST_MILE_TASKS_SYNC") {
+      const kind = type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" ? "first-mile-orders" : "first-mile-tasks";
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", { kind, message: `Extension background accepted ${kind === "first-mile-orders" ? "First Mile Orders" : "First Mile Tasks"} export. Preparing SPX request…` });
+      const job = reserveActiveJob(kind, port, { selectedDate: String(message?.selectedDate || "").trim() });
+      if (!job) { failBusy(kind); return; }
+      void runFirstMileExportJob(job);
+      return;
+    }
+
     if (type === "BADOC_START_PARCEL_SECONDARY_SYNC") {
       const job = reserveActiveJob("parcel-secondary", port);
       if (!job) { failBusy("parcel-secondary"); return; }
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", {
+        kind: "parcel-secondary",
+        message: "Extension background accepted Received / Transported export. Preparing SPX requests…"
+      });
       void runParcelSecondaryJob(job);
       return;
     }
@@ -1773,6 +2055,9 @@ chrome.runtime.onConnect.addListener(port => {
     }
 
     if (type === "BADOC_START_PARCEL_INBOUND_SYNC") {
+      // Acknowledge receipt immediately, before reserving/starting the export job.
+      // The dashboard can now distinguish a port-delivery failure from a job-start failure.
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", { kind: "parcel-inbound", message: "Extension background received the Received sync request. Preparing SPX export…" });
       const job = reserveActiveJob("parcel-inbound", port, {
         hubName: String(message?.hubName || "").trim(),
         hubCode: String(message?.hubCode || "").trim(),
