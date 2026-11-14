@@ -4331,7 +4331,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     async function tryRestoreSound(){
       try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC){setSoundState(false,"Web Audio is unavailable");return false;}
         audioCtx=audioCtx||new AC();if(audioCtx.state==="suspended")await audioCtx.resume();
-        const ready=audioCtx.state==="running";setSoundState(ready,ready?"":"autoplay permission is required");return ready;
+        const ready=audioCtx.state==="running";if(ready){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}}setSoundState(ready,ready?"":"autoplay permission is required");return ready;
       }catch(e){setSoundState(false,e.message||"autoplay permission is required");return false;}
     }
     const orderKey=g=>[String(g.pickupPointId||""),...(g.orders||[]).map(o=>String(fmValue(o,["Order ID","Order No","Order Number","Pickup Order ID","order_id","order_sn","order_number"])||"")).filter(Boolean).sort()].join("|");
@@ -4380,9 +4380,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     document.getElementById("enableFirstMileAlarm")?.addEventListener("click",unlockAlarmSound);
     // Restore the saved sound preference on every dashboard load. Chrome may
     // still require a fresh gesture; show the enable button only in that case.
-    let soundWasEnabled=false;try{soundWasEnabled=localStorage.getItem(SOUND_PREF_KEY)==="1";}catch(e){}
-    if(soundWasEnabled){tryRestoreSound();}
-    else setSoundState(false,"sound has not been enabled in this browser yet");
+    tryRestoreSound();
     // Any ordinary user gesture can satisfy Chrome's autoplay policy; no
     // dedicated setup click is needed if this succeeds.
     window.addEventListener("pointerdown",()=>{
