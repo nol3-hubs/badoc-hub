@@ -1317,7 +1317,7 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
           <div id="firstMileAutoAlertControls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
             <button class="btn" id="enableFirstMileAlarm" type="button" hidden>Enable alarm sound</button>
             <button class="btn" id="ackFirstMileAlarm" type="button" hidden>Acknowledge Alarm</button>
-            <span id="firstMileAutoAlertStatus" class="hint" aria-live="polite">Restoring unassigned alarm and sound…</span>
+            <span id="firstMileAutoAlertStatus" class="hint" aria-live="polite">Checking unassigned alarm and sound…</span>
           </div>
         </div>
         <div id="firstMileCombinedTable" class="first-mile-combined-table"><div class="first-mile-combined-empty">Combined pickup information will appear here after both exports are saved.</div></div>
@@ -4329,9 +4329,29 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       const el=statusEl();if(el)el.textContent=ready?"Unassigned alarm armed · sound ready · browser notifications "+(("Notification" in window&&Notification.permission==="granted")?"enabled":"use browser permission")+".":("Unassigned alarm is armed, but Chrome blocked alarm sound"+(reason?": "+reason:".")+" Click Enable alarm sound once to restore audio.");
     }
     async function tryRestoreSound(){
-      try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC){setSoundState(false,"Web Audio is unavailable");return false;}
-        audioCtx=audioCtx||new AC();if(audioCtx.state==="suspended")await audioCtx.resume();
-        const ready=audioCtx.state==="running";if(ready){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}}setSoundState(ready,ready?"":"autoplay permission is required");return ready;
+      try{
+        const AC=window.AudioContext||window.webkitAudioContext;
+        if(!AC){setSoundState(false,"Web Audio is unavailable");return false;}
+        audioCtx=audioCtx||new AC();
+        // Do not wait for resume() during page load: Chrome can leave that
+        // promise pending until a user gesture, which previously left the UI
+        // stuck on "Restoring..." forever.
+        if(audioCtx.state==="suspended"){
+          try{const resumeResult=audioCtx.resume();if(resumeResult&&typeof resumeResult.catch==="function")resumeResult.catch(()=>setSoundState(false,"autoplay permission is required"));}catch(e){}
+        }
+        const ready=audioCtx.state==="running";
+        if(ready){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}}
+        setSoundState(ready,ready?"":"autoplay permission is required");
+        if(!audioCtx.__badocStateHandler){
+          audioCtx.__badocStateHandler=true;
+          audioCtx.addEventListener("statechange",()=>{
+            const active=audioCtx.state==="running";
+            if(active){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}}
+            setSoundState(active,active?"":"autoplay permission is required");
+            if(active&&alarmActive)beep();
+          });
+        }
+        return ready;
       }catch(e){setSoundState(false,e.message||"autoplay permission is required");return false;}
     }
     const orderKey=g=>[String(g.pickupPointId||""),...(g.orders||[]).map(o=>String(fmValue(o,["Order ID","Order No","Order Number","Pickup Order ID","order_id","order_sn","order_number"])||"")).filter(Boolean).sort()].join("|");
@@ -4384,7 +4404,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     // Any ordinary user gesture can satisfy Chrome's autoplay policy; no
     // dedicated setup click is needed if this succeeds.
     window.addEventListener("pointerdown",()=>{
-      if(soundBlocked)tryRestoreSound().then(ok=>{if(ok){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}if(alarmActive)beep();}});
+      if(soundBlocked)tryRestoreSound();
     },{once:true,passive:true});
     document.getElementById("ackFirstMileAlarm")?.addEventListener("click",acknowledge);
     function checkForNewUnassigned(){
