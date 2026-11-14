@@ -1315,7 +1315,7 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
           </div>
           <span id="firstMileCombinedMeta">Sync Orders and Tasks to build the combined pickup list.</span>
           <div id="firstMileAutoAlertControls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-            <button class="btn" id="enableFirstMileAlarm" type="button">Enable Sound & Notifications</button>
+            <button class="btn" id="enableFirstMileAlarm" type="button" hidden>Enable alarm sound</button>
             <button class="btn" id="ackFirstMileAlarm" type="button" hidden>Acknowledge Alarm</button>
             <span id="firstMileAutoAlertStatus" class="hint" aria-live="polite">Automatic First Mile sync: 10:00 AM–4:00 PM · Unassigned alarm armed by default</span>
           </div>
@@ -4321,7 +4321,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const schedule=new Set(["10:00","11:00","12:00","13:00","14:00","15:00","15:30","15:40","15:50","15:57","15:59","16:00"]);
     const statusEl=()=>document.getElementById("firstMileAutoAlertStatus");
     const manilaParts=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).reduce((o,p)=>(o[p.type]=p.value,o),{});
-    let lastAutoRun="",alarmEnabled=true,alarmActive=false,audioCtx=null,alarmTimer=null,knownUnassigned=null;
+    let lastAutoRun="",alarmEnabled=true,alarmActive=false,audioCtx=null,alarmTimer=null,knownUnassigned=null,soundBlocked=false;\n    const SOUND_PREF_KEY="badoc_first_mile_alarm_sound_enabled_v1";\n    function setSoundState(ready,reason){\n      soundBlocked=!ready;\n      const b=document.getElementById("enableFirstMileAlarm");if(b)b.hidden=ready;\n      const el=statusEl();if(el)el.textContent=ready?"Unassigned alarm armed · sound ready · browser notifications "+(("Notification" in window&&Notification.permission==="granted")?"enabled":"use browser permission")+".":("Unassigned alarm is armed, but Chrome blocked alarm sound"+(reason?": "+reason:".")+" Click Enable alarm sound once to restore audio.");\n    }\n    async function tryRestoreSound(){\n      try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC){setSoundState(false,"Web Audio is unavailable");return false;}\n        audioCtx=audioCtx||new AC();if(audioCtx.state==="suspended")await audioCtx.resume();\n        const ready=audioCtx.state==="running";setSoundState(ready,ready?"":"autoplay permission is required");return ready;\n      }catch(e){setSoundState(false,e.message||"autoplay permission is required");return false;}\n    }
     const orderKey=g=>[String(g.pickupPointId||""),...(g.orders||[]).map(o=>String(fmValue(o,["Order ID","Order No","Order Number","Pickup Order ID","order_id","order_sn","order_number"])||"")).filter(Boolean).sort()].join("|");
     function currentUnassigned(){
       return new Set((firstMileCombinedRows||[]).filter(g=>!(g.tasks||[]).length||((g.tasks||[]).some(t=>fmNorm(fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"])))==="unassigned"))).map(orderKey));
@@ -4358,19 +4358,23 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
     async function unlockAlarmSound(){
       try{
-        const AC=window.AudioContext||window.webkitAudioContext;
-        if(AC){audioCtx=audioCtx||new AC();if(audioCtx.state==="suspended")await audioCtx.resume();}
+        const ok=await tryRestoreSound();
+        if(ok){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}}
         if("Notification" in window&&Notification.permission==="default")await Notification.requestPermission();
-        const b=document.getElementById("enableFirstMileAlarm");if(b){b.textContent="Sound & Notifications Ready";b.disabled=true;}
-        const el=statusEl();if(el)el.textContent="Unassigned alarm is armed by default · sound and browser notifications enabled where permitted.";
-        if(alarmActive)beep();
+        if(alarmActive&&ok)beep();
         if(knownUnassigned===null)knownUnassigned=currentUnassigned();
-      }catch(e){const el=statusEl();if(el)el.textContent="Alarm remains armed; sound setup needs browser permission: "+(e.message||e);}
+      }catch(e){setSoundState(false,e.message||"permission required");}
     }
     document.getElementById("enableFirstMileAlarm")?.addEventListener("click",unlockAlarmSound);
-    // Browser autoplay policies require a user gesture before Web Audio can play.
+    // Restore the saved sound preference on every dashboard load. Chrome may
+    // still require a fresh gesture; show the enable button only in that case.
+    let soundWasEnabled=false;try{soundWasEnabled=localStorage.getItem(SOUND_PREF_KEY)==="1";}catch(e){}
+    if(soundWasEnabled){tryRestoreSound();}
+    else setSoundState(false,"sound has not been enabled in this browser yet");
+    // Any ordinary user gesture can satisfy Chrome's autoplay policy; no
+    // dedicated setup click is needed if this succeeds.
     window.addEventListener("pointerdown",()=>{
-      if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(AC){try{audioCtx=new AC();if(audioCtx.state==="suspended")audioCtx.resume().catch(()=>{});}catch(e){}}}
+      if(soundBlocked)tryRestoreSound().then(ok=>{if(ok){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}if(alarmActive)beep();}});
     },{once:true,passive:true});
     document.getElementById("ackFirstMileAlarm")?.addEventListener("click",acknowledge);
     function checkForNewUnassigned(){
