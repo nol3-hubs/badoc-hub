@@ -4326,7 +4326,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     function setSoundState(ready,reason){
       soundBlocked=!ready;
       const b=document.getElementById("enableFirstMileAlarm");if(b)b.hidden=ready;
-      const el=statusEl();if(el)el.textContent=ready?"Unassigned alarm armed · sound ready · browser notifications "+(("Notification" in window&&Notification.permission==="granted")?"enabled":"use browser permission")+".":("Unassigned alarm is armed, but Chrome blocked alarm sound"+(reason?": "+reason:".")+" Click Enable alarm sound once to restore audio.");
+      const el=statusEl();if(el){const notificationOn=("Notification" in window&&Notification.permission==="granted");el.textContent="Unassigned alarm: ON · Sound: "+(ready?"ON":"OFF")+(ready?"":" (Chrome blocked sound)")+" · Browser notifications: "+(notificationOn?"ON":"OFF")+(ready?"":". Click Enable alarm sound to turn sound ON.");}
     }
     async function tryRestoreSound(){
       try{
