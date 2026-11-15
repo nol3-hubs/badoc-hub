@@ -4130,14 +4130,22 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }).join("");
   }
   function fmPickupPointId(row){
-    // SPX task exports have used several Pickup Point header variants. Resolve
-    // the identifier column broadly so "Pickup No Order" tasks still join to
-    // their pickup-point order group and retain the Onhold status.
-    return fmValue(row,[
-      "Pickup Point ID","Pickup Point Id","Pickup Point","Pickup Point Code",
-      "Pickup Point No","Pickup Point Number","Point ID","point_id",
-      "pickup_point_id","pickupPointId","service_point_id","service_point_code"
+    // SPX exports can contain more than one "Pickup Point" column. Prefer the
+    // actual PUP... identifier value instead of accidentally taking a numeric
+    // internal point key (which prevents the task and order from joining).
+    const entries=Object.entries(row||{});
+    const candidates=entries.filter(([key,value])=>{
+      const header=fmNorm(key);
+      return /pickuppoint|servicepoint/.test(header)&&!/name|seller|shop/.test(header)&&String(value??"").trim();
+    });
+    const pup=candidates.find(([,value])=>/^PUP[0-9A-Z]+$/i.test(String(value??"").trim()));
+    if(pup)return String(pup[1]).trim();
+    const explicit= fmValue(row,[
+      "Pickup Point ID","Pickup Point Id","Pickup Point Code","Pickup Point No",
+      "Pickup Point Number","Point ID","point_id","pickup_point_id",
+      "pickupPointId","service_point_id","service_point_code"
     ],/^(pickup)?point(id|code|no|number)?$|^servicepoint(id|code|no|number)?$/i);
+    return explicit||fmValue(row,["Pickup Point"],/^pickuppoint$/i);
   }
   function fmPickupPointName(row){return fmValue(row,["Pickup Point Name","To Pickup Point Name","From Pickup Point Name","Pickup Point","Service Point Name","pickup_point_name","to_pickup_point_name","from_pickup_point_name","service_point_name","pickupPointName","toPickupPointName","fromPickupPointName"],/^(from|to)?pickuppointname$|^servicepointname$/i);}
   function fmSellerName(row){
