@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v64">
+<meta name="badoc-app-version" content="v66">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -29,18 +29,66 @@ window.BADOC_FIREBASE_CONFIG = {
 window.BADOC_SHARED_CONFIG = { url: window.BADOC_FIREBASE_CONFIG.databaseURL, key: window.BADOC_FIREBASE_CONFIG.apiKey || "firebase-rtdb" };
 </script>
 <script id="badoc-poll-gate">
-/* Visible-only timers: background tabs stop polling, and catch up once when you come back. */
+/* Pause non-critical polling timers in background tabs; run one catch-up check on return. */
 (function(){
   if(window.__badocEvery)return;
-  var gated=[],hiddenAt=0;
+  var jobs=Object.create(null),nextId=0,hiddenAt=document.hidden?Date.now():0;
+  var nativeSetTimeout=window.setTimeout.bind(window);
+  var nativeClearTimeout=window.clearTimeout.bind(window);
+  var nativeClearInterval=window.clearInterval.bind(window);
+  function invoke(job){
+    try{var result=job.fn();if(result&&typeof result.then==="function")result.catch(function(){});}
+    catch(error){try{console.warn("Background poll failed:",error);}catch(_){}}
+  }
+  function schedule(job,delay){
+    if(job.cancelled||document.hidden||job.timer!==null)return;
+    job.dueAt=Date.now()+Math.max(0,delay);
+    job.timer=nativeSetTimeout(function(){
+      job.timer=null;
+      if(job.cancelled||document.hidden)return;
+      schedule(job,job.ms);
+      invoke(job);
+    },Math.max(0,delay));
+  }
+  // Negative virtual IDs let the existing clearInterval callers stop these
+  // timers while native interval handles retain their normal behavior.
+  window.clearInterval=function(id){
+    var job=jobs[String(id)];
+    if(job){
+      job.cancelled=true;
+      if(job.timer!==null)nativeClearTimeout(job.timer);
+      delete jobs[String(id)];
+      return;
+    }
+    return nativeClearInterval(id);
+  };
   window.__badocEvery=function(fn,ms){
-    var id=setInterval(function(){ if(document.hidden)return; return fn.apply(this,arguments); },ms);
-    gated.push({fn:fn,ms:ms}); return id;
+    var interval=Math.max(100,Number(ms)||1000),id=String(--nextId);
+    var job={fn:fn,ms:interval,timer:null,dueAt:Date.now()+interval,cancelled:false};
+    jobs[id]=job;
+    schedule(job,interval);
+    return Number(id);
   };
   document.addEventListener("visibilitychange",function(){
-    if(document.hidden){hiddenAt=Date.now();return}
-    var away=Date.now()-hiddenAt,k=0;
-    gated.forEach(function(g){ if(away>=g.ms)setTimeout(function(){try{var r=g.fn();if(r&&r.catch)r.catch(function(){})}catch(e){}},150*(k++)); });
+    if(document.hidden){
+      hiddenAt=Date.now();
+      Object.keys(jobs).forEach(function(id){
+        var job=jobs[id];
+        if(job&&job.timer!==null){nativeClearTimeout(job.timer);job.timer=null;}
+      });
+      return;
+    }
+    var away=hiddenAt?Date.now()-hiddenAt:0,k=0;
+    Object.keys(jobs).forEach(function(id){
+      var job=jobs[id];if(!job||job.cancelled||job.timer!==null)return;
+      if(away>=job.ms){
+        job.timer=nativeSetTimeout(function(){
+          job.timer=null;if(job.cancelled||document.hidden)return;
+          schedule(job,job.ms);invoke(job);
+        },150*(k++));
+      }else schedule(job,Math.max(0,job.dueAt-Date.now()));
+    });
+    hiddenAt=0;
   });
 })();
 </script>
@@ -852,7 +900,8 @@ html[data-theme="dark"] #firstMile.page{color:#e7f0fb}
 #firstMile .fm-task-cancelled{color:#ff9292;background:rgba(239,68,68,.15);border-color:rgba(248,113,113,.38)}
 #firstMile .fm-task-onhold{color:#ffc36b;background:rgba(249,115,22,.16);border-color:rgba(251,146,60,.4)}
 #firstMile .fm-task-inbounded{color:#77e3a6;background:rgba(34,197,94,.15);border-color:rgba(74,222,128,.38)}
-#firstMile .fm-task-unassigned{color:#c4d2e2;background:rgba(148,163,184,.12);border-color:rgba(148,163,184,.35)}
+#firstMile .fm-task-done{color:#77e3a6;background:rgba(34,197,94,.15);border-color:rgba(74,222,128,.38)}
+#firstMile .fm-task-unassigned{color:#ff9292;background:rgba(239,68,68,.15);border-color:rgba(248,113,113,.38)}
 #firstMile .fm-task-other{color:#c4d2e2;background:rgba(148,163,184,.12);border-color:rgba(148,163,184,.25)}
 #firstMile .first-mile-combined-empty{padding:24px;text-align:center;color:#8da4bd;font-size:12px}
 @media(max-width:700px){#firstMile .first-mile-combined-stats{grid-template-columns:repeat(2,minmax(0,1fr))}#firstMile .first-mile-combined-head{align-items:stretch}}
@@ -976,6 +1025,8 @@ html[data-theme="light"] #firstMile .fm-task-assigned{color:#1d4ed8!important;ba
 html[data-theme="light"] #firstMile .fm-task-cancelled{color:#b91c1c!important;background:#fef2f2!important;border-color:#fecaca!important}
 html[data-theme="light"] #firstMile .fm-task-onhold{color:#c2410c!important;background:#fff7ed!important;border-color:#fed7aa!important}
 html[data-theme="light"] #firstMile .fm-task-inbounded{color:#15803d!important;background:#f0fdf4!important;border-color:#bbf7d0!important}
+html[data-theme="light"] #firstMile .fm-task-done{color:#15803d!important;background:#f0fdf4!important;border-color:#bbf7d0!important}
+html[data-theme="light"] #firstMile .fm-task-unassigned{color:#b91c1c!important;background:#fef2f2!important;border-color:#fecaca!important}
 html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;background:#f2f4f7!important;border-color:#d0d5dd!important}
 @media(max-width:520px){
   #firstMile #syncFirstMileAll{min-width:0!important;padding:9px 18px!important}
@@ -1319,6 +1370,7 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
             <button class="btn" id="ackFirstMileAlarm" type="button" hidden>Acknowledge Alarm</button>
             <span id="firstMileAutoAlertStatus" class="hint" aria-live="polite">Checking unassigned alarm and sound…</span>
           </div>
+          <div id="firstMileLastUpdated" class="hint" style="margin-top:5px;font-size:11px" aria-live="polite">Last updated (PHT) — Orders: Not yet · Tasks: Not yet</div>
         </div>
         <div id="firstMileCombinedTable" class="first-mile-combined-table"><div class="first-mile-combined-empty">Combined pickup information will appear here after both exports are saved.</div></div>
       </article>
@@ -2282,7 +2334,7 @@ function startExemptionFallbackPoll(){
       syncExceptionsFromCloud({silent:true});
     },20000);
   }else{
-    setInterval(()=>{if(!document.hidden)syncExceptionsFromCloud({silent:true})},20000);
+    __badocEvery(()=>syncExceptionsFromCloud({silent:true}),20000);
   }
 }
 
@@ -3997,6 +4049,19 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
 // FIRST MILE — export through SPX Bridge and retain CSV files locally only.
 (function(){
   const $=id=>document.getElementById(id);
+  window.__badocFirstMileCloudVersions=window.__badocFirstMileCloudVersions||{orders:0,tasks:0};
+  function updateFirstMileLastUpdated(){
+    const target=$("firstMileLastUpdated");if(!target)return;
+    const formatter=new Intl.DateTimeFormat("en-PH",{timeZone:"Asia/Manila",month:"short",day:"2-digit",year:"numeric",hour:"numeric",minute:"2-digit",hour12:true});
+    const getTime=kind=>{
+      const stamp=Number(window.__badocFirstMileCloudVersions?.[kind]||0);
+      return Number.isFinite(stamp)&&stamp>0?formatter.format(new Date(stamp)):"Not yet synced";
+    };
+    const orders=getTime("orders");
+    const tasks=getTime("tasks");
+    target.textContent="Last updated across all devices (PHT) — Orders: "+orders+" · Tasks: "+tasks;
+  }
+  window.__badocUpdateFirstMileLastUpdated=updateFirstMileLastUpdated;
   let firstMileSequenceBusy=false;
   let firstMileNextStep="";
   async function startFirstMileSync(){
@@ -4060,7 +4125,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     if(!statuses.length)return '<span class="fm-task-pill fm-task-unassigned">Unassigned</span>';
     return statuses.map(label=>{
       const key=fmNorm(label);
-      const tone=({assigned:"assigned",cancelled:"cancelled",onhold:"onhold",inbounded:"inbounded"})[key]||"other";
+      const tone=({assigned:"assigned",cancelled:"cancelled",onhold:"onhold",inbounded:"inbounded",done:"done",unassigned:"unassigned"})[key]||"other";
       return `<span class="fm-task-pill fm-task-${tone}">${fmEsc(label)}</span>`;
     }).join("");
   }
@@ -4167,6 +4232,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     };
     return ids.map(linkFor).join("");
   }
+  const FM_ETA_DATE_FORMATTER=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"});
   function fmEtaDate(row){
     const raw=fmValue(row,["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","Pickup Estimated Time","eta_date","eta_time","estimated_arrival_time"],/^eta(date|time)?$/i);
     if(!raw)return "";
@@ -4185,7 +4251,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       date=new Date(normalized);
     }
     if(!date||Number.isNaN(date.getTime()))return "";
-    return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
+    return FM_ETA_DATE_FORMATTER.format(date);
   }
   function fmEtaDate(row){
     const raw=fmValue(row,["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","Pickup Estimated Time","eta_date","eta_time","estimated_arrival_time"],/^eta(date|time)?$/i);
@@ -4205,7 +4271,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       date=new Date(normalized);
     }
     if(!date||Number.isNaN(date.getTime()))return "";
-    return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
+    return FM_ETA_DATE_FORMATTER.format(date);
   }
   function fmEsc(value){return typeof esc==="function"?esc(value):String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   let firstMileCombinedRows=[];
@@ -4229,8 +4295,12 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     fmRememberPickupPointNames(allOrderRows);
     const today=getBadocManilaDayBounds().date;
     // Only pickup orders whose ETA falls on today's Manila date are eligible for matching.
-    const orderRows=allOrderRows.filter(order=>fmEtaDate(order)===today);
-    const excludedEtaOrders=allOrderRows.length-orderRows.length;
+    const orderRows=[],historicalOrderRows=[];
+    allOrderRows.forEach(order=>{
+      if(fmEtaDate(order)===today)orderRows.push(order);
+      else historicalOrderRows.push(order);
+    });
+    const excludedEtaOrders=historicalOrderRows.length;
     const groups=new Map();
     const getGroup=(id)=>{if(!groups.has(id))groups.set(id,{pickupPointId:id,orders:[],eligibleOrders:[],tasks:[]});return groups.get(id);};
     // Today's ETA-eligible orders remain the only orders used for daily totals and sheet copy.
@@ -4239,12 +4309,13 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     // Also attach older Order IDs to an existing task row by Pickup Point ID.
     // Historical orders are display-only: they do not enter today's eligible count or Copy for Sheet.
     let historicalTaskOrders=0;
-    allOrderRows.filter(order=>fmEtaDate(order)!==today).forEach(order=>{
+    historicalOrderRows.forEach(order=>{
       const id=fmNorm(fmPickupPointId(order));
       const group=id?groups.get(id):null;
       if(group&&group.tasks.length){group.orders.push(order);historicalTaskOrders++;}
     });
     firstMileCombinedRows=[...groups.values()];
+    window.__badocCheckNewUnassigned?.();
     // Sort pickup-point rows by Assigned Rider A–Z. Names within each group are
     // already alphabetized by fmAssignedRiderDisplay(); groups without a rider go last.
     const riderCollator=new Intl.Collator("en",{sensitivity:"base",numeric:true});
@@ -4268,7 +4339,12 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const search=fmNorm($("firstMileCombinedSearch")?.value||"");
     const selectedTaskStatus=$("firstMileTaskStatusFilter")?.value||"all";
     const knownTaskStatuses=["assigned","cancelled","onhold","inbounded","done","unassigned"];
-    const taskStatusKeys=g=>(g.tasks||[]).map(t=>fmNorm(fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"])))).filter(Boolean);
+    const taskStatusCache=new WeakMap();
+    const taskStatusKeys=g=>{
+      if(taskStatusCache.has(g))return taskStatusCache.get(g);
+      const keys=(g.tasks||[]).map(t=>fmNorm(fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"])))).filter(Boolean);
+      taskStatusCache.set(g,keys);return keys;
+    };
     const searchMatchedRows=firstMileCombinedRows.filter(g=>!search||[g.pickupPointId,...g.orders.flatMap(o=>Object.values(o)),...g.tasks.flatMap(t=>Object.values(t))].some(v=>fmNorm(v).includes(search)));
     // Counts represent pickup-point groups (table rows), not individual task records.
     const statusCounts={
@@ -4310,7 +4386,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       ["Assigned Rider",g=>fmAssignedRiderDisplay(g)],
       ["Task Status",g=>g.tasks.map(t=>fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"]))).filter(Boolean).join(" | ")||"Unassigned"]
     ];
-    if(table){
+    if(table && $("firstMile")?.classList.contains("active")){
       if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No combined pickup groups match this search.</div>';
       else table.innerHTML=`<table><thead><tr>${columns.map(c=>`<th>${fmEsc(c[0])}</th>`).join("")}</tr></thead><tbody>${filtered.slice(0,2000).map(g=>{return `<tr>${columns.map(c=>c[0]==="Task Status"?`<td title="${fmEsc(c[1](g))}">${fmTaskStatusBadgesHtml(g)}</td>`:c[0]==="Order ID"?`<td>${fmOrderLinksHtml(g)}</td>`:`<td title="${fmEsc(c[1](g))}">${fmEsc(c[1](g))}</td>`).join("")}</tr>`;}).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} groups.</div>`:""}`;
     }
@@ -4414,6 +4490,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       knownUnassigned=now;
       if(added)startAlarm(added);
     }
+    window.__badocCheckNewUnassigned=checkForNewUnassigned;
     const pickupTable=document.getElementById("firstMileCombinedTable");
     if(pickupTable&&typeof MutationObserver!=="undefined"){
       new MutationObserver(()=>checkForNewUnassigned()).observe(pickupTable,{childList:true,subtree:true});
@@ -4429,7 +4506,11 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       catch(e){console.error("Scheduled First Mile click failed:",e);lastAutoRun="";}
     },15000);
   })();
-  $("firstMileCombinedSearch")?.addEventListener("input",renderFirstMileCombined);
+  let firstMileSearchTimer=0;
+  $("firstMileCombinedSearch")?.addEventListener("input",()=>{
+    clearTimeout(firstMileSearchTimer);
+    firstMileSearchTimer=setTimeout(renderFirstMileCombined,120);
+  });
   $("firstMileTaskStatusFilter")?.addEventListener("change",renderFirstMileCombined);
   $("copyFirstMileForSheet")?.addEventListener("click",async()=>{
     const groups=firstMileVisibleRows||[];
@@ -4517,9 +4598,10 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }catch(_){}
   });
   renderFirstMileCombined();
+  window.__badocUpdateFirstMileLastUpdated?.();
 })();
 
-function showPage(p){document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));const page=$(p);if(page)page.classList.add("active");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x.dataset.page===p));const titles={homeDashboard:"Dashboard",dashboard:"Parcel Count",volumeForecastBoard:"Volume Forecast",kpi:"KPI",records:"Parcel Records",linehaul:"Linehaul Task",receivedChecking:"Dispatch",podPoohChecker:"POD/POOH Checker",misrouted:"Misrouted Parcels",dailyPickup:"Pickup",dailyPerformance:"Performance",dailyRiderPerformance:"Rider Performance",dailyConsolidated:"Consolidated",dailyEod:"EOD Data",ridersData:"Riders Data",dailyHistory:"Data",instructions:"Instructions",firstMile:"Pickup",settings:"Settings"};$("pageTitle").textContent=titles[p]||p.replace(/^\w/,c=>c.toUpperCase()).replace("Towns","Town Management");document.body.classList.toggle("pickup-page-active",p==="firstMile");if(p==="dailyPerformance")window.__badocInitDailyPerformance?.();if(p==="dailyPickup")window.__badocInitDailyPickup?.();if(p==="dailyConsolidated")window.__badocInitConsolidated?.();if(p==="linehaul")renderLinehaul();if(p==="dailyRiderPerformance")renderRiderPerformance();if(p==="volumeForecastBoard"){window.updateOperationProgress?.();window.__badocRenderForecastBoard?.();document.getElementById("planningBoardNav")?.classList.add("open");document.getElementById("planningBoardToggle")?.setAttribute("aria-expanded","true");}}
+function showPage(p){document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));const page=$(p);if(page)page.classList.add("active");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x.dataset.page===p));const titles={homeDashboard:"Dashboard",dashboard:"Parcel Count",volumeForecastBoard:"Volume Forecast",kpi:"KPI",records:"Parcel Records",linehaul:"Linehaul Task",receivedChecking:"Dispatch",podPoohChecker:"POD/POOH Checker",misrouted:"Misrouted Parcels",dailyPickup:"Pickup",dailyPerformance:"Performance",dailyRiderPerformance:"Rider Performance",dailyConsolidated:"Consolidated",dailyEod:"EOD Data",ridersData:"Riders Data",dailyHistory:"Data",instructions:"Instructions",firstMile:"Pickup",settings:"Settings"};$("pageTitle").textContent=titles[p]||p.replace(/^\w/,c=>c.toUpperCase()).replace("Towns","Town Management");document.body.classList.toggle("pickup-page-active",p==="firstMile");if(p==="firstMile")window.__badocRenderFirstMileCombined?.();if(p==="dailyPerformance")window.__badocInitDailyPerformance?.();if(p==="dailyPickup")window.__badocInitDailyPickup?.();if(p==="dailyConsolidated")window.__badocInitConsolidated?.();if(p==="linehaul")renderLinehaul();if(p==="dailyRiderPerformance")renderRiderPerformance();if(p==="volumeForecastBoard"){window.updateOperationProgress?.();window.__badocRenderForecastBoard?.();document.getElementById("planningBoardNav")?.classList.add("open");document.getElementById("planningBoardToggle")?.setAttribute("aria-expanded","true");}}
 $("parcelIncomingVolumeBtn")?.addEventListener("click",()=>{
   const next=!parcelIncomingEnabled();
   try{localStorage.setItem(PARCEL_INCOMING_KEY,next?"1":"0")}catch(e){}
@@ -6621,6 +6703,7 @@ window.addEventListener("message",async event=>{
     try{
       if(!data.csvText)throw Error("SPX returned an empty First Mile CSV.");
       localStorage.setItem(key,JSON.stringify({csvText:data.csvText,fileName:data.fileName|| (orders?"first_mile_orders.csv":"first_mile_tasks.csv"),taskId:data.taskId||"",savedAt:Date.now(),rowCount:Number(data.rowCount||Math.max(0,data.csvText.split(/\\r?\\n/).filter(Boolean).length-1))}));
+      window.__badocUpdateFirstMileLastUpdated?.();
       const record=JSON.parse(localStorage.getItem(key));
       const cloudResult=typeof window.__badocPickupCloudSave==="function"
         ?await window.__badocPickupCloudSave(orders?"orders":"tasks",record)
@@ -7085,7 +7168,7 @@ window.DASHBOARD_V2_READY = true;
     }finally{busy=false}
   }
   window.__badocCfr1CloudSync={publish,resetCloud,ensureLoaded};
-  window.addEventListener("load",()=>{poll();setInterval(poll,15000)});
+  window.addEventListener("load",()=>{poll();__badocEvery(poll,15000)});
 })();
 </script>
 <script id="cloud-shared-sync">
@@ -9039,7 +9122,7 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",run,{once:true});else run();
   __badocEvery(function(){checkKpi();checkSync();updateLastSyncDetail();},3000);
   __badocEvery(checkData,3000);
-  setInterval(checkStorage,30000);
+  __badocEvery(checkStorage,30000);
 })();
 </script>
 <script id="daily-performance-runtime">
@@ -9843,6 +9926,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       "badoc_first_mile_tasks_csv_local_v1"
     ];
     keys.forEach(key=>{try{localStorage.removeItem(key)}catch(e){}});
+    window.__badocUpdateFirstMileLastUpdated?.();
     [
       ["firstMileOrdersStatus","Not synced yet"],
       ["firstMileOrdersResult","No export stored on this device."],
@@ -9937,7 +10021,11 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         clearRegularCfrAt230AM();
         window.__badocCfr1LedgerMemory=null;
         clearLocalPickupData();
-        try{await clearLocalExemptions();}catch(e){console.warn("2:30 AM already-done exemption reset:",e)}
+        // The shared reset has already cleared exemptions. This device must
+        // pull the authoritative cloud list instead of issuing another clear,
+        // which could erase exemptions added after the first device reset.
+        try{await syncExceptionsFromCloud({silent:true});}
+        catch(e){console.warn("2:30 AM exemption cloud refresh:",e)}
         // Reload once on this device so the CFR1 closure is rebuilt from the
         // now-empty cloud ledger and cleared working dataset.
         setResetStatus("already-done");
@@ -10024,7 +10112,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   // Check immediately and then frequently enough to catch 12:30 AM / 2:30 AM
   // even when the app is left running.
   setTimeout(tick,1500);
-  setInterval(tick,30000);
+  __badocEvery(tick,30000);
 })();
 </script>
 
@@ -11577,7 +11665,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     // refresh whenever the page is opened, and every 20s while viewing today
     const obs=new MutationObserver(()=>{if(page.classList.contains("active")){if(!page.__wasActive){page.__wasActive=true;window.__badocRefreshDailyHistory()}}else page.__wasActive=false});
     obs.observe(page,{attributes:true,attributeFilter:["class"]});
-    setInterval(()=>{if(page.classList.contains("active")&&!document.hidden&&(curDate||todayDate())===todayDate())show(todayDate())},20000);
+    __badocEvery(()=>{if(page.classList.contains("active")&&(curDate||todayDate())===todayDate())show(todayDate())},20000);
     setTimeout(()=>window.__badocRefreshDailyHistory(),700);
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
@@ -11976,7 +12064,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     bridgeModal()?.addEventListener("click",e=>{if(e.target===bridgeModal())closeBridgeInstaller();});
     window.addEventListener("keydown",e=>{if(e.key==="Escape")closeBridgeInstaller();});
     checkBridgeInstalled(BRIDGE_CHECK_TIMEOUT);
-    setInterval(()=>{if(!document.hidden&&!bridgeCheckInFlight&&!bridgeReady)checkBridgeInstalled(BRIDGE_CHECK_TIMEOUT);},10000);
+    __badocEvery(()=>{if(!bridgeCheckInFlight&&!bridgeReady)checkBridgeInstalled(BRIDGE_CHECK_TIMEOUT);},10000);
   });
 })();
 </script>
@@ -12575,8 +12663,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     var recent=(H.issues||[]).some(function(i){return i.kind==="error"&&Date.now()-i.at<10*60*1000});
     document.documentElement.classList.toggle("has-sync-issues",recent);
   }
-  setInterval(dot,15000);
-  function start(){watchStatuses();dot();setInterval(watchStatuses,10000)}
+  __badocEvery(dot,15000);
+  function start(){watchStatuses();dot();__badocEvery(watchStatuses,10000)}
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start);else start();
 })();
 
@@ -12942,6 +13030,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         return;
       }
       localStorage.setItem(LOCAL_KEYS[kind],JSON.stringify(record));
+      window.__badocUpdateFirstMileLastUpdated?.();
       const orders=kind==="orders";
       const prefix=orders?"firstMileOrders":"firstMileTasks";
       const rows=Number(record?.rowCount||0);
@@ -12958,6 +13047,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   }
   function clearLocalKind(kind){
     try{localStorage.removeItem(LOCAL_KEYS[kind])}catch(e){}
+    if(kind!=="names")window.__badocUpdateFirstMileLastUpdated?.();
     if(kind==="names"){
       if(typeof window.__badocApplyPickupPointNameMap==="function")window.__badocApplyPickupPointNameMap({});
       else try{localStorage.removeItem(LOCAL_KEYS.names)}catch(e){}
@@ -12993,7 +13083,12 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       const blob=new Blob([JSON.stringify(payload)],{type:"application/json"});
       const up=await storage().upload(path,blob,{contentType:"application/json",upsert:true,cacheControl:"0"});
       if(up.error)throw Error(up.error.message||"Pickup cloud file upload failed.");
-      await writeState({[field+"_exists"]:true,[field+"_version"]:version});
+      const cloudState=await writeState({[field+"_exists"]:true,[field+"_version"]:version});
+      if(kind!=="names"){
+        window.__badocFirstMileCloudVersions=window.__badocFirstMileCloudVersions||{orders:0,tasks:0};
+        window.__badocFirstMileCloudVersions[kind]=version;
+        window.__badocUpdateFirstMileLastUpdated?.();
+      }
       seen[kind]=version;
       try{localStorage.removeItem(DIRTY_KEYS[kind])}catch(e){}
       await announce("upload-"+kind);
@@ -13085,6 +13180,10 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     try{
       const state=await readState();
       if(!state)return; // Connection state is owned by the realtime subscription indicator.
+      window.__badocFirstMileCloudVersions=window.__badocFirstMileCloudVersions||{orders:0,tasks:0};
+      window.__badocFirstMileCloudVersions.orders=Number(state.pickup_orders_version||0);
+      window.__badocFirstMileCloudVersions.tasks=Number(state.pickup_tasks_version||0);
+      window.__badocUpdateFirstMileLastUpdated?.();
       for(const kind of ["orders","tasks","names"]){
         if(!hasCloudField(state,kind)){
           await seedLocalIfNeeded(state,kind);
