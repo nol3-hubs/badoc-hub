@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badoc Hub Extension",
-  "version": "1.1.8",
-  "description": "Badoc Hub extension with verified bridge handshakes, disconnect recovery, delivery-status exports, and integrated First Mile sync.",
+  "version": "1.1.9",
+  "description": "Badoc Hub extension with improved First Mile Orders export task discovery across SPX FM and FMS task lists.",
   "permissions": [
     "cookies",
     "scripting",
