@@ -20,12 +20,11 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
           root = Path("extension-firefox")
           manifest = json.loads((root / "manifest.json").read_text())
           assert manifest["manifest_version"] == 2
-          assert manifest["version"] == "69.2.6"
           assert manifest["browser_specific_settings"]["gecko"]["id"] == "spx-bridge-badoc-hub@nol3-hubs.github.io"
           for name in manifest["background"]["scripts"]:
               assert (root / name).is_file(), name
@@ -36,6 +35,8 @@ jobs:
           for name in ["pod-checker/page_bridge.js", "pod-checker/content.js"]:
               assert (root / name).is_file(), name
           print("Manifest and packaged files validated.")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write("PACKAGE_VERSION=" + manifest["version"] + "\\n")
           PY
           if grep -R -n --include='*.js' --include='*.json' --include='*.html' "chrome://extensions" extension-firefox; then
             echo "Chrome-only settings URL found in Firefox source."
@@ -47,18 +48,18 @@ jobs:
         shell: bash
         run: |
           cd extension-firefox
-          zip -X -qr "$GITHUB_WORKSPACE/SPX-BRIDGE-BADOC-HUB-69.2.6.xpi" .
+          zip -X -qr "$GITHUB_WORKSPACE/SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.xpi" .
           cd "$GITHUB_WORKSPACE"
-          sha256sum SPX-BRIDGE-BADOC-HUB-69.2.6.xpi > SPX-BRIDGE-BADOC-HUB-69.2.6.sha256
+          sha256sum "SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.xpi" > "SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.sha256"
       - name: Publish unsigned XPI in repository
         shell: bash
         run: |
           mkdir -p downloads
-          cp SPX-BRIDGE-BADOC-HUB-69.2.6.xpi downloads/
-          cp SPX-BRIDGE-BADOC-HUB-69.2.6.sha256 downloads/
+          cp "SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.xpi" downloads/
+          cp "SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.sha256" downloads/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads/SPX-BRIDGE-BADOC-HUB-69.2.6.xpi downloads/SPX-BRIDGE-BADOC-HUB-69.2.6.sha256
+          git add "downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.xpi" "downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.sha256"
           if ! git diff --cached --quiet; then
             git commit -m "Publish unsigned Firefox SPX Bridge 69.2.6 package"
             git push origin "HEAD:${GITHUB_REF_NAME}"
@@ -68,7 +69,7 @@ jobs:
         with:
           name: SPX-BRIDGE-BADOC-HUB-69.2.6
           path: |
-            SPX-BRIDGE-BADOC-HUB-69.2.6.xpi
-            SPX-BRIDGE-BADOC-HUB-69.2.6.sha256
+            SPX-BRIDGE-BADOC-HUB-FIREFOX-*.xpi
+            SPX-BRIDGE-BADOC-HUB-FIREFOX-*.sha256
           if-no-files-found: error
           retention-days: 30
