@@ -366,11 +366,34 @@ async function discoverFirstMileTask(startSec, fileName, kind, job) {
   let newestSeen = "";
   for (let attempt = 0; attempt < 12; attempt++) {
     if (job.cancelled) throw new Error("Sync cancelled.");
-    let tasks = [];
-    try { tasks = await listTasks(startSec); } catch (error) {
-      newestSeen = `task list: ${error?.message || String(error)}`;
-    }
-    const values = task => Object.values(task || {}).filter(value => typeof value === "string").join(" ").toLowerCase();
+    // Pickup exports can be registered in the FM task source rather than the
+    // default FMS task list. Query both source partitions and the default list,
+    // and inspect several pages so a busy hub cannot hide the new export.
+    const taskSets = await Promise.all(["fm", "fms", ""].map(async source => {
+      const pages = [];
+      for (let page = 1; page <= 3; page++) {
+        try {
+          const batch = await listTasks(startSec, source, page);
+          pages.push(...batch);
+          if (batch.length < 100) break;
+        } catch (error) {
+          if (page === 1) pages.push({ __list_error: `${source || "default"}: ${error?.message || String(error)}` });
+          break;
+        }
+      }
+      return pages;
+    }));
+    const tasks = [...new Map(taskSets.flat().filter(task => !task?.__list_error).map(task => [String(task?.task_id || JSON.stringify(task)), task])).values()];
+    const values = task => {
+      const parts = [];
+      const visit = value => {
+        if (typeof value === "string" || typeof value === "number") parts.push(String(value));
+        else if (Array.isArray(value)) value.forEach(visit);
+        else if (value && typeof value === "object") Object.values(value).forEach(visit);
+      };
+      visit(task);
+      return parts.join(" ").toLowerCase();
+    };
     const eligible = tasks.filter(task => {
       const id = Number(task?.task_id || 0);
       if (!(id > 0)) return false;
@@ -379,13 +402,13 @@ async function discoverFirstMileTask(startSec, fileName, kind, job) {
       return joined.includes("pickup") && wanted.test(joined) && !avoid.test(joined);
     }).sort((a,b) => Number(b?.task_id || 0) - Number(a?.task_id || 0));
     if (eligible.length) return eligible[0];
-    newestSeen = tasks.slice(0, 5).map(task => `#${task?.task_id || "?"} ${values(task).slice(0, 90)}`).join(" || ");
-    progress(`${kind === "first-mile-orders" ? "First Mile Orders" : "First Mile Tasks"}: locating the SPX export task…`, {
+    newestSeen = tasks.slice(0, 8).map(task => `#${task?.task_id || "?"} ${values(task).slice(0, 110)}`).join(" || ");
+    progress(`${kind === "first-mile-orders" ? "First Mile Orders" : "First Mile Tasks"}: locating the SPX export task across FM/FMS task lists…`, {
       phase: "first-mile-discover-task", kind, attempt: attempt + 1
     });
     await sleep(2500);
   }
-  job.firstMileTaskListPreview = newestSeen;
+  job.firstMileTaskListPreview = newestSeen || "No matching export task appeared in FM, FMS, or default task lists.";
   return null;
 }
 
@@ -421,8 +444,9 @@ function parseJsonResponse(label, response) {
   }
 }
 
-async function listTasks(startSec) {
-  const url = `${SPX_ORIGIN}${TASK_LIST_PATH}?start_time=${encodeURIComponent(startSec)}&count=100&pageno=1`;
+async function listTasks(startSec, source = "", page = 1) {
+  const sourceParam = source ? `&source=${encodeURIComponent(source)}` : "";
+  const url = `${SPX_ORIGIN}${TASK_LIST_PATH}?start_time=${encodeURIComponent(startSec)}&count=100&pageno=${Math.max(1, Number(page) || 1)}${sourceParam}`;
   const response = await extensionFetchText(url);
   const json = parseJsonResponse("SPX export task list", response);
   if (Number(json?.retcode) !== 0) {
