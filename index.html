@@ -4329,8 +4329,33 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const groups=new Map();
     const getGroup=(id)=>{if(!groups.has(id))groups.set(id,{pickupPointId:id,orders:[],eligibleOrders:[],tasks:[]});return groups.get(id);};
     // Today's ETA-eligible orders remain the only orders used for daily totals and sheet copy.
-    orderRows.forEach(order=>{const id=fmNorm(fmPickupPointId(order));const group=id?getGroup(id):getGroup(`__order_without_point_${groups.size}`);group.orders.push(order);group.eligibleOrders.push(order);});
-    tasksRows.forEach(task=>{const id=fmNorm(fmPickupPointId(task));if(id)getGroup(id).tasks.push(task);else getGroup(`__task_without_point_${groups.size}`).tasks.push(task);});
+    // Primary join: Pickup Point ID. Secondary join: exact Order ID when SPX
+    // exports disagree on the point identifier or the task row omits it.
+    const orderGroupsById=new Map();
+    orderRows.forEach(order=>{
+      const id=fmNorm(fmPickupPointId(order));
+      const group=id?getGroup(id):getGroup(`__order_without_point_${groups.size}`);
+      group.orders.push(order);
+      group.eligibleOrders.push(order);
+      const orderId=fmNorm(fmOrderId(order));
+      if(orderId){
+        if(!orderGroupsById.has(orderId))orderGroupsById.set(orderId,[]);
+        const matches=orderGroupsById.get(orderId);
+        if(!matches.includes(group))matches.push(group);
+      }
+    });
+    tasksRows.forEach(task=>{
+      const pointId=fmNorm(fmPickupPointId(task));
+      let group=pointId?groups.get(pointId):null;
+      if(!group){
+        const taskOrderId=fmNorm(fmOrderId(task));
+        const orderMatches=taskOrderId?orderGroupsById.get(taskOrderId):null;
+        if(orderMatches?.length===1)group=orderMatches[0];
+      }
+      if(group)group.tasks.push(task);
+      else if(pointId)getGroup(pointId).tasks.push(task);
+      else getGroup(`__task_without_point_${groups.size}`).tasks.push(task);
+    });
     // Also attach older Order IDs to an existing task row by Pickup Point ID.
     // Historical orders are display-only: they do not enter today's eligible count or Copy for Sheet.
     let historicalTaskOrders=0;
