@@ -4119,15 +4119,25 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const labels={pickupnoorder:"Onhold",accepted:"Assigned",disabled:"Cancelled",inbounded:"Inbounded"};
     return labels[key]||(key?String(value??"").trim():"Unassigned");
   }
+  function fmLatestTask(group){
+    const tasks=Array.isArray(group?.tasks)?group.tasks:[];
+    if(!tasks.length)return null;
+    let latest=tasks[0],latestTime=-Infinity;
+    for(const task of tasks){
+      const raw=fmValue(task,["Create Time","Created Time","Task Create Time","create_time","ctime"]);
+      const parsed=raw?Date.parse(String(raw).replace(/\//g,"-")):NaN;
+      const stamp=Number.isFinite(parsed)?parsed:-Infinity;
+      if(stamp>=latestTime){latest=task;latestTime=stamp;}
+    }
+    return latest;
+  }
   function fmTaskStatusBadgesHtml(group){
-    const tasks=group?.tasks||[];
-    const statuses=tasks.map(t=>fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"]))).filter(Boolean);
-    if(!statuses.length)return '<span class="fm-task-pill fm-task-unassigned">Unassigned</span>';
-    return statuses.map(label=>{
-      const key=fmNorm(label);
-      const tone=({assigned:"assigned",cancelled:"cancelled",onhold:"onhold",inbounded:"inbounded",done:"done",unassigned:"unassigned"})[key]||"other";
-      return `<span class="fm-task-pill fm-task-${tone}">${fmEsc(label)}</span>`;
-    }).join("");
+    const latest=fmLatestTask(group);
+    if(!latest)return '<span class="fm-task-pill fm-task-unassigned">Unassigned</span>';
+    const label=fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"]));
+    const key=fmNorm(label);
+    const tone=({assigned:"assigned",cancelled:"cancelled",onhold:"onhold",inbounded:"inbounded",done:"done",unassigned:"unassigned"})[key]||"other";
+    return `<span class="fm-task-pill fm-task-${tone}">${fmEsc(label)}</span>`;
   }
   function fmPickupPointId(row){
     // SPX exports can contain more than one "Pickup Point" column. Prefer the
@@ -4224,10 +4234,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     return [...new Set(sellerNames)].join(" | ")||"—";
   }
   function fmAssignedRiderDisplay(group){
-    const names=(group?.tasks||[]).map(t=>fmValue(t,["Driver Name","Rider Name","Pickup Driver Name","driver_name","rider_name"]).trim()).filter(Boolean);
-    const collator=new Intl.Collator("en",{sensitivity:"base",numeric:true});
-    names.sort((a,b)=>collator.compare(a,b));
-    return names.join(" | ")||"—";
+    const latest=fmLatestTask(group);
+    return latest?fmValue(latest,["Driver Name","Rider Name","Pickup Driver Name","driver_name","rider_name"]).trim()||"—":"—";
   }
   function fmOrderId(row){return fmValue(row,["Order ID","Order No","Order Number","Pickup Order ID","Pickup Order No","order_id","order_sn","order_number"],/^(pickup)?order(id|no|number|sn)$/i);}
   function fmOrderSheetStatus(order){
@@ -4359,7 +4367,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const taskStatusCache=new WeakMap();
     const taskStatusKeys=g=>{
       if(taskStatusCache.has(g))return taskStatusCache.get(g);
-      const keys=(g.tasks||[]).map(t=>fmNorm(fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"])))).filter(Boolean);
+      const latest=fmLatestTask(g);
+      const keys=latest?[fmNorm(fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"])))].filter(Boolean):[];
       taskStatusCache.set(g,keys);return keys;
     };
     const searchMatchedRows=firstMileCombinedRows.filter(g=>!search||[g.pickupPointId,...g.orders.flatMap(o=>Object.values(o)),...g.tasks.flatMap(t=>Object.values(t))].some(v=>fmNorm(v).includes(search)));
@@ -4449,7 +4458,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
     const orderKey=g=>[String(g.pickupPointId||""),...(g.orders||[]).map(o=>String(fmValue(o,["Order ID","Order No","Order Number","Pickup Order ID","order_id","order_sn","order_number"])||"")).filter(Boolean).sort()].join("|");
     function currentUnassigned(){
-      return new Set((firstMileCombinedRows||[]).filter(g=>!(g.tasks||[]).length||((g.tasks||[]).some(t=>fmNorm(fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"])))==="unassigned"))).map(orderKey));
+      return new Set((firstMileCombinedRows||[]).filter(g=>{const latest=fmLatestTask(g);return !latest||fmNorm(fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"])))==="unassigned";}).map(orderKey));
     }
     function beep(){
       if(!alarmEnabled||!alarmActive||!audioCtx)return;
