@@ -17,7 +17,7 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 The dashboard checks the installed extension package version separately from the bridge protocol version.
 
 Minimum versions:
-- Chrome: `1.1.8`
+- Chrome: `1.1.9`
 - Firefox: `69.3.5`
 
 Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard.
