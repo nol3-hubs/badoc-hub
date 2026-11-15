@@ -4129,7 +4129,16 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       return `<span class="fm-task-pill fm-task-${tone}">${fmEsc(label)}</span>`;
     }).join("");
   }
-  function fmPickupPointId(row){return fmValue(row,["Pickup Point ID","Pickup Point Id","Pickup Point","pickup_point_id","pickupPointId","service_point_id"],/^(pickup)?point(id)?$/i);}
+  function fmPickupPointId(row){
+    // SPX task exports have used several Pickup Point header variants. Resolve
+    // the identifier column broadly so "Pickup No Order" tasks still join to
+    // their pickup-point order group and retain the Onhold status.
+    return fmValue(row,[
+      "Pickup Point ID","Pickup Point Id","Pickup Point","Pickup Point Code",
+      "Pickup Point No","Pickup Point Number","Point ID","point_id",
+      "pickup_point_id","pickupPointId","service_point_id","service_point_code"
+    ],/^(pickup)?point(id|code|no|number)?$|^servicepoint(id|code|no|number)?$/i);
+  }
   function fmPickupPointName(row){return fmValue(row,["Pickup Point Name","To Pickup Point Name","From Pickup Point Name","Pickup Point","Service Point Name","pickup_point_name","to_pickup_point_name","from_pickup_point_name","service_point_name","pickupPointName","toPickupPointName","fromPickupPointName"],/^(from|to)?pickuppointname$|^servicepointname$/i);}
   function fmSellerName(row){
     return fmValue(row,[
