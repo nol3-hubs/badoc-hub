@@ -36,7 +36,7 @@ jobs:
               assert (root / name).is_file(), name
           print("Manifest and packaged files validated.")
           with open(os.environ["GITHUB_ENV"], "a") as env:
-              env.write("PACKAGE_VERSION=" + manifest["version"] + "\\n")
+              env.write("PACKAGE_VERSION=" + manifest["version"] + "\n")
           PY
           if grep -R -n --include='*.js' --include='*.json' --include='*.html' "chrome://extensions" extension-firefox; then
             echo "Chrome-only settings URL found in Firefox source."
@@ -61,13 +61,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.xpi" "downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-${PACKAGE_VERSION}.sha256"
           if ! git diff --cached --quiet; then
-            git commit -m "Publish unsigned Firefox SPX Bridge 69.2.6 package"
+            git commit -m "Publish unsigned Firefox SPX Bridge ${PACKAGE_VERSION} package"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
       - name: Upload XPI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SPX-BRIDGE-BADOC-HUB-69.2.6
+          name: SPX-BRIDGE-BADOC-HUB-FIREFOX-${{ env.PACKAGE_VERSION }}
           path: |
             SPX-BRIDGE-BADOC-HUB-FIREFOX-*.xpi
             SPX-BRIDGE-BADOC-HUB-FIREFOX-*.sha256
