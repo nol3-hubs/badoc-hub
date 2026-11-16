@@ -5260,15 +5260,15 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           sheetDate,             // Date (Asia/Manila)
           pointId,               // Pickup Point ID
           "",                    // No verified pickup Order ID in SPX Tasks export
-          "",                    // Bulky type unknown for task-only row
+          group.isTaskOnlyOnhold ? "Non-bulky" : "", // Bulky type for Onhold task rows
           "",                    // total_sc_weight
           "",                    // sc_max_item_max_dimension
           "",                    // sc_sum_item_height
           "",                    // packaging_type
           assignedRider,         // Assigned Rider from SPX Tasks
-          "",                    // Printed AWB? unknown
-          "",                    // Packaging Material unknown
-          sheetPickupStatus(taskStatus), // 5PM STATUS (Inbounded maps to Picked - Up; Onhold stays Onhold)
+          group.isTaskOnlyOnhold ? "TRUE" : "", // Printed AWB? checked for Onhold task rows
+          group.isTaskOnlyOnhold ? "Pouch - M" : "", // Packaging Material for Onhold task rows
+          "",                    // 5PM STATUS stays blank for task-only rows
           "",                    // 7PM STATUS
           "",                    // 9PM STATUS
           "",                    // EOD Status
