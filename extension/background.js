@@ -369,15 +369,18 @@ async function discoverFirstMileTask(startSec, fileName, kind, job) {
     // Pickup exports can be registered in the FM task source rather than the
     // default FMS task list. Query both source partitions and the default list,
     // and inspect several pages so a busy hub cannot hide the new export.
-    const taskSets = await Promise.all(["fm", "fms", ""].map(async source => {
+    const taskSets = await Promise.all(["fm", "fms", ""].flatMap(source => [
+      { source, omitStartTime: false },
+      { source, omitStartTime: true }
+    ]).map(async ({ source, omitStartTime }) => {
       const pages = [];
       for (let page = 1; page <= 3; page++) {
         try {
-          const batch = await listTasks(startSec, source, page);
+          const batch = await listTasks(startSec, source, page, omitStartTime);
           pages.push(...batch);
           if (batch.length < 100) break;
         } catch (error) {
-          if (page === 1) pages.push({ __list_error: `${source || "default"}: ${error?.message || String(error)}` });
+          if (page === 1) pages.push({ __list_error: `${source || "default"}${omitStartTime ? " unfiltered" : " recent"}: ${error?.message || String(error)}` });
           break;
         }
       }
@@ -451,15 +454,31 @@ function parseJsonResponse(label, response) {
   }
 }
 
-async function listTasks(startSec, source = "", page = 1) {
+async function listTasks(startSec, source = "", page = 1, omitStartTime = false) {
   const sourceParam = source ? `&source=${encodeURIComponent(source)}` : "";
-  const url = `${SPX_ORIGIN}${TASK_LIST_PATH}?start_time=${encodeURIComponent(startSec)}&count=100&pageno=${Math.max(1, Number(page) || 1)}${sourceParam}`;
+  const startParam = omitStartTime ? "" : `start_time=${encodeURIComponent(startSec)}&`;
+  const url = `${SPX_ORIGIN}${TASK_LIST_PATH}?${startParam}count=100&pageno=${Math.max(1, Number(page) || 1)}${sourceParam}`;
   const response = await extensionFetchText(url);
   const json = parseJsonResponse("SPX export task list", response);
   if (Number(json?.retcode) !== 0) {
     throw new Error(json?.message || "SPX task list request failed.");
   }
-  return Array.isArray(json?.data?.task_list) ? json.data.task_list : [];
+  // SPX has returned different task-list envelopes across portal modules.
+  // Do not silently turn an unfamiliar but successful response into [].
+  const candidates = [
+    json?.data?.task_list, json?.data?.list, json?.data?.tasks,
+    json?.task_list, json?.list, json?.tasks,
+    Array.isArray(json?.data) ? json.data : null
+  ];
+  const rows = candidates.find(Array.isArray);
+  if (rows) return rows;
+  const data = json?.data;
+  if (data && typeof data === "object") {
+    for (const [key, value] of Object.entries(data)) {
+      if (Array.isArray(value) && /task|list|record/i.test(key)) return value;
+    }
+  }
+  return [];
 }
 
 async function getSignedDownloadUrl(taskId) {
