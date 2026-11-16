@@ -27,6 +27,7 @@ Both extension bridge scripts report their package version during the handshake.
 - Pickup Tasks exports all statuses without driver, vehicle, pickup-point, or created-time restrictions.
 - The daily Pickup results keep Orders whose ETA is today (Philippine time), match task driver details by Pickup Point ID, preserve orders without a task/driver as `Unassigned`, and use the order export's Status.
 - Unmatched Inbounded task-only rows created today remain visible as a separate special case.
+- The combined Pickup CSV and Copy for Sheet use the same current search/status-filtered rows as the main table.
 
 ## Repository boundaries
 - This is the independent Test2 test repository.
