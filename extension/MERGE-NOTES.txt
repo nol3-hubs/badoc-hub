@@ -1,4 +1,4 @@
-BADOC HUB CHROME EXTENSION — Chrome v1.2.0 / Firefox v69.3.5
+BADOC HUB CHROME EXTENSION — Chrome v1.2.3 / Firefox v69.3.5
 First Mile Orders + Tasks integration
 
 SOURCE
@@ -56,5 +56,13 @@ UPDATE — 2026-11-16 · Pickup export and matching
 - Orders without a matching task or driver remain in the main table and Copy for Sheet with Driver Name shown as Unassigned.
 - Order Number, Pickup Point ID, Seller Name, ETA, and Status come from Pickup Orders; Driver Name comes from the matching Pickup Task.
 - The combined Pickup CSV now uses Order Number, Pickup Point ID, Seller Name, ETA, Status, and Driver Name; the download follows the table's current search and status filters.
-- The dashboard's embedded Chrome installer was refreshed to extension v1.2.1; the PWA cache and dashboard app versions were bumped to force clients to load the update.
+- The dashboard's embedded Chrome installer was refreshed to extension v1.2.3; the PWA cache and dashboard app versions were bumped to force clients to load the update.
 - Static source checks completed. Authenticated SPX export and live browser behavior still require a real sync test.
+
+
+UPDATE — 2026-11-16 · Chrome extension v1.2.3
+- Updated the dashboard's minimum required Chrome extension version to v1.2.3.
+- Refreshed the embedded Chrome installer package with extension/manifest.json and extension/background.js from the repository.
+- Updated installer success text and operation modal version labels.
+- Bumped the PWA cache key so deployed clients request the refreshed dashboard shell.
+- Live authenticated SPX export behavior still requires a browser test.
