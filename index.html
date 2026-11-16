@@ -1860,7 +1860,7 @@ html[data-theme="light"] .side > .theme-switch-row{
         <div id="firstMileCombinedTable" class="first-mile-combined-table"><div class="first-mile-combined-empty">Combined pickup information will appear here after both exports are saved.</div></div>
         <details id="firstMileUnmatchedPanel" hidden style="margin-top:12px;border:1px solid var(--border-color,#d8e0e8);border-radius:10px;padding:10px 12px;background:var(--card-bg,transparent)" open>
           <summary id="firstMileUnmatchedSummary" style="cursor:pointer;font-weight:700">Unmatched Tasks</summary>
-          <p class="hint" style="margin:8px 0">These SPX task records have no matching ETA-today Pickup Order by Pickup Point ID. Today's unmatched Inbounded tasks remain in the main results.</p>
+          <p class="hint" style="margin:8px 0">These SPX task records have no matching ETA-today Pickup Order by Pickup Point ID. Unmatched Inbounded and Onhold tasks also appear in the main results as task-only rows; Order Number, Seller Name, and ETA stay blank when no current-day Pickup Order exists.</p>
           <div id="firstMileUnmatchedTable" style="overflow:auto"></div>
         </details>
       </article>
@@ -4912,11 +4912,14 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         : "Unknown";
       unmatchedTaskStatusCounts[label]=(unmatchedTaskStatusCounts[label]||0)+1;
     });
-    // Promote unmatched Inbounded tasks into the main Pickup results. The Tasks
-    // export has no Order ID/ETA, so keep those fields blank instead of inventing
-    // values. Other unmatched task states stay in the separate diagnostic panel.
+    // Promote unmatched Inbounded and Onhold tasks into the main Pickup results.
+    // SPX Tasks has no Order Number, Seller Name, or ETA for task-only rows, so
+    // leave those fields blank rather than inventing order details.
     const unmatchedInboundedGroups=unmatchedTaskGroups.filter(group=>
       fmNorm(fmCombinedPickupStatus(group))==="inbounded"
+    );
+    const unmatchedOnholdGroups=unmatchedTaskGroups.filter(group=>
+      fmNorm(fmCombinedPickupStatus(group))==="onhold"
     );
     firstMileCombinedRows=[
       ...[...groups.values()].flatMap(group=>
@@ -4931,6 +4934,12 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         orders:[],
         eligibleOrders:[],
         isTaskOnlyInbounded:true
+      })),
+      ...unmatchedOnholdGroups.map(group=>({
+        ...group,
+        orders:[],
+        eligibleOrders:[],
+        isTaskOnlyOnhold:true
       }))
     ];
     window.__badocCheckNewUnassigned?.();
@@ -4949,7 +4958,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       return riderCollator.compare(nameA,nameB);
     });
     const matchedGroups=new Set(firstMileCombinedRows.filter(g=>g.pickupPointId&&!g.pickupPointId.startsWith("__")&&g.eligibleOrders.length&&g.tasks.length).map(g=>g.pickupPointId));
-    const unassignedDrivers=firstMileCombinedRows.filter(g=>!g.isTaskOnlyInbounded&&fmAssignedRiderDisplay(g)==="Unassigned").length;
+    const unassignedDrivers=firstMileCombinedRows.filter(g=>!g.isTaskOnlyInbounded&&!g.isTaskOnlyOnhold&&fmAssignedRiderDisplay(g)==="Unassigned").length;
     if(stats)stats.innerHTML=[[orderRows.length,"Orders · ETA today"],[matchedGroups.size,"Matched pickup points"],[unassignedDrivers,"Orders without assigned driver"],[tasksRows.length,"Tasks · all statuses"],[excludedEtaOrders,"Excluded · ETA not today"]].map(([n,l])=>`<div><strong>${Number(n).toLocaleString()}</strong><span>${l}</span></div>`).join("");
     const unmatchedPanel=$("firstMileUnmatchedPanel");
     const unmatchedSummary=$("firstMileUnmatchedSummary");
@@ -5012,8 +5021,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
     if(meta){
       const inboundedIncluded=unmatchedInboundedGroups.length;
+      const onholdIncluded=unmatchedOnholdGroups.length;
       const remainingUnmatched=unmatchedTaskGroups.filter(group=>
-        fmNorm(fmCombinedPickupStatus(group))!=="inbounded"
+        !["inbounded","onhold"].includes(fmNorm(fmCombinedPickupStatus(group)))
       );
       const remainingStatusCounts={};
       remainingUnmatched.forEach(group=>{
@@ -5023,7 +5033,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       const remainingStatusText=Object.entries(remainingStatusCounts)
         .map(([label,count])=>count+" "+label).join(", ");
       const parts=[];
-      if(inboundedIncluded)parts.push(inboundedIncluded+" unmatched Inbounded task(s) included in results and Copy for Sheet; Order ID and ETA are blank because SPX Tasks has no matching current-day Order.");
+      if(inboundedIncluded)parts.push(inboundedIncluded+" unmatched Inbounded task(s) included in results and Copy for Sheet; Order Number and ETA are blank because SPX Tasks has no matching current-day Order.");
+      if(onholdIncluded)parts.push(onholdIncluded+" unmatched Onhold task(s) also included in results and Copy for Sheet; Order Number and ETA are blank because SPX Tasks has no matching current-day Order. They remain listed below for reference.");
       if(remainingUnmatched.length)parts.push(remainingUnmatched.length+" other unmatched task point(s) remain below"+(remainingStatusText?" ("+remainingStatusText+")":"")+".");
       meta.textContent=parts.join(" ");
       if(!parts.length)meta.textContent="All ETA-today Orders were joined to Badoc Hub tasks by Pickup Point ID where a matching task exists.";
@@ -5033,9 +5044,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const selectedTaskStatus=$("firstMileTaskStatusFilter")?.value||"all";
     const searchMatchedRows=firstMileCombinedRows.filter(g=>!search||[g.pickupPointId,...g.orders.flatMap(o=>Object.values(o)),...g.tasks.flatMap(t=>Object.values(t))].some(v=>fmNorm(v).includes(search)));
     // Every ETA-today order is eligible, regardless of SPX order status or driver.
-    // Standalone task-only Inbounded rows remain eligible as before.
+    // Standalone task-only Inbounded and Onhold rows are also eligible.
     const eligibleStatusRows=searchMatchedRows.filter(g=>
-      (g.eligibleOrders||[]).length===1 || g.isTaskOnlyInbounded===true
+      (g.eligibleOrders||[]).length===1 || g.isTaskOnlyInbounded===true || g.isTaskOnlyOnhold===true
     );
     const statusFilter=$("firstMileTaskStatusFilter");
     const statusCounts=new Map();
@@ -5079,7 +5090,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       ["Driver Name",g=>fmAssignedRiderDisplay(g)]
     ];
     if(table && $("firstMile")?.classList.contains("active")){
-      if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No pickup orders or task-only Inbounded records match this search.</div>';
+      if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No pickup orders or task-only Inbounded / Onhold records match this search.</div>';
       else table.innerHTML=`<table><thead><tr>${columns.map(c=>`<th>${fmEsc(c[0])}</th>`).join("")}</tr></thead><tbody>${filtered.slice(0,2000).map(g=>
         `<tr>${columns.map(c=>{
           const value=c[1](g);
@@ -5238,10 +5249,11 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     for(const group of groups){
       const orders=group.eligibleOrders||[];
       const assignedRider=fmAssignedRiderDisplay(group)==="—"?"":fmAssignedRiderDisplay(group);
-      if(group.isTaskOnlyInbounded===true){
+      if(group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true){
         const task=fmLatestTask(group)||group.tasks?.[0]||{};
         const pointId=fmPickupPointId(task)||group.pickupPointId||"";
         const taskNumber=fmValue(task,["Pickup Task Number","Task Number","Pickup Task No","Task ID","task_id","pickup_task_number"]);
+        const taskStatus=fmCombinedPickupStatus(group)||(group.isTaskOnlyInbounded?"Inbounded":"Onhold");
         const cells=[
           sheetDate,             // Date (Asia/Manila)
           pointId,               // Pickup Point ID
@@ -5254,7 +5266,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           assignedRider,         // Assigned Rider from SPX Tasks
           "",                    // Printed AWB? unknown
           "",                    // Packaging Material unknown
-          sheetPickupStatus("Inbounded"), // 5PM STATUS
+          sheetPickupStatus(taskStatus), // 5PM STATUS (Inbounded maps to Picked - Up; Onhold stays Onhold)
           "",                    // 7PM STATUS
           "",                    // 9PM STATUS
           "",                    // EOD Status
