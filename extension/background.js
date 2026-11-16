@@ -1562,10 +1562,9 @@ function buildFirstMileExportUrl(kind, selectedDate) {
     };
     return `${SPX_ORIGIN}${FM_PICKUP_ORDER_PATH}?${fmQuery(params)}`;
   }
-  // Do not restrict pickup tasks to Arrived/Accepted/Pickup Done. SPX task export
-  // also needs Inbounded rows so the dashboard can read inbounded pickups automatically.
-  const params = {};
-  return `${SPX_ORIGIN}${FM_PICKUP_TASK_PATH}?${fmQuery(params)}`;
+  // Do not pass a status subset. The former 8,2,7 filter excluded Inbounded.
+  // Requesting without a status filter lets SPX return every task state.
+  return SPX_ORIGIN + FM_PICKUP_TASK_PATH;
 }
 
 async function runFirstMileExportJob(job) {
@@ -1651,17 +1650,56 @@ async function runFirstMileExportJob(job) {
   }
 }
 
+function countFirstMileCsvColumnValue(csvText, columnAliases, expectedValue) {
+  const source = String(csvText || "").replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (quoted) {
+      if (ch === '"' && source[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") { row.push(cell); cell = ""; }
+    else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (ch !== "\r") cell += ch;
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  if (!rows.length) return null;
+  const norm = value => String(value ?? "").normalize("NFKC").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  const aliases = new Set((columnAliases || []).map(norm));
+  const headerIndex = rows[0].findIndex(value => aliases.has(norm(value)));
+  if (headerIndex < 0) return null;
+  const wanted = norm(expectedValue);
+  return rows.slice(1).filter(values => norm(values[headerIndex]) === wanted).length;
+}
+
 function finishFirstMileExport(job, kind, date, taskId, csv, label) {
   const rows = Math.max(0, String(csv?.text || "").split(/\r?\n/).filter(Boolean).length - 1);
-  progress(`${label}: downloaded ${rows.toLocaleString()} rows. Returning CSV to BADOC HUB…`, { phase: "first-mile-import", kind, taskId, rowCount: rows });
+  const inboundedCount = kind === "first-mile-tasks"
+    ? countFirstMileCsvColumnValue(csv?.text, ["Status", "Task Status", "Pickup Task Status"], "Inbounded")
+    : null;
+  if (kind === "first-mile-tasks" && inboundedCount === null) {
+    throw new Error("SPX First Mile Tasks export is missing the Status column. The existing saved Tasks data was kept.");
+  }
+  const statusSummary = inboundedCount === null ? "" : " · " + inboundedCount.toLocaleString() + " Inbounded";
+  progress(label + ": downloaded " + rows.toLocaleString() + " rows" + statusSummary + ". Returning CSV to BADOC HUB…", {
+    phase: "first-mile-import", kind, taskId, rowCount: rows,
+    ...(inboundedCount === null ? {} : { inboundedCount })
+  });
   sendToBadoc(kind === "first-mile-orders" ? "BADOC_SPX_FIRST_MILE_ORDERS_CSV" : "BADOC_SPX_FIRST_MILE_TASKS_CSV", {
     taskId: taskId || "direct",
     selectedDate: date,
     fileName: csv.fileName || (kind === "first-mile-orders" ? "first_mile_orders.csv" : "first_mile_tasks.csv"),
     csvText: csv.text,
-    rowCount: rows
+    rowCount: rows,
+    ...(inboundedCount === null ? {} : { inboundedCount })
   });
-  progress(`${label}: ${rows.toLocaleString()} rows ready for import.`, { phase: "first-mile-done", kind, taskId: taskId || 0, rowCount: rows });
+  progress(label + ": " + rows.toLocaleString() + " rows ready for import" + statusSummary + ".", {
+    phase: "first-mile-done", kind, taskId: taskId || 0, rowCount: rows,
+    ...(inboundedCount === null ? {} : { inboundedCount })
+  });
 }
 
 async function runParcelSecondaryJob(job) {

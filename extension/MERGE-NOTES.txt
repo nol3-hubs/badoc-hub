@@ -1,4 +1,4 @@
-BADOC HUB CHROME EXTENSION — v1.0.9
+BADOC HUB CHROME EXTENSION — Chrome v1.2.0 / Firefox v69.3.5
 First Mile Orders + Tasks integration
 
 SOURCE
@@ -41,3 +41,9 @@ INSTALL
 4. Remove/disable the old Badoc Hub extension version.
 5. Choose Load unpacked and select the extracted extension-chrome folder.
 6. Refresh the BADOC Hub dashboard and reload the SPX tab.
+
+
+UPDATE — 2026-11-16
+- Removed the manual Replace Tasks CSV control from the Pickup page.
+- First Mile Tasks export no longer applies the Arrived/Accepted/Pickup Done-only status subset; it requests all SPX task statuses, including Inbounded.
+- Extension validates that the returned Tasks CSV contains a Status column and reports the Inbounded row count during import.

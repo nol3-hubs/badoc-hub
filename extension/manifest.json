@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badoc Hub Extension",
-  "version": "1.1.9",
-  "description": "Badoc Hub extension with improved First Mile Orders export task discovery across SPX FM and FMS task lists.",
+  "version": "1.2.0",
+  "description": "Badoc Hub extension with First Mile task export includes all SPX statuses, including Inbounded.",
   "permissions": [
     "cookies",
     "scripting",
