@@ -1296,6 +1296,99 @@ html[data-theme="light"] .side > .theme-switch-row{
   display:none!important;
 }
 </style>
+<style id="badoc-sidebar-fit-all-menus">
+/* Compact expanded sidebar so all destinations and footer controls fit in laptop-height viewports. */
+.side{
+  padding:14px 12px 8px!important;
+  gap:0!important;
+}
+.side > .brand{
+  padding:3px 8px 12px!important;
+  font-size:18px!important;
+  line-height:1.15!important;
+}
+.side > .nav{
+  flex:0 0 auto!important;
+  padding:0!important;
+  margin:0!important;
+}
+.side > .nav > button,
+.side > .nav .planning-board-nav-head > button{
+  min-height:32px!important;
+  height:auto!important;
+  margin:1px 0!important;
+  padding:6px 9px!important;
+  font-size:12px!important;
+  line-height:1.15!important;
+  border-radius:8px!important;
+}
+.side > .nav .planning-board-nav-head{
+  display:flex!important;
+  align-items:center!important;
+  gap:2px!important;
+  min-height:32px!important;
+}
+.side > .nav .planning-board-nav-head .planning-board-primary{
+  flex:1 1 auto!important;
+  min-width:0!important;
+}
+.side > .nav .planning-board-nav-head .planning-board-toggle{
+  flex:0 0 26px!important;
+  width:26px!important;
+  min-width:26px!important;
+  padding:4px!important;
+}
+.side > .nav .nav-group-label{
+  margin:6px 8px 2px!important;
+  padding-top:6px!important;
+  font-size:8px!important;
+  line-height:1.1!important;
+  letter-spacing:.09em!important;
+}
+.side > .nav .nav-group-label:first-of-type{
+  margin-top:4px!important;
+}
+.side > .sidebar-footer{
+  gap:3px!important;
+  padding:5px 0 3px!important;
+}
+.side > .sidebar-footer > .theme-switch-row{
+  min-height:30px!important;
+  padding:2px 4px 5px!important;
+}
+.side > .sidebar-footer > .side-collapse-btn{
+  min-height:31px!important;
+  padding:5px 8px!important;
+  font-size:10px!important;
+}
+.side > .sidebar-footer .theme-switch-label{
+  font-size:11px!important;
+}
+@media(max-height:820px) and (min-width:701px){
+  .side{padding-top:10px!important;padding-bottom:5px!important}
+  .side > .brand{padding-bottom:8px!important;font-size:17px!important}
+  .side > .nav > button,
+  .side > .nav .planning-board-nav-head > button{
+    min-height:29px!important;
+    padding-top:4px!important;
+    padding-bottom:4px!important;
+    font-size:11px!important;
+  }
+  .side > .nav .planning-board-nav-head{min-height:29px!important}
+  .side > .nav .nav-group-label{
+    margin-top:4px!important;
+    padding-top:4px!important;
+    margin-bottom:1px!important;
+    font-size:7px!important;
+  }
+  .side > .sidebar-footer{padding-top:3px!important}
+  .side > .sidebar-footer > .theme-switch-row{min-height:27px!important;padding-bottom:3px!important}
+  .side > .sidebar-footer > .side-collapse-btn{min-height:28px!important}
+}
+@media(max-width:700px){
+  .side{display:none!important}
+}
+</style>
 </head>
 <body data-app-version="21">
 
