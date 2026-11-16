@@ -1554,16 +1554,14 @@ function buildFirstMileExportUrl(kind, selectedDate) {
   if (kind === "first-mile-orders") {
     const fromDate = shiftIsoDate(date, -FM_ORDER_LOOKBACK_DAYS);
     const fromSec = startSec - FM_ORDER_LOOKBACK_DAYS * 86400;
+    // SPX dialog: All statuses and All bulky types; Created Time is the only restriction.
     const params = {
       ctime: `${fromSec},${endSec}`,
-      status: "2,0,4,13",
-      bulky_type: "1,0,2",
-      format_condition: `Status= Assigned,Created,Picked up,Pickup Retry; Bulky Type= Bulky,N/A,Non-Bulky; Created Time= ${fromDate} 00:00:00,${date} 23:59:59`
+      format_condition: `Created Time= ${fromDate} 00:00:00,${date} 23:59:59`
     };
     return `${SPX_ORIGIN}${FM_PICKUP_ORDER_PATH}?${fmQuery(params)}`;
   }
-  // Do not pass a status subset. The former 8,2,7 filter excluded Inbounded.
-  // Requesting without a status filter lets SPX return every task state.
+  // SPX Pickup Task Management: All statuses, no other filter fields.
   return SPX_ORIGIN + FM_PICKUP_TASK_PATH;
 }
 
