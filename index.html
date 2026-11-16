@@ -4758,8 +4758,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     return fmOrderSheetStatus(order)==="Picked Up"?"Picked Up":"Not Picked Up";
   }
   function fmCombinedPickupStatus(group){
-    const order=group?.eligibleOrders?.[0]||group?.orders?.[0]||null;
-    // Pickup Orders is the source of truth for the status of an order.
+    // Only an ETA-today eligible Pickup Order is authoritative for a matched row.
+    // Historical orders attached for context must never override a task-only row.
+    const order=group?.eligibleOrders?.[0]||null;
     if(order)return fmPickupOrderStatus(order)||fmOrderSheetStatus(order)||"Unknown";
     const latest=fmLatestTask(group);
     return latest
@@ -4767,7 +4768,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       :"Unknown";
   }
   function fmOrderLinksHtml(group){
-    const ids=(group?.orders||[]).map(fmOrderId).filter(Boolean);
+    // Show only current ETA-today order IDs; historical context is not an order result.
+    const ids=(group?.eligibleOrders||[]).map(fmOrderId).filter(Boolean);
     if(!ids.length)return "—";
     const linkFor=id=>{
       const href=`https://spx.shopee.ph/#/orderDetail/${encodeURIComponent(id)}/pickup_info`;
@@ -5034,7 +5036,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         .map(([label,count])=>count+" "+label).join(", ");
       const parts=[];
       if(inboundedIncluded)parts.push(inboundedIncluded+" unmatched Inbounded task(s) included in results and Copy for Sheet; Order Number and ETA are blank because SPX Tasks has no matching current-day Order.");
-      if(onholdIncluded)parts.push(onholdIncluded+" unmatched Onhold task(s) also included in results and Copy for Sheet; Order Number and ETA are blank because SPX Tasks has no matching current-day Order. They remain listed below for reference.");
+      if(onholdIncluded)parts.push(onholdIncluded+" unmatched Onhold task(s) included in the main results and Copy for Sheet; Order Number and ETA are blank because SPX Tasks has no matching current-day Order.");
       if(remainingUnmatched.length)parts.push(remainingUnmatched.length+" other unmatched task point(s) remain below"+(remainingStatusText?" ("+remainingStatusText+")":"")+".");
       meta.textContent=parts.join(" ");
       if(!parts.length)meta.textContent="All ETA-today Orders were joined to Badoc Hub tasks by Pickup Point ID where a matching task exists.";
@@ -5082,10 +5084,10 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const copyOrderCount=filtered.length;
     if(copyBtn){copyBtn.disabled=copyOrderCount===0;copyBtn.textContent=copyOrderCount?`Copy for Sheet (${copyOrderCount})`:"Copy for Sheet";}
     const columns=[
-      ["Order Number",g=>fmOrderId(g.orders[0]||{})||"—"],
-      ["Pickup Point ID",g=>fmPickupPointId(g.orders[0]||g.tasks[0]||{})||g.pickupPointId||"—"],
-      ["Seller Name",g=>fmSellerName(g.orders[0]||{})||"—"],
-      ["ETA",g=>fmValue(g.orders[0]||{},["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","eta_date","eta_time"])||"—"],
+      ["Order Number",g=>fmOrderId(g.eligibleOrders?.[0]||{})||"—"],
+      ["Pickup Point ID",g=>fmPickupPointId(g.eligibleOrders?.[0]||g.tasks[0]||{})||g.pickupPointId||"—"],
+      ["Seller Name",g=>fmSellerName(g.eligibleOrders?.[0]||{})||"—"],
+      ["ETA",g=>fmValue(g.eligibleOrders?.[0]||{},["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","eta_date","eta_time"])||"—"],
       ["Status",g=>fmCombinedPickupStatus(g)||"Unknown"],
       ["Driver Name",g=>fmAssignedRiderDisplay(g)]
     ];
@@ -5328,7 +5330,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const headers=["Order Number","Pickup Point ID","Seller Name","ETA","Status","Driver Name"];
     const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
     const lines=[headers.map(q).join(","),...exportRows.map(g=>{
-      const order=g.orders[0]||{};
+      const order=g.eligibleOrders?.[0]||{};
       return [
         fmOrderId(order),
         fmPickupPointId(order)||fmPickupPointId(g.tasks[0]||{})||g.pickupPointId,
