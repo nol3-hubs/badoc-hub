@@ -4729,6 +4729,12 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
   $("copyFirstMileForSheet")?.addEventListener("click",async()=>{
     const groups=firstMileVisibleRows||[];
     const clean=value=>String(value??"").replace(/[\t\r\n]+/g," ").trim();
+    // Copy for Sheet maps Inbounded and Picked Up to the sheet's "Picked - Up" label.
+    // This conversion is deliberately local to the copy action; the Pickup UI/export keep their own statuses.
+    const sheetPickupStatus=value=>{
+      const status=String(value??"").trim();
+      return ["inbounded","pickedup"].includes(fmNorm(status)) ? "Picked - Up" : status;
+    };
     const lines=[];
     // Column positions follow the user's 16 spreadsheet headers exactly.
     // Date is today's Philippine date; parcel measurement and tracking fields
@@ -4755,7 +4761,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           assignedRider,         // Assigned Rider from SPX Tasks
           "",                    // Printed AWB? unknown
           "",                    // Packaging Material unknown
-          "Inbounded",           // 5PM STATUS
+          sheetPickupStatus("Inbounded"), // 5PM STATUS
           "",                    // 7PM STATUS
           "",                    // 9PM STATUS
           "",                    // EOD Status
@@ -4779,7 +4785,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           assignedRider,   // ASSIGNED RIDER - from Pickup Tasks export
           "TRUE",          // Printed AWB?
           "Pouch - M",     // Packaging Material to be used
-          (fmOrderSheetStatus(order)==="Picked Up"?"Picked - Up":fmOrderSheetStatus(order)), // 5PM STATUS
+          sheetPickupStatus(fmOrderSheetStatus(order)), // 5PM STATUS
           "",              // 7PM STATUS
           "",              // 9PM STATUS
           "",              // EOD Status
