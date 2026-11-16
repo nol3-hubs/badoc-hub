@@ -3,7 +3,7 @@
 Independent test repository merged from the newer `nol3-hubs/test` project while retaining Test2's extension-version validation and GitHub Actions workflows.
 
 ## Included
-- BADOC Hub dashboard v70
+- BADOC Hub dashboard v71
 - Chrome extension v1.2.0, including First Mile Orders and Tasks
 - Firefox extension v69.3.5
 - First Mile XLSX-to-CSV support
@@ -17,7 +17,7 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 The dashboard checks the installed extension package version separately from the bridge protocol version.
 
 Minimum versions:
-- Chrome: `1.1.9`
+- Chrome: `1.2.0`
 - Firefox: `69.3.5`
 
 Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard.
