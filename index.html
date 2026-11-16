@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v74">
+<meta name="badoc-app-version" content="v75">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -4425,15 +4425,27 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         : "Unknown";
       unmatchedTaskStatusCounts[label]=(unmatchedTaskStatusCounts[label]||0)+1;
     });
-    // Render one independent row per eligible current-day pickup Order ID.
-    // Task-only and historical-order-only groups are not mixed into this table.
-    firstMileCombinedRows=[...groups.values()].flatMap(group=>
-      (group.eligibleOrders||[]).map(order=>({
-        ...group,
-        orders:[order],
-        eligibleOrders:[order]
-      }))
+    // Promote unmatched Inbounded tasks into the main Pickup results. The Tasks
+    // export has no Order ID/ETA, so keep those fields blank instead of inventing
+    // values. Other unmatched task states stay in the separate diagnostic panel.
+    const unmatchedInboundedGroups=unmatchedTaskGroups.filter(group=>
+      fmNorm(fmCombinedPickupStatus(group))==="inbounded"
     );
+    firstMileCombinedRows=[
+      ...[...groups.values()].flatMap(group=>
+        (group.eligibleOrders||[]).map(order=>({
+          ...group,
+          orders:[order],
+          eligibleOrders:[order]
+        }))
+      ),
+      ...unmatchedInboundedGroups.map(group=>({
+        ...group,
+        orders:[],
+        eligibleOrders:[],
+        isTaskOnlyInbounded:true
+      }))
+    ];
     window.__badocCheckNewUnassigned?.();
     // Sort pickup-point rows by Assigned Rider A–Z. Names within each group are
     // already alphabetized by fmAssignedRiderDisplay(); groups without a rider go last.
@@ -4458,6 +4470,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const unmatchedTable=$("firstMileUnmatchedTable");
     const unmatchedSearchText=fmNorm($("firstMileCombinedSearch")?.value||"");
     const visibleUnmatchedTaskGroups=unmatchedTaskGroups.filter(group=>
+      fmNorm(fmCombinedPickupStatus(group))!=="inbounded"
+    ).filter(group=>
       !unmatchedSearchText ||
       [group.pickupPointId,...(group.tasks||[]).flatMap(task=>Object.values(task)),
        fmPickupNameDisplay(group),fmAssignedRiderDisplay(group)]
@@ -4511,16 +4525,22 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       }
     }
     if(meta){
-      const unmatchedTotal=unmatchedTaskGroups.length;
-      const unmatchedStatusText=Object.entries(unmatchedTaskStatusCounts)
-        .sort((a,b)=>a[0].localeCompare(b[0]))
-        .map(([label,count])=>count+" "+label)
-        .join(", ");
-      meta.textContent=unmatchedTotal
-        ? "Unmatched task points shown below: "+unmatchedTotal+
-          (unmatchedStatusText?" ("+unmatchedStatusText+")":"")+
-          ". They are excluded from Copy for Sheet because no eligible current-day Order matched by Pickup Point ID."
-        : "All current-day Badoc Hub task points matched to eligible Orders.";
+      const inboundedIncluded=unmatchedInboundedGroups.length;
+      const remainingUnmatched=unmatchedTaskGroups.filter(group=>
+        fmNorm(fmCombinedPickupStatus(group))!=="inbounded"
+      );
+      const remainingStatusCounts={};
+      remainingUnmatched.forEach(group=>{
+        const label=fmNorm(fmCombinedPickupStatus(group))||"unknown";
+        remainingStatusCounts[label]=(remainingStatusCounts[label]||0)+1;
+      });
+      const remainingStatusText=Object.entries(remainingStatusCounts)
+        .map(([label,count])=>count+" "+label).join(", ");
+      const parts=[];
+      if(inboundedIncluded)parts.push(inboundedIncluded+" unmatched Inbounded task(s) included in results and Copy for Sheet; Order ID and ETA are blank because SPX Tasks has no matching current-day Order.");
+      if(remainingUnmatched.length)parts.push(remainingUnmatched.length+" other unmatched task point(s) remain below"+(remainingStatusText?" ("+remainingStatusText+")":"")+".");
+      meta.textContent=parts.join(" ");
+      if(!parts.length)meta.textContent="All current-day Badoc Hub task points matched to eligible Orders.";
     }
     if(downloadBtn)downloadBtn.disabled=!firstMileCombinedRows.length;
     const search=fmNorm($("firstMileCombinedSearch")?.value||"");
@@ -4529,7 +4549,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     // Main Pickup table contains only rows with one eligible current-day Order.
     // Therefore every row counted in the status dropdown is also one sheet row.
     const eligibleStatusRows=searchMatchedRows.filter(g=>
-      (g.eligibleOrders||[]).length===1 &&
+      ((g.eligibleOrders||[]).length===1 || g.isTaskOnlyInbounded===true) &&
       ["assigned","pickedup","onhold","inbounded"].includes(fmNorm(fmCombinedPickupStatus(g)))
     );
     const statusCounts={
@@ -4698,9 +4718,34 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }).format(new Date());
     for(const group of groups){
       const orders=group.eligibleOrders||[];
+      const assignedRider=fmAssignedRiderDisplay(group)==="—"?"":fmAssignedRiderDisplay(group);
+      if(group.isTaskOnlyInbounded===true){
+        const task=fmLatestTask(group)||group.tasks?.[0]||{};
+        const pointId=fmPickupPointId(task)||group.pickupPointId||"";
+        const taskNumber=fmValue(task,["Pickup Task Number","Task Number","Pickup Task No","Task ID","task_id","pickup_task_number"]);
+        const cells=[
+          sheetDate,             // Date (Asia/Manila)
+          pointId,               // Pickup Point ID
+          "",                    // No verified pickup Order ID in SPX Tasks export
+          "",                    // Bulky type unknown for task-only row
+          "",                    // total_sc_weight
+          "",                    // sc_max_item_max_dimension
+          "",                    // sc_sum_item_height
+          "",                    // packaging_type
+          assignedRider,         // Assigned Rider from SPX Tasks
+          "",                    // Printed AWB? unknown
+          "",                    // Packaging Material unknown
+          "Inbounded",           // 5PM STATUS
+          "",                    // 7PM STATUS
+          "",                    // 9PM STATUS
+          "",                    // EOD Status
+          taskNumber ? "SPX Task "+taskNumber+" · No matching current-day Order" : "No matching current-day Order"
+        ];
+        lines.push(cells.map(clean).join("\t"));
+        continue;
+      }
       if(orders.length!==1)continue;
       const pointId=fmPickupPointId(orders[0])||fmPickupPointId((group.tasks||[])[0]||{});
-      const assignedRider=fmAssignedRiderDisplay(group)==="—"?"":fmAssignedRiderDisplay(group);
       for(const order of orders){
         const cells=[
           sheetDate,       // Column 1 - date (Asia/Manila)
@@ -4714,9 +4759,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           assignedRider,   // ASSIGNED RIDER - from Pickup Tasks export
           "TRUE",          // Printed AWB?
           "Pouch - M",     // Packaging Material to be used
-          (fmOrderSheetStatus(order)==="Picked Up"?"Picked - Up":fmOrderSheetStatus(order)), // 5PM STATUS - 17:00: exact sheet label
-          "",              // 7PM STATUS - 19:00
-          "",              // 9PM STATUS - 21:00
+          (fmOrderSheetStatus(order)==="Picked Up"?"Picked - Up":fmOrderSheetStatus(order)), // 5PM STATUS
+          "",              // 7PM STATUS
+          "",              // 9PM STATUS
           "",              // EOD Status
           ""               // Remarks
         ];
