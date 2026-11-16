@@ -1046,32 +1046,106 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
 #firstMile #enableFirstMileAlarm:disabled{opacity:.78!important;cursor:default!important}
 #firstMile #ackFirstMileAlarm{background:#b45309!important;color:#fff!important;border:1px solid #f59e0b!important}
 </style>
+<style id="badoc-navigation-display-cleanup">
+/* Sidebar categories improve scanning without changing page targets. */
+.nav-group-label{
+  display:block;
+  margin:12px 10px 5px;
+  padding-top:10px;
+  border-top:1px solid var(--line);
+  color:var(--muted);
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.11em;
+  line-height:1.2;
+  text-transform:uppercase;
+}
+.nav-group-label:first-of-type{margin-top:7px}
+.nav button,.planning-board-nav-head button{
+  min-height:40px;
+  line-height:1.2;
+}
+.nav button:focus-visible,.planning-board-nav-head button:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+.nav button[title]{cursor:pointer}
+.app.side-collapsed .nav-group-label{display:none!important}
+.app.side-collapsed .nav button{min-height:40px!important}
+@media(max-width:900px){
+  .nav-group-label{margin:10px 4px 4px;padding-top:8px;font-size:8px;letter-spacing:.08em}
+  .nav button,.planning-board-nav-head button{min-height:38px}
+}
+/* Keep metric cards aligned and numbers easy to compare. */
+#homeDashboard .dashboard-summary-grid,
+#homeDashboard .dashboard-status-grid{
+  align-items:stretch!important;
+}
+#homeDashboard .dashboard-summary-card,
+#homeDashboard .dashboard-status-card{
+  height:100%;
+  min-width:0;
+  box-sizing:border-box;
+  font-variant-numeric:tabular-nums;
+}
+#homeDashboard .dashboard-summary-card strong,
+#homeDashboard .dashboard-status-card strong,
+#homeDashboard .dashboard-kpi-card strong{
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em;
+}
+#homeDashboard .dashboard-summary-card span,
+#homeDashboard .dashboard-status-card span{
+  line-height:1.2;
+}
+@media(max-width:1100px) and (min-width:701px){
+  #homeDashboard .dashboard-summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  #homeDashboard .dashboard-status-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+}
+@media(max-width:700px){
+  #homeDashboard .dashboard-summary-grid{grid-template-columns:1fr!important}
+  #homeDashboard .dashboard-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  #homeDashboard .dashboard-summary-card,
+  #homeDashboard .dashboard-status-card{min-height:64px}
+}
+@media(max-width:380px){
+  #homeDashboard .dashboard-status-grid{grid-template-columns:1fr!important}
+}
+</style>
 </head>
 <body data-app-version="21">
 
 <div class="app">
 <aside class="side"><button id="sideCollapseBtn" class="side-collapse-btn" type="button" aria-label="Collapse menu" title="Collapse menu">‹</button>
   <div class="brand">BADOC HUB<small></small></div>
-  <nav class="nav">
-    <button class="active" data-page="homeDashboard"><span class="ico">▣</span> Dashboard</button>
+  <nav class="nav" aria-label="Main navigation">
+    <button class="active" data-page="homeDashboard" title="Dashboard"><span class="ico">▣</span> Dashboard</button>
+
+    <div class="nav-group-label">OPERATIONS</div>
     <div class="planning-board-nav" id="planningBoardNav">
       <div class="planning-board-nav-head">
-        <button type="button" class="planning-board-primary" data-page="dashboard"><span class="ico">▦</span> Planning Board</button>
+        <button type="button" class="planning-board-primary" data-page="dashboard" title="Planning Board"><span class="ico">▦</span> Planning Board</button>
         <button type="button" class="planning-board-toggle" id="planningBoardToggle" aria-expanded="false" aria-controls="planningBoardSubmenu" aria-label="Show Planning Board pages" title="Show Planning Board pages">›</button>
       </div>
       <div class="planning-board-submenu" id="planningBoardSubmenu">
-        <button type="button" data-page="volumeForecastBoard"><span class="sub-ico">•</span> Volume Forecast</button>
+        <button type="button" data-page="volumeForecastBoard" title="Volume Forecast"><span class="sub-ico">•</span> Volume Forecast</button>
       </div>
     </div>
-    <button data-page="linehaul"><span class="ico">⇄</span> Linehaul Task</button>
-    <button data-page="receivedChecking"><span class="ico">✓</span> Dispatch</button>
-    <button data-page="firstMile"><span class="ico">↗</span> Pickup</button>
-    <button data-page="podPoohChecker"><span class="ico">◎</span> POD/POOH Checker</button>
-    <button data-page="dailyHistory"><span class="ico">◷</span> Data</button>
-    <button data-page="ridersData"><span class="ico">♙</span> Riders Data</button>
-    <button data-page="kpi"><span class="ico">▣</span> KPI</button>
-    <button data-page="instructions"><span class="ico">☷</span> Instructions</button>
-    <button data-page="settings"><span class="ico">⚙</span> Settings</button>
+    <button data-page="linehaul" title="Linehaul Task"><span class="ico">⇄</span> Linehaul Task</button>
+    <button data-page="receivedChecking" title="Dispatch"><span class="ico">✓</span> Dispatch</button>
+    <button data-page="firstMile" title="Pickup"><span class="ico">↗</span> Pickup</button>
+
+    <div class="nav-group-label">MONITORING & DATA</div>
+    <button data-page="podPoohChecker" title="POD/POOH Checker"><span class="ico">◎</span> POD/POOH Checker</button>
+    <button data-page="dailyHistory" title="Data"><span class="ico">◷</span> Data</button>
+
+    <div class="nav-group-label">PERFORMANCE</div>
+    <button data-page="ridersData" title="Riders Data"><span class="ico">♙</span> Riders Data</button>
+    <button data-page="kpi" title="KPI"><span class="ico">▣</span> KPI</button>
+
+    <div class="nav-group-label">SYSTEM</div>
+    <button data-page="instructions" title="Instructions"><span class="ico">☷</span> Instructions</button>
+    <button data-page="settings" title="Settings"><span class="ico">⚙</span> Settings</button>
   </nav>
     <div class="theme-switch-row">
       <span class="theme-switch-label"><span class="ico theme-switch-ico-sun">&#9728;</span><span class="ico theme-switch-ico-moon">&#9790;</span><span class="theme-switch-text">Light Mode</span></span>
