@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v68">
+<meta name="badoc-app-version" content="v69">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -4597,7 +4597,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           assignedRider,   // ASSIGNED RIDER - from Pickup Tasks export
           "TRUE",          // Printed AWB?
           "Pouch - M",     // Packaging Material to be used
-          fmOrderSheetStatus(order), // 5PM STATUS - 17:00: mark only orders whose SPX Order ID status is Picked up
+          (fmOrderSheetStatus(order)==="Picked Up"?"Picked - Up":fmOrderSheetStatus(order)), // 5PM STATUS - 17:00: exact sheet label
           "",              // 7PM STATUS - 19:00
           "",              // 9PM STATUS - 21:00
           "",              // EOD Status
