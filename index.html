@@ -1150,11 +1150,123 @@ html[data-theme="light"] .side > .theme-switch-row{
   .side{display:none!important}
 }
 </style>
+<style id="badoc-sidebar-collapse-upgrade">
+/* Sidebar footer: theme switch and collapse control share one clean, stable area. */
+.side{
+  display:flex!important;
+  flex-direction:column!important;
+  height:100vh!important;
+  min-height:100vh!important;
+  min-width:0!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+}
+.side > .nav{
+  flex:0 0 auto!important;
+  min-width:0!important;
+}
+.side > .sidebar-footer{
+  position:sticky!important;
+  bottom:0!important;
+  z-index:10010!important;
+  display:flex!important;
+  flex-direction:column!important;
+  gap:6px!important;
+  flex:0 0 auto!important;
+  width:100%!important;
+  margin-top:auto!important;
+  padding:8px 0 6px!important;
+  background:var(--bg,#080d12)!important;
+  border-top:1px solid var(--line,#25313e)!important;
+}
+.side > .sidebar-footer > .theme-switch-row{
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:8px!important;
+  width:100%!important;
+  min-width:0!important;
+  margin:0!important;
+  padding:3px 4px 7px!important;
+  border:0!important;
+  background:transparent!important;
+}
+.side > .sidebar-footer .theme-switch-label{
+  min-width:0!important;
+  gap:7px!important;
+}
+.side > .sidebar-footer .side-collapse-btn{
+  position:static!important;
+  inset:auto!important;
+  transform:none!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:36px!important;
+  margin:0!important;
+  padding:7px 10px!important;
+  border:1px solid var(--line,#25313e)!important;
+  border-radius:9px!important;
+  background:var(--panel,#111720)!important;
+  color:var(--muted,#aebbc5)!important;
+  box-shadow:none!important;
+  font:600 11px/1.2 Inter,Segoe UI,Arial,sans-serif!important;
+  cursor:pointer!important;
+}
+.side > .sidebar-footer .side-collapse-btn:hover{
+  border-color:var(--blue,#3da5ff)!important;
+  background:var(--panel2,#141922)!important;
+  color:var(--text,#f5f8fc)!important;
+}
+.side-collapse-icon{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:18px!important;
+  height:18px!important;
+  font-size:20px!important;
+  line-height:1!important;
+  font-weight:700!important;
+}
+.side-collapse-label{display:inline!important}
+.app.side-collapsed .side > .sidebar-footer{
+  align-items:center!important;
+  padding:8px 0 5px!important;
+}
+.app.side-collapsed .side > .sidebar-footer > .theme-switch-row{
+  flex-direction:column!important;
+  justify-content:center!important;
+  gap:8px!important;
+  padding:3px 0 7px!important;
+}
+.app.side-collapsed .side > .sidebar-footer .theme-switch-label{
+  justify-content:center!important;
+}
+.app.side-collapsed .side > .sidebar-footer .theme-switch-text,
+.app.side-collapsed .side > .sidebar-footer .side-collapse-label{
+  display:none!important;
+}
+.app.side-collapsed .side > .sidebar-footer .side-collapse-btn{
+  width:48px!important;
+  min-height:38px!important;
+  padding:5px!important;
+}
+@media(max-width:900px) and (min-width:701px){
+  .side > .sidebar-footer .side-collapse-btn{font-size:10px!important}
+}
+@media(max-width:700px){
+  .side{display:none!important}
+}
+</style>
 </head>
 <body data-app-version="21">
 
 <div class="app">
-<aside class="side"><button id="sideCollapseBtn" class="side-collapse-btn" type="button" aria-label="Collapse menu" title="Collapse menu">‹</button>
+<aside class="side">
   <div class="brand">BADOC HUB<small></small></div>
   <nav class="nav" aria-label="Main navigation">
     <button class="active" data-page="homeDashboard" title="Dashboard"><span class="ico">▣</span> Dashboard</button>
@@ -1185,10 +1297,16 @@ html[data-theme="light"] .side > .theme-switch-row{
     <button data-page="instructions" title="Instructions"><span class="ico">☷</span> Instructions</button>
     <button data-page="settings" title="Settings"><span class="ico">⚙</span> Settings</button>
   </nav>
-    <div class="theme-switch-row">
-      <span class="theme-switch-label"><span class="ico theme-switch-ico-sun">&#9728;</span><span class="ico theme-switch-ico-moon">&#9790;</span><span class="theme-switch-text">Light Mode</span></span>
-      <button id="themeToggleBtn" type="button" class="theme-switch" role="switch" aria-checked="false" aria-label="Toggle dark mode">
-        <span class="theme-switch-thumb"></span>
+    <div class="sidebar-footer">
+      <div class="theme-switch-row">
+        <span class="theme-switch-label"><span class="ico theme-switch-ico-sun">&#9728;</span><span class="ico theme-switch-ico-moon">&#9790;</span><span class="theme-switch-text">Light Mode</span></span>
+        <button id="themeToggleBtn" type="button" class="theme-switch" role="switch" aria-checked="false" aria-label="Toggle dark mode">
+          <span class="theme-switch-thumb"></span>
+        </button>
+      </div>
+      <button id="sideCollapseBtn" class="side-collapse-btn" type="button" aria-label="Collapse menu" aria-expanded="true" title="Collapse menu">
+        <span class="side-collapse-icon" aria-hidden="true">‹</span>
+        <span class="side-collapse-label">Collapse menu</span>
       </button>
     </div>
 </aside>
@@ -12034,9 +12152,12 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   try{collapsed=localStorage.getItem(key)==='1'}catch(e){}
   const apply=()=>{
     app.classList.toggle('side-collapsed',collapsed);
-    btn.setAttribute('aria-label',collapsed?'Expand menu':'Collapse menu');
-    btn.title=collapsed?'Expand menu':'Collapse menu';
-
+    const label=collapsed?'Expand menu':'Collapse menu';
+    btn.setAttribute('aria-label',label);
+    btn.setAttribute('aria-expanded',collapsed?'false':'true');
+    btn.title=label;
+    const icon=btn.querySelector('.side-collapse-icon');
+    if(icon)icon.textContent=collapsed?'›':'‹';
   };
   btn.addEventListener('click',()=>{collapsed=!collapsed;try{localStorage.setItem(key,collapsed?'1':'0')}catch(e){}apply()});
   apply();
