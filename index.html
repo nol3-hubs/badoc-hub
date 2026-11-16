@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v71">
+<meta name="badoc-app-version" content="v72">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -4312,6 +4312,21 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     if(!date||Number.isNaN(date.getTime()))return "";
     return FM_ETA_DATE_FORMATTER.format(date);
   }
+  // Pickup task counts are for today's Manila date only. SPX's task export can
+  // contain older task history, so Create Time must be checked before grouping.
+  function fmTaskCreateDate(row){
+    const raw=fmValue(row,["Create Time","Task Create Time","Created Time","create_time","ctime"],/^createtime$|^taskcreatetime$|^ctime$/i);
+    return raw ? fmEtaDate({ETA:raw}) : "";
+  }
+  // BADOC HUB is station 3061. Prefer the station ID; use the station name
+  // only for exports that omit the ID column.
+  function fmIsBadocPickupTask(row){
+    const stationId=fmValue(row,["Station ID","Station Id","Current Station ID","station_id","current_station_id"],/^station(id)?$|^currentstationid$/i);
+    if(stationId)return String(stationId).trim()==="3061";
+    const stationName=fmValue(row,["Station Name","Current Station Name","station_name","current_station_name"],/^stationname$|^currentstationname$/i);
+    if(stationName)return fmNorm(stationName)==="badochub";
+    return true;
+  }
   function fmEsc(value){return typeof esc==="function"?esc(value):String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   let firstMileCombinedRows=[];
   let firstMileVisibleRows=[];
@@ -4328,11 +4343,19 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       const copyBtn=$("copyFirstMileForSheet");if(copyBtn){copyBtn.disabled=true;copyBtn.textContent="Copy for Sheet";}
       return;
     }
-    const allOrderRows=ordersData.rows,tasksRows=tasksData.rows;
-    // Learn/refresh ID->name reference data from both exports before rendering.
+    const allOrderRows=ordersData.rows;
+    const today=getBadocManilaDayBounds().date;
+    const allTaskRows=tasksData.rows;
+    // Exclude historical task exports and tasks belonging to another station
+    // before joining pickup points. This prevents old Inbounded milestones from
+    // inflating today's Pickup status counts.
+    const tasksRows=allTaskRows.filter(task=>
+      fmTaskCreateDate(task)===today && fmIsBadocPickupTask(task)
+    );
+    // Learn/refresh ID->name reference data from current Badoc task rows
+    // and the full Orders export before rendering.
     fmRememberPickupPointNames(tasksRows);
     fmRememberPickupPointNames(allOrderRows);
-    const today=getBadocManilaDayBounds().date;
     // Only pickup orders whose ETA falls on today's Manila date are eligible for matching.
     const orderRows=[],historicalOrderRows=[];
     allOrderRows.forEach(order=>{
