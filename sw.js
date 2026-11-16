@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-app-v80-20261116';
+const CACHE_NAME = 'badoc-hub-pwa-app-v81-20261116';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
