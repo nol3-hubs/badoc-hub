@@ -1860,7 +1860,7 @@ html[data-theme="light"] .side > .theme-switch-row{
         <div id="firstMileCombinedTable" class="first-mile-combined-table"><div class="first-mile-combined-empty">Combined pickup information will appear here after both exports are saved.</div></div>
         <details id="firstMileUnmatchedPanel" hidden style="margin-top:12px;border:1px solid var(--border-color,#d8e0e8);border-radius:10px;padding:10px 12px;background:var(--card-bg,transparent)" open>
           <summary id="firstMileUnmatchedSummary" style="cursor:pointer;font-weight:700">Unmatched Tasks</summary>
-          <p class="hint" style="margin:8px 0">These SPX task records have no matching ETA-today Pickup Order by Pickup Point ID. Unmatched Inbounded and Onhold tasks also appear in the main results as task-only rows; Order Number, Seller Name, and ETA stay blank when no current-day Pickup Order exists.</p>
+          <p class="hint" style="margin:8px 0">These SPX task records have no matching ETA-today Pickup Order by Pickup Point ID. Unmatched Inbounded and Onhold tasks are moved into the main results; this panel shows other unmatched task statuses.</p>
           <div id="firstMileUnmatchedTable" style="overflow:auto"></div>
         </details>
       </article>
@@ -4965,7 +4965,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const unmatchedTable=$("firstMileUnmatchedTable");
     const unmatchedSearchText=fmNorm($("firstMileCombinedSearch")?.value||"");
     const visibleUnmatchedTaskGroups=unmatchedTaskGroups.filter(group=>
-      fmNorm(fmCombinedPickupStatus(group))!=="inbounded"
+      !["inbounded","onhold"].includes(fmNorm(fmCombinedPickupStatus(group)))
     ).filter(group=>
       !unmatchedSearchText ||
       [group.pickupPointId,...(group.tasks||[]).flatMap(task=>Object.values(task)),
