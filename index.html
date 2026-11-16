@@ -4248,6 +4248,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     if(rawStatus==="2"||rawStatus==="2assigned")return "Assigned";
     return "";
   }
+  function fmOrderPickupStatusLabel(order){
+    return fmOrderSheetStatus(order)==="Picked - Up"?"Picked Up":"Not Picked Up";
+  }
   function fmOrderLinksHtml(group){
     const ids=(group?.orders||[]).map(fmOrderId).filter(Boolean);
     if(!ids.length)return "—";
@@ -4364,7 +4367,17 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       const group=id?groups.get(id):null;
       if(group&&group.tasks.length){group.orders.push(order);historicalTaskOrders++;}
     });
-    firstMileCombinedRows=[...groups.values()];
+    // Render one independent row per pickup Order ID. Keep the matching task
+    // and rider attached to each order, but never combine multiple OIDs into
+    // one table row. Task-only groups remain visible for diagnosis.
+    firstMileCombinedRows=[...groups.values()].flatMap(group=>{
+      if(!group.orders.length)return [group];
+      return group.orders.map(order=>({
+        ...group,
+        orders:[order],
+        eligibleOrders:(group.eligibleOrders||[]).includes(order)?[order]:[]
+      }));
+    });
     window.__badocCheckNewUnassigned?.();
     // Sort pickup-point rows by Assigned Rider A–Z. Names within each group are
     // already alphabetized by fmAssignedRiderDisplay(); groups without a rider go last.
@@ -4380,8 +4393,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       if(!nameB)return -1;
       return riderCollator.compare(nameA,nameB);
     });
-    const matchedGroups=firstMileCombinedRows.filter(g=>g.pickupPointId&&!g.pickupPointId.startsWith("__")&&g.eligibleOrders.length&&g.tasks.length);
-    const matchedOrders=matchedGroups.reduce((n,g)=>n+g.eligibleOrders.length,0);
+    const matchedGroups=new Set(firstMileCombinedRows.filter(g=>g.pickupPointId&&!g.pickupPointId.startsWith("__")&&g.eligibleOrders.length&&g.tasks.length).map(g=>g.pickupPointId));
+    const matchedOrders=firstMileCombinedRows.reduce((n,g)=>n+(g.eligibleOrders||[]).length&&g.tasks.length?n+(g.eligibleOrders||[]).length:n,0);
     const unmatchedOrders=orderRows.length-matchedOrders;
     if(stats)stats.innerHTML=[[orderRows.length,"Orders · ETA today"],[matchedGroups.length,"Matched pickup points"],[unmatchedOrders,"Today's orders without task"],[tasksRows.length,"Tasks"],[excludedEtaOrders,"Excluded · ETA not today"]].map(([n,l])=>`<div><strong>${Number(n).toLocaleString()}</strong><span>${l}</span></div>`).join("");
     if(meta)meta.textContent="";
@@ -4397,7 +4410,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       taskStatusCache.set(g,keys);return keys;
     };
     const searchMatchedRows=firstMileCombinedRows.filter(g=>!search||[g.pickupPointId,...g.orders.flatMap(o=>Object.values(o)),...g.tasks.flatMap(t=>Object.values(t))].some(v=>fmNorm(v).includes(search)));
-    // Counts represent pickup-point groups (table rows), not individual task records.
+    // Counts below now represent individual OID rows.
     const statusCounts={
       all:searchMatchedRows.length,
       assigned:searchMatchedRows.filter(g=>taskStatusKeys(g).includes("assigned")).length,
@@ -4430,16 +4443,17 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const copyOrderCount=filtered.reduce((sum,g)=>sum+(g.eligibleOrders||[]).length,0);
     if(copyBtn){copyBtn.disabled=copyOrderCount===0;copyBtn.textContent=copyOrderCount?`Copy for Sheet (${copyOrderCount})`:"Copy for Sheet";}
     const columns=[
-      ["Order ID",g=>orderDetails(g,"",["Order ID","Order No","Order Number","Pickup Order ID","order_id","order_sn","order_number"])],
+      ["Order ID",g=>fmOrderId(g.orders[0]||{})||"—"],
+      ["Pickup Status",g=>g.orders.length?fmOrderPickupStatusLabel(g.orders[0]):"No Order"],
       ["Pickup Point ID",g=>g.orders.length||g.tasks.length?fmPickupPointId(g.orders[0]||g.tasks[0])||"—":"—"],
       ["Pickup Point Name",g=>fmPickupNameDisplay(g)],
-      ["ETA",g=>[...new Set(g.orders.map(o=>fmValue(o,["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","eta_date","eta_time"])) .filter(Boolean))].join(" | ")||"—"],
+      ["ETA",g=>fmValue(g.orders[0]||{},["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","eta_date","eta_time"])||"—"],
       ["Assigned Rider",g=>fmAssignedRiderDisplay(g)],
       ["Task Status",g=>g.tasks.map(t=>fmTaskStatusLabel(fmValue(t,["Status","Task Status","Pickup Task Status","status_name","status"]))).filter(Boolean).join(" | ")||"Unassigned"]
     ];
     if(table && $("firstMile")?.classList.contains("active")){
       if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No combined pickup groups match this search.</div>';
-      else table.innerHTML=`<table><thead><tr>${columns.map(c=>`<th>${fmEsc(c[0])}</th>`).join("")}</tr></thead><tbody>${filtered.slice(0,2000).map(g=>{return `<tr>${columns.map(c=>c[0]==="Task Status"?`<td title="${fmEsc(c[1](g))}">${fmTaskStatusBadgesHtml(g)}</td>`:c[0]==="Order ID"?`<td>${fmOrderLinksHtml(g)}</td>`:`<td title="${fmEsc(c[1](g))}">${fmEsc(c[1](g))}</td>`).join("")}</tr>`;}).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} groups.</div>`:""}`;
+      else table.innerHTML=`<table><thead><tr>${columns.map(c=>`<th>${fmEsc(c[0])}</th>`).join("")}</tr></thead><tbody>${filtered.slice(0,2000).map(g=>{return `<tr>${columns.map(c=>c[0]==="Task Status"?`<td title="${fmEsc(c[1](g))}">${fmTaskStatusBadgesHtml(g)}</td>`:c[0]==="Pickup Status"?`<td><span class="fm-task-pill fm-task-${c[1](g)==="Picked Up"?"done":"onhold"}">${fmEsc(c[1](g))}</span></td>`:c[0]==="Order ID"?`<td>${fmOrderLinksHtml(g)}</td>`:`<td title="${fmEsc(c[1](g))}">${fmEsc(c[1](g))}</td>`).join("")}</tr>`;}).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} OIDs.</div>`:""}`;
     }
   }
   window.__badocRenderFirstMileCombined=renderFirstMileCombined;
