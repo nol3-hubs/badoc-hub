@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badoc Hub Extension",
-  "version": "1.2.0",
-  "description": "Badoc Hub extension with First Mile task export includes all SPX statuses, including Inbounded.",
+  "version": "1.2.1",
+  "description": "Badoc Hub extension with First Mile Orders export using all statuses and a 14-day Created Time window; Pickup Tasks exports all statuses.",
   "permissions": [
     "cookies",
     "scripting",
