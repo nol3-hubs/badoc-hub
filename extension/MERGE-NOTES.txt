@@ -47,3 +47,14 @@ UPDATE — 2026-11-16
 - Removed the manual Replace Tasks CSV control from the Pickup page.
 - First Mile Tasks export no longer applies the Arrived/Accepted/Pickup Done-only status subset; it requests all SPX task statuses, including Inbounded.
 - Extension validates that the returned Tasks CSV contains a Status column and reports the Inbounded row count during import.
+
+
+UPDATE — 2026-11-16 · Pickup export and matching
+- Pickup Orders export now requests All statuses and All bulky types; Created Time is limited to 14 days before the selected day through the end of that day.
+- Pickup Tasks export requests All statuses with no additional driver, vehicle, pickup-point, or created-time filter.
+- The daily Pickup view remains ETA-today (Asia/Manila), but it now matches all Badoc task records to eligible orders by Pickup Point ID, even when the task was created earlier.
+- Orders without a matching task or driver remain in the main table and Copy for Sheet with Driver Name shown as Unassigned.
+- Order Number, Pickup Point ID, Seller Name, ETA, and Status come from Pickup Orders; Driver Name comes from the matching Pickup Task.
+- The combined Pickup CSV now uses Order Number, Pickup Point ID, Seller Name, ETA, Status, and Driver Name.
+- The dashboard's embedded Chrome installer was refreshed to extension v1.2.1; the PWA cache and dashboard app versions were bumped to force clients to load the update.
+- Static source checks completed. Authenticated SPX export and live browser behavior still require a real sync test.
