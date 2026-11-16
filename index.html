@@ -14245,3 +14245,216 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 })();
 </script>
 <script src="./extension/pod-checker/app.js"></script>
+
+<style id="badoc-sidebar-collapsed-layout-fix-v2">
+/* Final sidebar correction: make the collapsed state truly icon-only. */
+.app.side-collapsed > .side,
+.side.side-collapsed{
+  width:76px!important;
+  min-width:76px!important;
+  max-width:76px!important;
+  flex:0 0 76px!important;
+  padding:14px 8px 8px!important;
+  align-items:stretch!important;
+  overflow-x:hidden!important;
+}
+.app.side-collapsed .side .brand,
+.side.side-collapsed .brand{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  min-height:38px!important;
+  margin:0 0 12px!important;
+  padding:4px 0!important;
+  font-size:0!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  text-align:center!important;
+}
+.app.side-collapsed .side .brand:after,
+.side.side-collapsed .brand:after{
+  content:"BH"!important;
+  display:block!important;
+  font-size:16px!important;
+  line-height:1!important;
+  font-weight:800!important;
+  color:var(--blue,#19c2ff)!important;
+}
+.app.side-collapsed .side .brand > *,
+.side.side-collapsed .brand > *{display:none!important}
+.app.side-collapsed .side .nav,
+.side.side-collapsed .nav{
+  width:100%!important;
+  min-width:0!important;
+  flex:1 1 auto!important;
+  overflow:visible!important;
+}
+.app.side-collapsed .side .nav .nav-group-label,
+.side.side-collapsed .nav .nav-group-label{display:none!important}
+.app.side-collapsed .side .nav > button,
+.app.side-collapsed .side .nav .planning-board-primary,
+.app.side-collapsed .side .nav .planning-board-submenu button,
+.side.side-collapsed .nav > button,
+.side.side-collapsed .nav .planning-board-primary,
+.side.side-collapsed .nav .planning-board-submenu button{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:42px!important;
+  height:42px!important;
+  margin:2px 0!important;
+  padding:0!important;
+  overflow:hidden!important;
+  white-space:nowrap!important;
+  font-size:0!important;
+  line-height:0!important;
+  text-align:center!important;
+}
+.app.side-collapsed .side .nav button > .ico,
+.app.side-collapsed .side .nav .planning-board-primary > .ico,
+.side.side-collapsed .nav button > .ico,
+.side.side-collapsed .nav .planning-board-primary > .ico{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  box-sizing:border-box!important;
+  width:26px!important;
+  min-width:26px!important;
+  height:26px!important;
+  margin:0!important;
+  padding:0!important;
+  font-size:19px!important;
+  line-height:1!important;
+}
+.app.side-collapsed .side .nav .planning-board-nav-head,
+.side.side-collapsed .nav .planning-board-nav-head{
+  position:relative!important;
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:46px!important;
+}
+.app.side-collapsed .side .nav .planning-board-primary,
+.side.side-collapsed .nav .planning-board-primary{
+  width:100%!important;
+  min-height:42px!important;
+}
+.app.side-collapsed .side .nav .planning-board-toggle,
+.side.side-collapsed .nav .planning-board-toggle{
+  position:absolute!important;
+  top:1px!important;
+  right:0!important;
+  z-index:2!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:16px!important;
+  min-width:16px!important;
+  height:16px!important;
+  min-height:16px!important;
+  margin:0!important;
+  padding:0!important;
+  border-radius:5px!important;
+  background:var(--panel2,#141922)!important;
+  color:var(--text,#f5f8fc)!important;
+  font-size:12px!important;
+  line-height:1!important;
+  text-indent:0!important;
+}
+.app.side-collapsed .side .nav .planning-board-submenu,
+.side.side-collapsed .nav .planning-board-submenu{padding:0!important;margin:0!important}
+.app.side-collapsed .side .nav .planning-board-submenu button,
+.side.side-collapsed .nav .planning-board-submenu button{min-height:34px!important;height:34px!important}
+.app.side-collapsed .side .nav .planning-board-submenu button > .sub-ico,
+.side.side-collapsed .nav .planning-board-submenu button > .sub-ico{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  font-size:16px!important;
+  line-height:1!important;
+}
+.app.side-collapsed .side .sidebar-footer,
+.side.side-collapsed .sidebar-footer{
+  width:100%!important;
+  flex:0 0 auto!important;
+  align-items:center!important;
+  gap:8px!important;
+  margin-top:auto!important;
+  padding:8px 0 4px!important;
+}
+.app.side-collapsed .side .sidebar-footer > .theme-switch-row,
+.side.side-collapsed .sidebar-footer > .theme-switch-row{
+  width:100%!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  padding:4px 0!important;
+}
+.app.side-collapsed .side .sidebar-footer .theme-switch-label,
+.side.side-collapsed .sidebar-footer .theme-switch-label{justify-content:center!important;min-width:0!important}
+.app.side-collapsed .side .sidebar-footer .theme-switch-text,
+.side.side-collapsed .sidebar-footer .theme-switch-text{display:none!important}
+.app.side-collapsed .side .sidebar-footer #themeToggleBtn,
+.side.side-collapsed .sidebar-footer #themeToggleBtn{
+  flex:0 0 42px!important;width:42px!important;min-width:42px!important;
+}
+.app.side-collapsed .side .sidebar-footer > #sideCollapseBtn,
+.side.side-collapsed .sidebar-footer > #sideCollapseBtn{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:48px!important;
+  min-width:48px!important;
+  min-height:40px!important;
+  margin:0 auto!important;
+  padding:4px!important;
+  font-size:0!important;
+}
+.app.side-collapsed .side .sidebar-footer > #sideCollapseBtn .side-collapse-label,
+.side.side-collapsed .sidebar-footer > #sideCollapseBtn .side-collapse-label{display:none!important}
+.app.side-collapsed .side .sidebar-footer > #sideCollapseBtn .side-collapse-icon,
+.side.side-collapsed .sidebar-footer > #sideCollapseBtn .side-collapse-icon{
+  display:inline-flex!important;flex:0 0 auto!important;font-size:22px!important;line-height:1!important;
+}
+@media(min-width:901px){
+  .app.side-collapsed > .main{margin-left:76px!important;width:calc(100% - 76px)!important;min-width:0!important}
+}
+/* Slightly larger readable labels whenever the sidebar is expanded. */
+.app:not(.side-collapsed) > .side .nav > button,
+.app:not(.side-collapsed) > .side .nav .planning-board-primary,
+.app:not(.side-collapsed) > .side .nav .planning-board-submenu button{
+  font-size:13px!important;
+  line-height:1.2!important;
+}
+.app:not(.side-collapsed) > .side .nav > button,
+.app:not(.side-collapsed) > .side .nav .planning-board-primary{
+  min-height:34px!important;
+  padding-top:6px!important;
+  padding-bottom:6px!important;
+}
+.app:not(.side-collapsed) > .side .nav .nav-group-label{
+  font-size:9px!important;
+}
+</style>
+<script id="badoc-sidebar-state-sync-v2">
+(function(){
+  function syncSidebarState(){
+    const app=document.querySelector('.app');
+    const side=app&&app.querySelector('.side');
+    if(!app||!side)return;
+    const collapsed=app.classList.contains('side-collapsed');
+    side.classList.toggle('side-collapsed',collapsed);
+    side.setAttribute('data-collapsed',collapsed?'true':'false');
+  }
+  syncSidebarState();
+  const app=document.querySelector('.app');
+  if(app&&window.MutationObserver){
+    new MutationObserver(syncSidebarState).observe(app,{attributes:true,attributeFilter:['class']});
+  }
+})();
+</script>
