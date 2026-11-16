@@ -394,15 +394,22 @@ async function discoverFirstMileTask(startSec, fileName, kind, job) {
       visit(task);
       return parts.join(" ").toLowerCase();
     };
+    const taskIdOf = task => Number(task?.task_id || task?.taskId || task?.export_task_id || task?.exportTaskId || task?.id || 0);
     const eligible = tasks.filter(task => {
-      const id = Number(task?.task_id || 0);
-      if (!(id > 0)) return false;
+      if (!(taskIdOf(task) > 0)) return false;
       const joined = values(task);
-      if (hint && joined.includes(hint)) return true;
-      return joined.includes("pickup") && wanted.test(joined) && !avoid.test(joined);
-    }).sort((a,b) => Number(b?.task_id || 0) - Number(a?.task_id || 0));
+      // The Pickup Orders endpoint currently registers its export under the
+      // generic fleet_order_export_forward task type. It does not include the
+      // word "pickup", so the previous pickup-only test silently missed it.
+      const pickupNameMatch = !!hint && joined.includes(hint);
+      const pickupTypeMatch = joined.includes("pickup") && wanted.test(joined) && !avoid.test(joined);
+      const fleetPickupOrderMatch = kind === "first-mile-orders" &&
+        /fleet_order_export_forward/.test(joined) &&
+        !/pickup_task|task_export/.test(joined);
+      return pickupNameMatch || pickupTypeMatch || fleetPickupOrderMatch;
+    }).sort((a,b) => taskIdOf(b) - taskIdOf(a));
     if (eligible.length) return eligible[0];
-    newestSeen = tasks.slice(0, 8).map(task => `#${task?.task_id || "?"} ${values(task).slice(0, 110)}`).join(" || ");
+    newestSeen = tasks.slice(0, 8).map(task => `#${taskIdOf(task) || "?"} ${values(task).slice(0, 110)}`).join(" || ");
     progress(`${kind === "first-mile-orders" ? "First Mile Orders" : "First Mile Tasks"}: locating the SPX export task across FM/FMS task lists…`, {
       phase: "first-mile-discover-task", kind, attempt: attempt + 1
     });
@@ -1621,7 +1628,7 @@ async function runFirstMileExportJob(job) {
     }
 
     if (!taskId && !directCsv) {
-      const waitStartSec = Math.max(0, Math.floor((job.startedAt - 30 * 1000) / 1000));
+      const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
       const task = await discoverFirstMileTask(waitStartSec, fileName, kind, job);
       taskId = Number(task?.task_id || 0);
       if (!taskId) {
