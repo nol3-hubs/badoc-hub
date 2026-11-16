@@ -55,6 +55,6 @@ UPDATE — 2026-11-16 · Pickup export and matching
 - The daily Pickup view remains ETA-today (Asia/Manila), but it now matches all Badoc task records to eligible orders by Pickup Point ID, even when the task was created earlier.
 - Orders without a matching task or driver remain in the main table and Copy for Sheet with Driver Name shown as Unassigned.
 - Order Number, Pickup Point ID, Seller Name, ETA, and Status come from Pickup Orders; Driver Name comes from the matching Pickup Task.
-- The combined Pickup CSV now uses Order Number, Pickup Point ID, Seller Name, ETA, Status, and Driver Name.
+- The combined Pickup CSV now uses Order Number, Pickup Point ID, Seller Name, ETA, Status, and Driver Name; the download follows the table's current search and status filters.
 - The dashboard's embedded Chrome installer was refreshed to extension v1.2.1; the PWA cache and dashboard app versions were bumped to force clients to load the update.
 - Static source checks completed. Authenticated SPX export and live browser behavior still require a real sync test.
