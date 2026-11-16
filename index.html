@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v69">
+<meta name="badoc-app-version" content="v70">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -1358,6 +1358,8 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
               <option value="inbounded">Inbounded</option>
             </select>
             <button class="btn" id="copyFirstMileForSheet" type="button" disabled title="Copy visible pickup orders as tab-separated rows for the spreadsheet">Copy for Sheet</button>
+            <button class="btn" id="replaceFirstMileTasksCsv" type="button" title="Replace saved First Mile Tasks with a manually downloaded SPX CSV">Replace Tasks CSV</button>
+            <input id="firstMileTasksCsvInput" type="file" accept=".csv,text/csv" hidden>
             <button class="btn primary" id="syncFirstMileAll" type="button">↻ Sync First Mile</button>
           </div>
           <span id="firstMileCombinedMeta">Sync Orders and Tasks to build the combined pickup list.</span>
@@ -4449,6 +4451,90 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
   }
   window.__badocRenderFirstMileCombined=renderFirstMileCombined;
+
+  // Manually replace only the saved First Mile Tasks export. This allows an
+  // operator to import a freshly downloaded SPX task CSV without re-running
+  // the extension export. The imported file is saved locally and to shared
+  // cloud storage, then the combined OID rows are rebuilt immediately.
+  (function(){
+    const chooseButton=document.getElementById("replaceFirstMileTasksCsv");
+    const fileInput=document.getElementById("firstMileTasksCsvInput");
+    if(!chooseButton||!fileInput)return;
+    chooseButton.addEventListener("click",()=>fileInput.click());
+    fileInput.addEventListener("change",async()=>{
+      const file=fileInput.files?.[0];
+      if(!file)return;
+      chooseButton.disabled=true;
+      const oldLabel=chooseButton.textContent;
+      chooseButton.textContent="Reading CSV…";
+      const statusEl=document.getElementById("firstMileTasksStatus");
+      const resultEl=document.getElementById("firstMileTasksResult");
+      try{
+        const csvText=await file.text();
+        if(!csvText.trim())throw Error("The selected CSV is empty.");
+        const parsedRows=parseCsvText(csvText);
+        if(!parsedRows.length)throw Error("No task records were found in the selected CSV.");
+        const headers=Object.keys(parsedRows[0]||{});
+        const normalizedHeaders=new Set(headers.map(fmNorm));
+        const required=["Pickup Point ID","Status","Driver Name"];
+        const missing=required.filter(name=>!normalizedHeaders.has(fmNorm(name)));
+        if(missing.length)throw Error("This is not a valid First Mile Tasks CSV. Missing columns: "+missing.join(", ")+".");
+        const taskNumberHeader=headers.find(h=>fmNorm(h)==="pickuptasknumber");
+        const pointHeader=headers.find(h=>fmNorm(h)==="pickuppointid");
+        const statusHeader=headers.find(h=>fmNorm(h)==="status");
+        const validRows=parsedRows.filter(row=>String(row[pointHeader]||"").trim()&&String(row[statusHeader]||"").trim());
+        if(!validRows.length)throw Error("The CSV has no rows with both Pickup Point ID and Status.");
+        const statusCounts={};
+        validRows.forEach(row=>{
+          const label=fmTaskStatusLabel(row[statusHeader]);
+          statusCounts[label]=(statusCounts[label]||0)+1;
+        });
+        const preview=Object.entries(statusCounts).map(([label,count])=>count+" "+label).join(", ");
+        const accepted=window.confirm(
+          "Replace the saved First Mile Tasks dataset with this file?\n\n"+
+          "File: "+file.name+"\n"+
+          "Task rows: "+validRows.length.toLocaleString()+"\n"+
+          "Statuses: "+preview+"\n\n"+
+          "This replaces Tasks only. First Mile Orders are kept. The replacement will sync to other dashboard devices."
+        );
+        if(!accepted)return;
+        const record={
+          csvText,
+          fileName:file.name||"manual_first_mile_tasks.csv",
+          taskId:"Manual CSV",
+          savedAt:Date.now(),
+          rowCount:validRows.length
+        };
+        localStorage.setItem("badoc_first_mile_tasks_csv_local_v1",JSON.stringify(record));
+        window.__badocUpdateFirstMileLastUpdated?.();
+        chooseButton.textContent="Saving…";
+        const cloudResult=typeof window.__badocPickupCloudSave==="function"
+          ?await window.__badocPickupCloudSave("tasks",record)
+          :{ok:false,message:"Cloud service is not ready; the file was saved locally."};
+        const cloudLabel=cloudResult?.ok?"Shared across devices":"Saved locally; cloud sync pending";
+        if(statusEl)statusEl.textContent=(cloudResult?.ok?"Cloud synced":"Cloud sync pending")+" · "+validRows.length.toLocaleString()+" rows · "+new Date(record.savedAt).toLocaleString("en-PH");
+        if(resultEl)resultEl.textContent=validRows.length.toLocaleString()+" task rows · "+cloudLabel+" · "+file.name;
+        const downloadButton=document.getElementById("downloadFirstMileTasks");
+        if(downloadButton)downloadButton.disabled=false;
+        renderFirstMileCombined();
+        const inboundedCount=validRows.filter(row=>fmNorm(row[statusHeader])==="inbounded").length;
+        const doneCount=validRows.filter(row=>fmNorm(row[statusHeader])==="done").length;
+        const assignedCount=validRows.filter(row=>["accepted","assigned"].includes(fmNorm(row[statusHeader]))).length;
+        const detail="Tasks were replaced and the Pickup list was rebuilt. "+inboundedCount+" Inbounded, "+assignedCount+" Assigned, "+doneCount+" Done. "+(cloudResult?.ok?"Shared cloud updated.":"Cloud upload will retry automatically.");
+        window.__badocOperationModalFinish?.("First Mile Tasks Replaced",detail,[["Task rows",validRows.length.toLocaleString()],["Inbounded",inboundedCount.toLocaleString()],["Shared cloud",cloudResult?.ok?"Synced":"Pending retry"]],"success");
+      }catch(error){
+        console.error("Manual First Mile Tasks CSV import failed:",error);
+        if(statusEl)statusEl.textContent="Manual replacement failed · existing Tasks were kept.";
+        if(resultEl)resultEl.textContent=error?.message||"Unable to import this CSV.";
+        window.__badocOperationModalFinish?.("Tasks CSV Import Failed",error?.message||"Unable to import this CSV.",[],"error");
+      }finally{
+        fileInput.value="";
+        chooseButton.disabled=false;
+        chooseButton.textContent=oldLabel;
+      }
+    });
+  })();
+
   // Scheduled First Mile button clicks and new-unassigned alarm (Philippine time).
   (function(){
     const schedule=new Set(["10:00","11:00","12:00","13:00","14:00","15:00","15:30","15:40","15:50","15:57","15:59","16:00"]);
