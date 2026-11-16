@@ -4,7 +4,7 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 
 ## Included
 - BADOC Hub dashboard v76
-- Chrome extension v1.2.1, including all-status First Mile Orders and Tasks exports
+- Chrome extension v1.2.3, including all-status First Mile Orders and Tasks exports
 - Firefox extension v69.3.5
 - First Mile XLSX-to-CSV support
 - Integrated POD/POOH checker
@@ -17,10 +17,10 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 The dashboard checks the installed extension package version separately from the bridge protocol version.
 
 Minimum versions:
-- Chrome: `1.2.1`
+- Chrome: `1.2.3`
 - Firefox: `69.3.5`
 
-Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer embeds the same v1.2.1 package.
+Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer embeds the same v1.2.3 package.
 
 ## Pickup export and matching
 - Pickup Orders exports all statuses and all bulky types, limited only to Created Time in the last 14 days through the selected day.
