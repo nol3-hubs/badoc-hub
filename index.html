@@ -4329,12 +4329,14 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
   }
   function fmEsc(value){return typeof esc==="function"?esc(value):String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   let firstMileCombinedRows=[];
+  let firstMileAlertRows=[];
   let firstMileVisibleRows=[];
   function renderFirstMileCombined(){
     const ordersData=getStoredFirstMile("orders"),tasksData=getStoredFirstMile("tasks");
     const stats=$("firstMileCombinedStats"),table=$("firstMileCombinedTable"),meta=$("firstMileCombinedMeta"),downloadBtn=$("downloadFirstMileCombined");
     if(!ordersData||!tasksData){
       firstMileCombinedRows=[];
+      firstMileAlertRows=[];
       if(stats)stats.innerHTML=[[ordersData?.rows.length||0,"Orders · awaiting ETA filter"],["—","Matched pickup points"],["—","Orders without task"],[tasksData?.rows.length||0,"Tasks"],["—","Excluded · ETA not today"]].map(([n,l])=>`<div><strong>${n}</strong><span>${l}</span></div>`).join("");
       if(meta)meta.textContent="Both exports are required before the combined list can be built.";
       if(table)table.innerHTML='<div class="first-mile-combined-empty">Sync both First Mile Orders and First Mile Tasks to create the combined pickup list.</div>';
@@ -4401,6 +4403,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       const group=id?groups.get(id):null;
       if(group&&group.tasks.length){group.orders.push(order);historicalTaskOrders++;}
     });
+    // Preserve every filtered task group for the new-unassigned alarm, even
+    // though task-only groups are excluded from the main order table.
+    firstMileAlertRows=[...groups.values()];
     // Keep task groups without a current-day eligible Order separately.
     // The SPX Tasks export has no Order ID or ETA, so these cannot be copied
     // to the sheet unless the Orders export supplies a matching current-day row.
@@ -4539,7 +4544,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
     const orderKey=g=>[String(g.pickupPointId||""),...(g.orders||[]).map(o=>String(fmValue(o,["Order ID","Order No","Order Number","Pickup Order ID","order_id","order_sn","order_number"])||"")).filter(Boolean).sort()].join("|");
     function currentUnassigned(){
-      return new Set((firstMileCombinedRows||[]).filter(g=>{const latest=fmLatestTask(g);return !latest||fmNorm(fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"])))==="unassigned";}).map(orderKey));
+      return new Set((firstMileAlertRows||[]).filter(g=>{const latest=fmLatestTask(g);return !latest||fmNorm(fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"])))==="unassigned";}).map(orderKey));
     }
     function beep(){
       if(!alarmEnabled||!alarmActive||!audioCtx)return;
