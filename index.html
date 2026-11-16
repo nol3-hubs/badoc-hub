@@ -4394,7 +4394,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       return riderCollator.compare(nameA,nameB);
     });
     const matchedGroups=new Set(firstMileCombinedRows.filter(g=>g.pickupPointId&&!g.pickupPointId.startsWith("__")&&g.eligibleOrders.length&&g.tasks.length).map(g=>g.pickupPointId));
-    const matchedOrders=firstMileCombinedRows.reduce((n,g)=>n+(g.eligibleOrders||[]).length&&g.tasks.length?n+(g.eligibleOrders||[]).length:n,0);
+    const matchedOrders=firstMileCombinedRows.reduce((n,g)=>n+(g.tasks.length?(g.eligibleOrders||[]).length:0),0);
     const unmatchedOrders=orderRows.length-matchedOrders;
     if(stats)stats.innerHTML=[[orderRows.length,"Orders · ETA today"],[matchedGroups.length,"Matched pickup points"],[unmatchedOrders,"Today's orders without task"],[tasksRows.length,"Tasks"],[excludedEtaOrders,"Excluded · ETA not today"]].map(([n,l])=>`<div><strong>${Number(n).toLocaleString()}</strong><span>${l}</span></div>`).join("");
     if(meta)meta.textContent="";
