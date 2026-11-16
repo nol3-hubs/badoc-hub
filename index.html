@@ -4235,7 +4235,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
   function fmOrderId(row){return fmValue(row,["Order ID","Order No","Order Number","Pickup Order ID","Pickup Order No","order_id","order_sn","order_number"],/^(pickup)?order(id|no|number|sn)$/i);}
   function fmOrderSheetStatus(order){
     const textStatus=fmNorm(fmValue(order,["Status(pickup order)","Status (pickup order)","Pickup Status","Pickup Order Status","Order Status","Status Name","status_name","pickup_status_name","order_status_name","Status","status"],/^status.*pickuporder$|^pickuporderstatus$/i));
-    if(textStatus.includes("pickedup")||textStatus==="pickupdone"||textStatus==="collected")return "Picked Up";
+    if((textStatus.includes("pickedup")&&!textStatus.includes("notpickedup"))||textStatus==="pickupdone"||textStatus==="collected")return "Picked Up";
     if(textStatus==="onhold"||textStatus==="pickupnoorder"||textStatus.includes("onhold"))return "Onhold";
     if(textStatus==="assigned")return "Assigned";
     const rawStatus=fmNorm(fmValue(order,["Status Code","Status ID","Order Status ID","Pickup Status ID","status_code","status_id","order_status","order_status_id","pickup_status","pickup_status_id"]));
