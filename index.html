@@ -5272,7 +5272,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           "",                    // 7PM STATUS
           "",                    // 9PM STATUS
           "",                    // EOD Status
-          taskNumber ? "SPX Task "+taskNumber+" · No matching current-day Order" : "No matching current-day Order"
+          ""                    // Remarks must remain blank
         ];
         lines.push(cells.map(clean).join("\t"));
         continue;
