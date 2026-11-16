@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v73">
+<meta name="badoc-app-version" content="v74">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -1369,6 +1369,11 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
           <div id="firstMileLastUpdated" class="hint" style="margin-top:5px;font-size:11px" aria-live="polite">Last updated (PHT) — Orders: Not yet · Tasks: Not yet</div>
         </div>
         <div id="firstMileCombinedTable" class="first-mile-combined-table"><div class="first-mile-combined-empty">Combined pickup information will appear here after both exports are saved.</div></div>
+        <details id="firstMileUnmatchedPanel" hidden style="margin-top:12px;border:1px solid var(--border-color,#d8e0e8);border-radius:10px;padding:10px 12px;background:var(--card-bg,transparent)" open>
+          <summary id="firstMileUnmatchedSummary" style="cursor:pointer;font-weight:700">Unmatched Tasks</summary>
+          <p class="hint" style="margin:8px 0">These SPX task records have no matching current-day Order ID/ETA. They remain visible here but are not included in Copy for Sheet.</p>
+          <div id="firstMileUnmatchedTable" style="overflow:auto"></div>
+        </details>
       </article>
     </div>
     <div class="hint first-mile-local-note">Pickup Orders and Tasks are cached on this device and synced to shared cloud storage for all dashboard devices.</div>
@@ -4448,6 +4453,63 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const matchedOrders=firstMileCombinedRows.reduce((n,g)=>n+(g.tasks.length?(g.eligibleOrders||[]).length:0),0);
     const unmatchedOrders=orderRows.length-matchedOrders;
     if(stats)stats.innerHTML=[[orderRows.length,"Orders · ETA today"],[matchedGroups.size,"Matched pickup points"],[unmatchedOrders,"Today's orders without task"],[tasksRows.length,"Tasks"],[excludedEtaOrders,"Excluded · ETA not today"]].map(([n,l])=>`<div><strong>${Number(n).toLocaleString()}</strong><span>${l}</span></div>`).join("");
+    const unmatchedPanel=$("firstMileUnmatchedPanel");
+    const unmatchedSummary=$("firstMileUnmatchedSummary");
+    const unmatchedTable=$("firstMileUnmatchedTable");
+    const unmatchedSearchText=fmNorm($("firstMileCombinedSearch")?.value||"");
+    const visibleUnmatchedTaskGroups=unmatchedTaskGroups.filter(group=>
+      !unmatchedSearchText ||
+      [group.pickupPointId,...(group.tasks||[]).flatMap(task=>Object.values(task)),
+       fmPickupNameDisplay(group),fmAssignedRiderDisplay(group)]
+        .some(value=>fmNorm(value).includes(unmatchedSearchText))
+    );
+    const unmatchedCountByStatus={};
+    visibleUnmatchedTaskGroups.forEach(group=>{
+      const latest=fmLatestTask(group);
+      const label=latest
+        ?fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"]))
+        :"Unknown";
+      unmatchedCountByStatus[label]=(unmatchedCountByStatus[label]||0)+1;
+    });
+    if(unmatchedPanel){
+      unmatchedPanel.hidden=visibleUnmatchedTaskGroups.length===0;
+      unmatchedPanel.open=visibleUnmatchedTaskGroups.length>0;
+    }
+    if(unmatchedSummary){
+      const statusText=Object.entries(unmatchedCountByStatus)
+        .sort((a,b)=>a[0].localeCompare(b[0]))
+        .map(([label,count])=>count+" "+label).join(", ");
+      unmatchedSummary.textContent="Unmatched Tasks ("+visibleUnmatchedTaskGroups.length+")"+
+        (statusText?" · "+statusText:"");
+    }
+    if(unmatchedTable){
+      if(!visibleUnmatchedTaskGroups.length)unmatchedTable.innerHTML="";
+      else{
+        const rows=visibleUnmatchedTaskGroups.map(group=>{
+          const latest=fmLatestTask(group)||group.tasks?.[0]||{};
+          const taskNumber=fmValue(latest,["Pickup Task Number","Task Number","Pickup Task No","Task ID","task_id","pickup_task_number"]);
+          const created=fmValue(latest,["Create Time","Task Create Time","Created Time","create_time","ctime"]);
+          const status=fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"]));
+          const cells=[
+            taskNumber||"—",
+            fmPickupPointId(latest)||group.pickupPointId||"—",
+            fmPickupNameDisplay(group),
+            status,
+            created||"—",
+            fmAssignedRiderDisplay(group)
+          ];
+          const tone=fmNorm(status)==="inbounded"?"inbounded":fmNorm(status)==="assigned"?"assigned":"onhold";
+          return "<tr>"+cells.map((value,index)=>index===3
+            ?'<td><span class="fm-task-pill fm-task-'+tone+'">'+fmEsc(value)+'</span></td>'
+            :'<td>'+fmEsc(value)+'</td>').join("")+"</tr>";
+        });
+        unmatchedTable.innerHTML=
+          '<table style="width:100%;border-collapse:collapse;min-width:780px"><thead><tr>'+
+          ["Pickup Task Number","Pickup Point ID","Pickup Point Name","Task Status","Create Time","Assigned Rider"]
+            .map(label=>'<th style="text-align:left;padding:9px 8px;border-bottom:1px solid var(--border-color,#d8e0e8)">'+fmEsc(label)+'</th>').join("")+
+          '</tr></thead><tbody>'+rows.join("")+'</tbody></table>';
+      }
+    }
     if(meta){
       const unmatchedTotal=unmatchedTaskGroups.length;
       const unmatchedStatusText=Object.entries(unmatchedTaskStatusCounts)
@@ -4455,9 +4517,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         .map(([label,count])=>count+" "+label)
         .join(", ");
       meta.textContent=unmatchedTotal
-        ? "Unmatched task points excluded: "+unmatchedTotal+
+        ? "Unmatched task points shown below: "+unmatchedTotal+
           (unmatchedStatusText?" ("+unmatchedStatusText+")":"")+
-          ". Tasks export has no Order ID/ETA; no eligible current-day Order matched by Pickup Point ID."
+          ". They are excluded from Copy for Sheet because no eligible current-day Order matched by Pickup Point ID."
         : "All current-day Badoc Hub task points matched to eligible Orders.";
     }
     if(downloadBtn)downloadBtn.disabled=!firstMileCombinedRows.length;
