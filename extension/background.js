@@ -1562,7 +1562,9 @@ function buildFirstMileExportUrl(kind, selectedDate) {
     };
     return `${SPX_ORIGIN}${FM_PICKUP_ORDER_PATH}?${fmQuery(params)}`;
   }
-  const params = { status: "8,2,7", format_condition: "Status= Arrived,Accepted,Pickup Done" };
+  // Do not restrict pickup tasks to Arrived/Accepted/Pickup Done. SPX task export
+  // also needs Inbounded rows so the dashboard can read inbounded pickups automatically.
+  const params = {};
   return `${SPX_ORIGIN}${FM_PICKUP_TASK_PATH}?${fmQuery(params)}`;
 }
 
