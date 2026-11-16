@@ -1262,6 +1262,40 @@ html[data-theme="light"] .side > .theme-switch-row{
   .side{display:none!important}
 }
 </style>
+<style id="badoc-sidebar-collapse-icon-cleanup">
+/* Clear legacy pseudo-icons; the button uses its own chevron and label only. */
+.side > .sidebar-footer > #sideCollapseBtn::before,
+.side > .sidebar-footer > #sideCollapseBtn::after{
+  content:none!important;
+  display:none!important;
+  width:0!important;
+  height:0!important;
+  box-shadow:none!important;
+  background:none!important;
+}
+.side > .sidebar-footer > #sideCollapseBtn{
+  justify-content:center!important;
+  gap:9px!important;
+  font-size:11px!important;
+}
+.side > .sidebar-footer > #sideCollapseBtn .side-collapse-icon{
+  display:inline-flex!important;
+  flex:0 0 18px!important;
+  font-size:21px!important;
+  line-height:1!important;
+}
+.side > .sidebar-footer > #sideCollapseBtn .side-collapse-label{
+  display:inline!important;
+  flex:0 0 auto!important;
+}
+.app.side-collapsed .side > .sidebar-footer > #sideCollapseBtn{
+  justify-content:center!important;
+  gap:0!important;
+}
+.app.side-collapsed .side > .sidebar-footer > #sideCollapseBtn .side-collapse-label{
+  display:none!important;
+}
+</style>
 </head>
 <body data-app-version="21">
 
