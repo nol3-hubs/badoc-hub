@@ -4811,10 +4811,12 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
   });
   $("downloadFirstMileCombined")?.addEventListener("click",()=>{
-    if(!firstMileCombinedRows.length)return;
+    // Export the same search/status-filtered rows currently shown in the main table.
+    const exportRows=firstMileVisibleRows||[];
+    if(!exportRows.length)return;
     const headers=["Order Number","Pickup Point ID","Seller Name","ETA","Status","Driver Name"];
     const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-    const lines=[headers.map(q).join(","),...firstMileCombinedRows.map(g=>{
+    const lines=[headers.map(q).join(","),...exportRows.map(g=>{
       const order=g.orders[0]||{};
       return [
         fmOrderId(order),
