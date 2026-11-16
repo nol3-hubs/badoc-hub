@@ -1526,10 +1526,6 @@ html[data-theme="light"] .side > .theme-switch-row{
 }
 </style>
 
-<style id="badoc-remove-dashboard-todays-performance">
-/* Keep the legacy EOD summary DOM available to its data updater, but remove it from the Dashboard page. */
-#homeDashboard #dashboardEodSummary{display:none!important}
-</style>
 </head>
 <body data-app-version="21">
 
@@ -1645,26 +1641,7 @@ html[data-theme="light"] .side > .theme-switch-row{
   </div>
   <ol class="syncall-steps" id="syncAllSteps" hidden></ol>
 </div>
-<div class="section dashboard-kpi-summary" id="dashboardKpiSummary">
-  <div class="dashboard-kpi-summary-head">
-    <div>
-      <div class="dashboard-kpi-title">KPI SUMMARY</div>
-    </div>
-    <button type="button" class="dashboard-kpi-badge" id="dashboardLiveKpi" title="Open KPI details">KPI Details</button>
-  </div>
-  <div class="dashboard-kpi-summary-grid">
-    <div class="dashboard-kpi-card">
-      <span class="label">OVERALL SCORE</span>
-      <strong id="dashboardOverallScore">—</strong>
-    </div>
-    <div class="dashboard-kpi-card">
-      <span class="label">GRADE</span>
-      <strong id="dashboardKpiGrade">—</strong>
-    </div>
-  </div>
-</div>
-
-    <div class="section dashboard-overview">
+<div class="section dashboard-overview">
       <div class="dashboard-overview-head">
         <div>
           <div class="dashboard-overview-kicker">OPERATION PROGRESS</div>
@@ -1693,9 +1670,28 @@ html[data-theme="light"] .side > .theme-switch-row{
 
       </div>
     </div>
+
+    <div class="section dashboard-kpi-summary" id="dashboardKpiSummary">
+  <div class="dashboard-kpi-summary-head">
+    <div>
+      <div class="dashboard-kpi-title">KPI SUMMARY</div>
+    </div>
+    <button type="button" class="dashboard-kpi-badge" id="dashboardLiveKpi" title="Open KPI details">KPI Details</button>
+  </div>
+  <div class="dashboard-kpi-summary-grid">
+    <div class="dashboard-kpi-card">
+      <span class="label">OVERALL SCORE</span>
+      <strong id="dashboardOverallScore">—</strong>
+    </div>
+    <div class="dashboard-kpi-card">
+      <span class="label">GRADE</span>
+      <strong id="dashboardKpiGrade">—</strong>
+    </div>
+  </div>
+</div>
   
 
-<div class="section dashboard-eod-summary" id="dashboardEodSummary">
+<div class="section dashboard-eod-summary" id="dashboardEodSummary" hidden style="display:none!important">
   <div class="dashboard-eod-titlebar">Today's Performance</div>
   <div class="dashboard-eod-hub" id="dashEodHub">Hub</div>
   <div class="dashboard-eod-date" id="dashEodDate">—</div>
