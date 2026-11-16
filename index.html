@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v72">
+<meta name="badoc-app-version" content="v73">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -4401,17 +4401,29 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       const group=id?groups.get(id):null;
       if(group&&group.tasks.length){group.orders.push(order);historicalTaskOrders++;}
     });
-    // Render one independent row per pickup Order ID. Keep the matching task
-    // and rider attached to each order, but never combine multiple OIDs into
-    // one table row. Task-only groups remain visible for diagnosis.
-    firstMileCombinedRows=[...groups.values()].flatMap(group=>{
-      if(!group.orders.length)return [group];
-      return group.orders.map(order=>({
+    // Keep task groups without a current-day eligible Order separately.
+    // The SPX Tasks export has no Order ID or ETA, so these cannot be copied
+    // to the sheet unless the Orders export supplies a matching current-day row.
+    const unmatchedTaskGroups=[...groups.values()].filter(group=>
+      group.tasks.length>0 && !(group.eligibleOrders||[]).length
+    );
+    const unmatchedTaskStatusCounts={};
+    unmatchedTaskGroups.forEach(group=>{
+      const latest=fmLatestTask(group);
+      const label=latest
+        ? fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"]))
+        : "Unknown";
+      unmatchedTaskStatusCounts[label]=(unmatchedTaskStatusCounts[label]||0)+1;
+    });
+    // Render one independent row per eligible current-day pickup Order ID.
+    // Task-only and historical-order-only groups are not mixed into this table.
+    firstMileCombinedRows=[...groups.values()].flatMap(group=>
+      (group.eligibleOrders||[]).map(order=>({
         ...group,
         orders:[order],
-        eligibleOrders:(group.eligibleOrders||[]).includes(order)?[order]:[]
-      }));
-    });
+        eligibleOrders:[order]
+      }))
+    );
     window.__badocCheckNewUnassigned?.();
     // Sort pickup-point rows by Assigned Rider A–Z. Names within each group are
     // already alphabetized by fmAssignedRiderDisplay(); groups without a rider go last.
@@ -4431,15 +4443,28 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const matchedOrders=firstMileCombinedRows.reduce((n,g)=>n+(g.tasks.length?(g.eligibleOrders||[]).length:0),0);
     const unmatchedOrders=orderRows.length-matchedOrders;
     if(stats)stats.innerHTML=[[orderRows.length,"Orders · ETA today"],[matchedGroups.size,"Matched pickup points"],[unmatchedOrders,"Today's orders without task"],[tasksRows.length,"Tasks"],[excludedEtaOrders,"Excluded · ETA not today"]].map(([n,l])=>`<div><strong>${Number(n).toLocaleString()}</strong><span>${l}</span></div>`).join("");
-    if(meta)meta.textContent="";
+    if(meta){
+      const unmatchedTotal=unmatchedTaskGroups.length;
+      const unmatchedStatusText=Object.entries(unmatchedTaskStatusCounts)
+        .sort((a,b)=>a[0].localeCompare(b[0]))
+        .map(([label,count])=>count+" "+label)
+        .join(", ");
+      meta.textContent=unmatchedTotal
+        ? "Unmatched task points excluded: "+unmatchedTotal+
+          (unmatchedStatusText?" ("+unmatchedStatusText+")":"")+
+          ". Tasks export has no Order ID/ETA; no eligible current-day Order matched by Pickup Point ID."
+        : "All current-day Badoc Hub task points matched to eligible Orders.";
+    }
     if(downloadBtn)downloadBtn.disabled=!firstMileCombinedRows.length;
     const search=fmNorm($("firstMileCombinedSearch")?.value||"");
     const selectedTaskStatus=$("firstMileTaskStatusFilter")?.value||"all";
     const searchMatchedRows=firstMileCombinedRows.filter(g=>!search||[g.pickupPointId,...g.orders.flatMap(o=>Object.values(o)),...g.tasks.flatMap(t=>Object.values(t))].some(v=>fmNorm(v).includes(search)));
-    // Show only the three operational order states requested. Unknown, cancelled,
-    // inbounded, and unassigned records remain in the source data for matching
-    // and alerts, but are not included in the visible pickup list.
-    const eligibleStatusRows=searchMatchedRows.filter(g=>["assigned","pickedup","onhold","inbounded"].includes(fmNorm(fmCombinedPickupStatus(g))));
+    // Main Pickup table contains only rows with one eligible current-day Order.
+    // Therefore every row counted in the status dropdown is also one sheet row.
+    const eligibleStatusRows=searchMatchedRows.filter(g=>
+      (g.eligibleOrders||[]).length===1 &&
+      ["assigned","pickedup","onhold","inbounded"].includes(fmNorm(fmCombinedPickupStatus(g)))
+    );
     const statusCounts={
       all:eligibleStatusRows.length,
       assigned:eligibleStatusRows.filter(g=>fmNorm(fmCombinedPickupStatus(g))==="assigned").length,
@@ -4456,7 +4481,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const filtered=eligibleStatusRows.filter(g=>selectedTaskStatus==="all"||fmNorm(fmCombinedPickupStatus(g))===selectedTaskStatus);
     firstMileVisibleRows=filtered;
     const copyBtn=$("copyFirstMileForSheet");
-    const copyOrderCount=filtered.reduce((sum,g)=>sum+(g.eligibleOrders||[]).length,0);
+    // Same eligible row set as the dropdown/table: one Order ID per row.
+    const copyOrderCount=filtered.length;
     if(copyBtn){copyBtn.disabled=copyOrderCount===0;copyBtn.textContent=copyOrderCount?`Copy for Sheet (${copyOrderCount})`:"Copy for Sheet";}
     const columns=[
       ["Order ID",g=>fmOrderId(g.orders[0]||{})||"—"],
@@ -4605,7 +4631,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }).format(new Date());
     for(const group of groups){
       const orders=group.eligibleOrders||[];
-      if(!orders.length)continue;
+      if(orders.length!==1)continue;
       const pointId=fmPickupPointId(orders[0])||fmPickupPointId((group.tasks||[])[0]||{});
       const assignedRider=fmAssignedRiderDisplay(group)==="—"?"":fmAssignedRiderDisplay(group);
       for(const order of orders){
