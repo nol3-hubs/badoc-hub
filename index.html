@@ -1525,6 +1525,11 @@ html[data-theme="light"] .side > .theme-switch-row{
   }
 }
 </style>
+
+<style id="badoc-remove-dashboard-todays-performance">
+/* Keep the legacy EOD summary DOM available to its data updater, but remove it from the Dashboard page. */
+#homeDashboard #dashboardEodSummary{display:none!important}
+</style>
 </head>
 <body data-app-version="21">
 
