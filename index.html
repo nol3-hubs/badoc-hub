@@ -4853,8 +4853,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const today=getBadocManilaDayBounds().date;
     const allTaskRows=tasksData.rows;
     // Match orders to all Badoc task rows by Pickup Point ID, including tasks
-    // created before today. Tasks without an eligible order are only retained
-    // as standalone rows when their creation date is today (for Inbounded).
+    // created before today. Tasks without an eligible order are retained as
+    // standalone task-only rows only when their creation date is today.
     const tasksRows=allTaskRows.filter(fmIsBadocPickupTask);
     fmRememberPickupPointNames(tasksRows);
     fmRememberPickupPointNames(allOrderRows);
