@@ -1112,6 +1112,44 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
   #homeDashboard .dashboard-status-grid{grid-template-columns:1fr!important}
 }
 </style>
+<style id="badoc-theme-switch-visibility">
+/* Keep the desktop theme control visible while the longer grouped menu scrolls. */
+.side{
+  display:flex!important;
+  flex-direction:column!important;
+  min-height:0!important;
+}
+.side > .nav{
+  flex:0 0 auto!important;
+  min-height:0!important;
+}
+.side > .theme-switch-row{
+  position:sticky!important;
+  bottom:0!important;
+  z-index:25!important;
+  flex:0 0 auto!important;
+  margin-top:auto!important;
+  padding-top:12px!important;
+  padding-bottom:12px!important;
+  background:var(--panel,var(--bg,#0b1118))!important;
+  box-shadow:0 -8px 14px rgba(0,0,0,.12)!important;
+}
+html[data-theme="light"] .side > .theme-switch-row{
+  background:#fff!important;
+  box-shadow:0 -8px 14px rgba(16,24,40,.06)!important;
+}
+.app.side-collapsed .side > .theme-switch-row{
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+}
+.app.side-collapsed .side > .theme-switch-row .theme-switch-label{
+  justify-content:center!important;
+}
+@media(max-width:700px){
+  .side{display:none!important}
+}
+</style>
 </head>
 <body data-app-version="21">
 
