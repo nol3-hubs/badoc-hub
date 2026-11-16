@@ -1355,6 +1355,7 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
               <option value="assigned">Assigned</option>
               <option value="pickedup">Picked Up</option>
               <option value="onhold">Onhold</option>
+              <option value="inbounded">Inbounded</option>
             </select>
             <button class="btn" id="copyFirstMileForSheet" type="button" disabled title="Copy visible pickup orders as tab-separated rows for the spreadsheet">Copy for Sheet</button>
             <button class="btn primary" id="syncFirstMileAll" type="button">↻ Sync First Mile</button>
@@ -4248,12 +4249,15 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     return fmOrderSheetStatus(order)==="Picked Up"?"Picked Up":"Not Picked Up";
   }
   function fmCombinedPickupStatus(group){
+    const latest=fmLatestTask(group);
+    const taskStatus=latest?fmNorm(fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"]))):"";
+    // Inbounded is a later task milestone and must remain visible even when
+    // the order export still carries an earlier Assigned/Picked Up value.
+    if(taskStatus==="inbounded")return "Inbounded";
+    if(taskStatus==="onhold"||taskStatus==="pickupnoorder")return "Onhold";
     const order=group?.orders?.[0]||null;
     const orderStatus=order?fmOrderSheetStatus(order):"";
     if(orderStatus)return orderStatus;
-    const latest=fmLatestTask(group);
-    const taskStatus=latest?fmNorm(fmTaskStatusLabel(fmValue(latest,["Status","Task Status","Pickup Task Status","status_name","status"]))):"";
-    if(taskStatus==="onhold"||taskStatus==="pickupnoorder")return "Onhold";
     if(taskStatus==="pickedup"||taskStatus==="pickupdone"||taskStatus==="collected"||taskStatus==="done")return "Picked Up";
     if(taskStatus==="assigned"||taskStatus==="accepted")return "Assigned";
     return "";
@@ -4412,15 +4416,16 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     // Show only the three operational order states requested. Unknown, cancelled,
     // inbounded, and unassigned records remain in the source data for matching
     // and alerts, but are not included in the visible pickup list.
-    const eligibleStatusRows=searchMatchedRows.filter(g=>["assigned","pickedup","onhold"].includes(fmNorm(fmCombinedPickupStatus(g))));
+    const eligibleStatusRows=searchMatchedRows.filter(g=>["assigned","pickedup","onhold","inbounded"].includes(fmNorm(fmCombinedPickupStatus(g))));
     const statusCounts={
       all:eligibleStatusRows.length,
       assigned:eligibleStatusRows.filter(g=>fmNorm(fmCombinedPickupStatus(g))==="assigned").length,
       pickedup:eligibleStatusRows.filter(g=>fmNorm(fmCombinedPickupStatus(g))==="pickedup").length,
-      onhold:eligibleStatusRows.filter(g=>fmNorm(fmCombinedPickupStatus(g))==="onhold").length
+      onhold:eligibleStatusRows.filter(g=>fmNorm(fmCombinedPickupStatus(g))==="onhold").length,
+      inbounded:eligibleStatusRows.filter(g=>fmNorm(fmCombinedPickupStatus(g))==="inbounded").length
     };
     const statusFilter=$("firstMileTaskStatusFilter");
-    const statusLabels={all:"All pickup statuses",assigned:"Assigned",pickedup:"Picked Up",onhold:"Onhold"};
+    const statusLabels={all:"All pickup statuses",assigned:"Assigned",pickedup:"Picked Up",onhold:"Onhold",inbounded:"Inbounded"};
     if(statusFilter)Array.from(statusFilter.options).forEach(option=>{
       const label=statusLabels[option.value];
       if(label!==undefined)option.textContent=`${label} (${Number(statusCounts[option.value]||0).toLocaleString()})`;
@@ -4440,7 +4445,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     ];
     if(table && $("firstMile")?.classList.contains("active")){
       if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No pickup orders with Assigned, Picked Up, or Onhold status match this search.</div>';
-      else table.innerHTML=`<table><thead><tr>${columns.map(c=>`<th>${fmEsc(c[0])}</th>`).join("")}</tr></thead><tbody>${filtered.slice(0,2000).map(g=>{return `<tr>${columns.map(c=>c[0]==="Pickup Status"?`<td><span class="fm-task-pill fm-task-${c[1](g)==="Picked Up"?"done":c[1](g)==="Assigned"?"assigned":"onhold"}">${fmEsc(c[1](g))}</span></td>`:c[0]==="Order ID"?`<td>${fmOrderLinksHtml(g)}</td>`:`<td title="${fmEsc(c[1](g))}">${fmEsc(c[1](g))}</td>`).join("")}</tr>`;}).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} OIDs.</div>`:""}`;
+      else table.innerHTML=`<table><thead><tr>${columns.map(c=>`<th>${fmEsc(c[0])}</th>`).join("")}</tr></thead><tbody>${filtered.slice(0,2000).map(g=>{return `<tr>${columns.map(c=>c[0]==="Pickup Status"?`<td><span class="fm-task-pill fm-task-${c[1](g)==="Picked Up"?"done":c[1](g)==="Assigned"?"assigned":c[1](g)==="Inbounded"?"inbounded":"onhold"}">${fmEsc(c[1](g))}</span></td>`:c[0]==="Order ID"?`<td>${fmOrderLinksHtml(g)}</td>`:`<td title="${fmEsc(c[1](g))}">${fmEsc(c[1](g))}</td>`).join("")}</tr>`;}).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} OIDs.</div>`:""}`;
     }
   }
   window.__badocRenderFirstMileCombined=renderFirstMileCombined;
