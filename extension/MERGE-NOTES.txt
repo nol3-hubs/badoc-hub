@@ -127,3 +127,11 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Show Downloaded Export Data
 - Downloaded rows are shown immediately after both SPX exports complete. The checker input continues to receive the deduplicated OID list for validation.
 - Chrome package bumped to v1.2.9, Firefox package bumped to v69.4.1, and the checker iframe marker bumped to 1.5.51.
 - Static JavaScript syntax and manifest checks are required. Live rendering still needs a test against actual Forward and Return CSVs from an authenticated SPX session.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Explicit SPX export parameters
+- Fixed the shared Assigned Parcels Today request builder in Chrome and Firefox to send explicit empty tracking_status and ctime values for All statuses and no Created Date restriction, rather than omitting those request fields.
+- Preserved Current Station = Badoc Hub and today's Onhold Time filter. The downloaded CSV rows continue to exclude only Delivering and Delivered before appearing in Downloaded Data and before OIDs are loaded.
+- Export errors now identify whether the Forward Order or Return Order request failed.
+- Chrome extension bumped to v1.3.2, Firefox extension bumped to v69.4.4, and the POD Checker iframe marker bumped to 1.5.52.
+- Static source changes are committed. The SPX API response still needs a live test from the user's authenticated SPX session.
