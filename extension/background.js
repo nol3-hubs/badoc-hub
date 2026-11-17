@@ -520,6 +520,120 @@ async function downloadCsv(signedUrl) {
 }
 
 
+function parseOnholdExportCsvRows(source) {
+  const input = String(source || "").replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [], field = "", quoted = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (quoted) {
+      if (ch === '"' && input[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+      continue;
+    }
+    if (ch === '"' && field.length === 0) quoted = true;
+    else if (ch === ",") { row.push(field); field = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      row.push(field);
+      if (row.some(value => String(value).trim())) rows.push(row);
+      row = []; field = "";
+      if (ch === "\r" && input[i + 1] === "\n") i++;
+    } else field += ch;
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    if (row.some(value => String(value).trim())) rows.push(row);
+  }
+  return rows;
+}
+
+function extractOnholdParcelOids(csvText) {
+  const rows = parseOnholdExportCsvRows(csvText);
+  if (!rows.length) throw new Error("SPX returned an empty OnHold parcel export.");
+  const headers = rows[0].map(value => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const orderIdColumns = headers
+    .map((header, index) => ({ header, index }))
+    .filter(item => /^(oid|orderid|orderno|ordernumber|ordersn|shipmentid|shipmentno)$/.test(item.header))
+    .map(item => item.index);
+  const oidPattern = /^(?:PH|SPEPH)[A-Z0-9]{8,}$/i;
+  const found = new Set();
+  const addValues = values => {
+    for (const raw of values) {
+      const value = String(raw ?? "").trim().replace(/\s+/g, "").toUpperCase();
+      if (oidPattern.test(value)) found.add(value);
+    }
+  };
+  for (const row of rows.slice(1)) {
+    if (orderIdColumns.length) addValues(orderIdColumns.map(index => row[index]));
+    else addValues(row);
+  }
+  if (!found.size && orderIdColumns.length) {
+    for (const row of rows.slice(1)) addValues(row);
+  }
+  return { oids: [...found], rowCount: Math.max(0, rows.length - 1) };
+}
+
+async function exportOnholdParcelsTodayFromSpx() {
+  const range = parcelDeliveryDateRange();
+  const job = { kind: "pod-onhold-today", startedAt: Date.now(), cancelled: false };
+  const body = {
+    tracking_status: "5",
+    bulky_type: "1,0,2",
+    pick_up_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
+    format_condition:
+      "Status Log= OnHold; " +
+      "Bulky Type= Bulky,N/A,Non-Bulky; " +
+      "Assigned Time= " + range.todayDate + " 00:00:00," + range.todayDate + " 23:59:59; " +
+      "Driver= All"
+  };
+
+  progress("Submitting SPX OnHold parcel export for " + range.todayDate + " (Assigned Time only)…", {
+    phase: "pod-onhold-today-export", kind: job.kind, statusName: "OnHold",
+    dateStart: range.todayDate, dateEnd: range.todayDate
+  });
+
+  const response = await extensionFetchText(SPX_ORIGIN + PARCEL_FORWARD_EXPORT_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json, text/plain, */*" },
+    body: JSON.stringify(body)
+  });
+  const json = parseJsonResponse("SPX OnHold parcel export", response);
+  if (!response.ok || Number(json?.retcode) !== 0) {
+    throw new Error(json?.message || "SPX OnHold parcel export failed (HTTP " + response.status + ").");
+  }
+
+  const taskId = Number(json?.data?.task_id || json?.task_id || 0);
+  if (!taskId) throw new Error("SPX accepted the OnHold export request but returned no task ID.");
+
+  const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
+  const completed = await waitForCompletion(taskId, waitStartSec, job);
+  if (String(completed?.export_name || "") !== PARCEL_EXPORT_NAME ||
+      String(completed?.biz_name || "") !== PARCEL_EXPORT_BIZ_NAME) {
+    throw new Error("The completed SPX task is not a Forward Order export.");
+  }
+  const completedStatuses = String(parseTaskCondition(completed)?.tracking_status || "")
+    .split(",").map(value => value.trim()).filter(Boolean);
+  if (!setsEqual(completedStatuses, ["5"])) {
+    throw new Error("The completed SPX export did not match the OnHold-only request.");
+  }
+
+  progress("SPX OnHold export task " + taskId + " is complete. Downloading the CSV…", {
+    phase: "pod-onhold-today-download", kind: job.kind, taskId
+  });
+  const signedUrl = await getSignedDownloadUrl(taskId);
+  const csv = await downloadCsv(signedUrl);
+  const extracted = extractOnholdParcelOids(csv.text);
+  return {
+    ok: true,
+    todayDate: range.todayDate,
+    taskId,
+    rowCount: extracted.rowCount,
+    oids: extracted.oids,
+    fileName: csv.fileName
+  };
+}
+
 async function ensureToListRoute(tabId) {
   const tab = await chrome.tabs.get(tabId);
   const currentUrl = String(tab?.url || "");
@@ -2235,6 +2349,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ───────── Integrated POD/POOH Checker background actions ─────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.target !== "POD_CHECKER_BACKGROUND") return false;
+
+  if (message.action === "EXPORT_ONHOLD_PARCELS_TODAY") {
+    (async () => {
+      try {
+        sendResponse(await exportOnholdParcelsTodayFromSpx());
+      } catch (error) {
+        sendResponse({ ok: false, error: error?.message || String(error) });
+      }
+    })();
+    return true;
+  }
+
 
   // Run Google Sheets requests from the MV3 service worker. This avoids the
   // extension-page CORS failure seen when calling docs.google.com directly.
