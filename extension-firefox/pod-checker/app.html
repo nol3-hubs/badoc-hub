@@ -36,20 +36,6 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}tr:last-child td{border-bo
 .stat.tier-stat{background:#f9fafb}
 .stat.tier-stat span{color:#344054;font-weight:700}.stat.tier-stat strong{color:#202938}
 footer{font-size:12px;color:var(--muted);line-height:1.5}
-.downloaded-tools{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:12px 0}
-.downloaded-tools label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600;min-width:150px}
-.downloaded-tools select,.downloaded-tools input{min-width:170px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font:13px Arial,sans-serif}
-.downloaded-scroll{max-height:430px;overflow:auto}
-#downloadedTable{width:max-content;min-width:100%;font-size:12px}
-#downloadedTable th{white-space:nowrap}
-#downloadedTable td{max-width:280px;min-width:110px;white-space:normal;overflow-wrap:anywhere}
-#downloadedTable th:first-child,#downloadedTable td:first-child{position:sticky;left:0;z-index:2;min-width:110px;background:#fff}
-#downloadedTable th:first-child{z-index:3;background:#f8fafc}
-.return-source{background:#e8eaff;color:#3f4598}
-.forward-source{background:#e6f3ff;color:#145b8a}
-.downloaded-pagination{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
-.downloaded-pagination button{min-height:34px;padding:7px 11px}
-@media(max-width:600px){.downloaded-tools label,.downloaded-tools select,.downloaded-tools input{width:100%;min-width:0}.downloaded-pagination button{flex:1 1 100%}}
 @media(max-width:900px){.grid{grid-template-columns:1fr}textarea{min-height:145px}}
 @media(max-width:600px){.header-actions{flex-wrap:wrap}header{padding:15px 12px}h1{font-size:21px}main{padding:0 8px 25px;margin:10px auto}.card{padding:12px}.stat-row{grid-template-columns:1fr}.tier-stat-row{grid-template-columns:repeat(2,minmax(0,1fr))}.row button{flex-basis:100%}th,td{padding:7px}.capture-list{max-height:200px}}
 .filters{align-items:flex-end;gap:10px;margin:12px 0}.filters label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}.filters select{min-width:125px;max-width:220px;padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--text);font-size:13px}.evidence-yes{color:#16803c;font-weight:700}.evidence-no{color:#c62828;font-weight:700}
@@ -110,35 +96,7 @@ footer{font-size:12px;color:var(--muted);line-height:1.5}
 </section>
 </div>
 <div>
-<section class="card" id="downloadedCard">
-  <div class="row" style="justify-content:space-between;align-items:center;margin-top:0">
-    <h2 style="margin:0">Downloaded Data <span id="downloadedTotal" class="muted small"></span></h2>
-    <button id="clearDownloaded" class="outline secondary" style="flex:0 0 auto">Clear view</button>
-  </div>
-  <div class="stat-row">
-    <div class="stat"><span>Forward rows</span><strong id="downloadedForwardRows">0</strong></div>
-    <div class="stat"><span>Return rows</span><strong id="downloadedReturnRows">0</strong></div>
-    <div class="stat"><span>Unique OIDs loaded</span><strong id="downloadedUniqueOids">0</strong></div>
-  </div>
-  <div id="downloadedSummary" class="muted small">Click Assigned Parcels Today to load Forward and Return parcels created within the last 14 days and assigned today at Badoc Hub, excluding Delivering and Delivered.</div>
-  <div class="downloaded-tools">
-    <label>Source
-      <select id="downloadSource"><option value="ALL">All downloads</option><option value="Forward Order">Forward Order</option><option value="Return Order">Return Order</option></select>
-    </label>
-    <label>Search downloaded rows
-      <input id="downloadSearch" type="search" placeholder="Search any downloaded field">
-    </label>
-  </div>
-  <div class="table-wrap downloaded-scroll">
-    <table id="downloadedTable"><thead id="downloadedHead"><tr><th>Source</th></tr></thead><tbody id="downloadedRows"><tr><td class="muted">No downloaded data yet.</td></tr></tbody></table>
-  </div>
-  <div class="downloaded-pagination">
-    <span id="downloadedRange" class="muted small">0 rows</span>
-    <button id="downloadedPrev" class="outline secondary" disabled>← Previous</button>
-    <span id="downloadedPageIndicator" class="muted small">Page 1 / 1</span>
-    <button id="downloadedNext" class="outline secondary" disabled>Next →</button>
-  </div>
-</section>
+
 <section class="card">
 <h2>Results <span id="resultsCount" class="muted"></span></h2>
 <div class="stat-row">
@@ -168,5 +126,5 @@ footer{font-size:12px;color:var(--muted);line-height:1.5}
 </div>
 </div>
 </main>
-<script src="app.js?v=1.4.0"></script>
+<script src="app.js?v=1.4.1"></script>
 </body></html>
