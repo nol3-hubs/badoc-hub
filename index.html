@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v85">
+<meta name="badoc-app-version" content="v86">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -12966,8 +12966,11 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   function bridgeModal(){return document.getElementById("badocSpxBridgeInstallModal");}
   function openBridgeInstaller(){bridgeModal()?.classList.add("is-open");}
   function closeBridgeInstaller(){
-    // Closing the installer refreshes the dashboard and rechecks the extension bridge.
-    window.location.reload();
+    // Closing the installer must not reload the dashboard. Escape is commonly
+    // used to dismiss dialogs and should never reset the current page.
+    const modal=bridgeModal();
+    if(modal)modal.classList.remove("is-open");
+    if(!bridgeCheckInFlight)checkBridgeInstalled(BRIDGE_CHECK_TIMEOUT);
   }
 
   function setBridgeDownloadStatus(message){
@@ -13262,7 +13265,11 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     if(data.type==="BADOC_EXTENSIONS_OPENED") setBridgeDownloadStatus("✅ Chrome Extensions opened in a new tab.");
   });
     bridgeModal()?.addEventListener("click",e=>{if(e.target===bridgeModal())closeBridgeInstaller();});
-    window.addEventListener("keydown",e=>{if(e.key==="Escape")closeBridgeInstaller();});
+    window.addEventListener("keydown",e=>{
+      if(e.key!=="Escape"||!bridgeModal()?.classList.contains("is-open"))return;
+      e.preventDefault();
+      closeBridgeInstaller();
+    });
     checkBridgeInstalled(BRIDGE_CHECK_TIMEOUT);
     __badocEvery(()=>{if(!bridgeCheckInFlight&&!bridgeReady)checkBridgeInstalled(BRIDGE_CHECK_TIMEOUT);},10000);
   });
