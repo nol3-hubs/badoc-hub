@@ -1,4 +1,4 @@
-BADOC HUB CHROME EXTENSION — Chrome v1.2.3 / Firefox v69.3.5
+BADOC HUB CHROME EXTENSION — Chrome v1.2.4 / Firefox v69.3.6
 First Mile Orders + Tasks integration
 
 SOURCE
@@ -75,3 +75,8 @@ UPDATE — 2026-11-17 · Pickup Info lookup and daily first-sync baseline
 - Pickup Task Number is used for an exact Order/Task association when it is present in both exports; the existing Pickup Point ID grouping remains as a fallback.
 - Explicit Pickup Task statuses Accepted, Disabled, Pickup no order, and Inbounded drive the mapped status. Disabled appears as Cancelled after Assigned only if its same-day first-sync baseline was Assigned; otherwise it is hidden.
 - The next Manila date uses a new baseline path. The all-status SPX export filters and unrelated dashboard workflows are retained.
+
+
+Firefox follow-up — 2026-11-17
+- Bumped the Firefox extension package to v69.3.6 and added the same on-demand Pickup Info lookup through the signed-in SPX tab.
+- The Firefox content bridge relays the validated Order ID request to its WebExtensions background worker and returns the Pickup Info attempt metadata to the dashboard.
