@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v82">
+<meta name="badoc-app-version" content="v83">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2235,33 +2235,146 @@ EOD</div>
   </div>
 </section>
 
-<section id="settings" class="page">
-<div class="section" id="localOnlyModeNotice" style="border:1px solid #d6a84f;background:rgba(234,179,8,.08);padding:12px;border-radius:10px;margin-bottom:12px">
-  <strong>Shared cloud sync is enabled</strong>
-  <div class="hint">Dashboard data syncs through Firebase. First Mile Orders and Tasks remain saved locally in this browser/device.</div>
-</div>
-
-<div id="cloudTestCard">
-  <button id="cloudTestBtn" type="button">Test Cloud Connection</button>
-  <span id="cloudTestResult">Not tested</span>
-</div>
-
-<div class="section sync-health-settings-card">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-    <div><h2 style="margin:0 0 5px">Sync health</h2><p class="hint" style="margin:0">Check cloud connection, recent sync activity, stale data, and reported errors.</p></div>
-    <button type="button" class="syncall-health" id="syncHealthOpen" title="See what is working and what failed">Open Sync Health</button>
+<section id="settings" class="page settings-center">
+  <div class="section settings-panel" id="localOnlyModeNotice">
+    <h2>1. Connection &amp; Sync</h2>
+    <p class="hint">Live status for the dashboard cloud, First Mile shared data, and the SPX extension.</p>
+    <div class="settings-status-grid">
+      <div class="settings-status-item"><span>Dashboard Cloud</span><strong id="settingsDashboardCloudStatus">Checking…</strong><small id="settingsDashboardCloudDetail">Reading current cloud connection</small></div>
+      <div class="settings-status-item"><span>First Mile Sync</span><strong id="settingsPickupCloudStatus">Checking…</strong><small id="settingsPickupCloudDetail">Reading Orders and Tasks sync state</small></div>
+      <div class="settings-status-item"><span>SPX Extension</span><strong id="settingsExtensionStatus">Checking…</strong><small id="settingsExtensionDetail">Checking this browser's extension bridge</small></div>
+      <div class="settings-status-item"><span>Last successful sync</span><strong id="settingsLastSync">—</strong><small id="settingsLastSyncDetail">This device</small></div>
+    </div>
+    <div class="settings-actions-row">
+      <div id="cloudTestCard"><button id="cloudTestBtn" type="button">Test Cloud Connection</button><span id="cloudTestResult">Not tested</span></div>
+      <button class="btn" id="settingsRefreshStatus" type="button">Refresh Status</button>
+      <button type="button" class="syncall-health" id="syncHealthOpen" title="See recent sync activity, stale data, and errors">Open Sync Health</button>
+    </div>
   </div>
-</div>
 
-<div class="section shared-storage-panel">
-  <h2>☁ Shared Files</h2>
-  <p class="hint">Shared storage is built into this version.</p>
-  
-</div>
-<div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Dashboard version"><strong>Dashboard version</strong><span>Current application build</span><b>v45</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
-    <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
-  </div></section>
+  <div class="section settings-panel" id="settingsStoragePanel">
+    <div class="settings-panel-head">
+      <div><h2>2. Storage Information</h2><p class="hint">Storage used by Badoc Hub in this browser. Cloud storage usage is reported separately when the provider exposes it.</p></div>
+      <button class="btn" id="settingsStorageRefresh" type="button">↻ Refresh</button>
+    </div>
+    <div class="settings-storage-grid">
+      <div class="settings-storage-item"><span>Browser storage used</span><strong id="settingsStorageUsage">Not checked</strong><small id="settingsStorageUsageDetail">Origin-wide usage</small></div>
+      <div class="settings-storage-item"><span>Browser storage quota</span><strong id="settingsStorageQuota">—</strong><small id="settingsStorageQuotaDetail">Available browser quota</small></div>
+      <div class="settings-storage-item"><span>Parcel uploads</span><strong id="settingsParcelStorage">Not checked</strong><small id="settingsParcelStorageDetail">IndexedDB batches</small></div>
+      <div class="settings-storage-item"><span>First Mile files</span><strong id="settingsPickupStorage">Not checked</strong><small id="settingsPickupStorageDetail">Orders, Tasks, and point names</small></div>
+      <div class="settings-storage-item"><span>Browser app settings</span><strong id="settingsLocalStorage">Not checked</strong><small id="settingsLocalStorageDetail">Local storage size</small></div>
+      <div class="settings-storage-item"><span>Storage persistence</span><strong id="settingsStoragePersistence">Not checked</strong><small id="settingsStoragePersistenceDetail">Browser eviction protection</small></div>
+      <div class="settings-storage-item"><span>Shared cloud storage</span><strong id="settingsCloudStorage">Usage not exposed</strong><small id="settingsCloudStorageDetail">Current cloud API does not report total bucket usage</small></div>
+    </div>
+    <p class="hint settings-storage-footnote" id="settingsStorageStatus" aria-live="polite">Select Refresh to measure this browser's stored data.</p>
+  </div>
+
+  <div class="section settings-panel" id="settingsAlertsPanel">
+    <h2>3. Notifications &amp; Alerts</h2>
+    <p class="hint">Control new-unassigned alerts in the Pickup menu. Browser permission is separate from the dashboard's notification preference.</p>
+    <div class="settings-toggle-list">
+      <label class="settings-toggle-row" for="settingsAlarmEnabled"><span><strong>Unassigned Pickup Alarm</strong><small>Detect and alert when new unassigned pickup groups appear.</small></span><input type="checkbox" id="settingsAlarmEnabled" checked></label>
+      <label class="settings-toggle-row" for="settingsSoundEnabled"><span><strong>Alarm Sound</strong><small>Play the repeating sound while an unassigned alarm is active.</small></span><input type="checkbox" id="settingsSoundEnabled" checked></label>
+      <label class="settings-toggle-row" for="settingsBrowserNotifications"><span><strong>Browser Notifications</strong><small>Show a desktop notification when a new unassigned pickup group is detected.</small></span><input type="checkbox" id="settingsBrowserNotifications" checked></label>
+    </div>
+    <div class="settings-actions-row">
+      <span class="hint" id="settingsNotificationPermission" aria-live="polite">Checking browser notification permission…</span>
+      <button class="btn" id="settingsRequestNotificationPermission" type="button">Allow Notifications</button>
+      <button class="btn" id="settingsTestSound" type="button">Test Sound</button>
+      <button class="btn" id="settingsTestNotification" type="button">Test Notification</button>
+    </div>
+  </div>
+
+  <div class="section settings-panel" id="settingsMaintenancePanel">
+    <h2>4. Maintenance &amp; Reset</h2>
+    <div class="settings-maintenance-group">
+      <div><strong>Clear Floor Rate</strong><p class="hint">Reset today's regular Clear Floor Rate peak to 0%. This does not delete parcel data or reset CFR1.</p></div>
+      <button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button>
+    </div>
+    <div class="settings-maintenance-group">
+      <div><strong>CFR1</strong><p class="hint">Rebuild today's CFR1 eligible-parcel list and 7:00 AM count freeze from the parcel data currently available on this device.</p></div>
+      <button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button>
+    </div>
+    <div id="cfr1CloudSyncStatus" class="hint settings-cfr1-status">CFR1 cloud sync initializes when cloud storage is available.</div>
+    <div class="settings-danger-zone">
+      <strong>Clear all data</strong>
+      <p>This clears operational uploads and working data from this device and their current shared cloud copies:</p>
+      <ul>
+        <li>Upload Exported parcel batches and shared parcel upload.</li>
+        <li>Linehaul Task records, town/packed-row/export data, and shared linehaul data.</li>
+        <li>First Mile Pickup Orders, Pickup Tasks, saved Pickup Point ID/name directory, and local first-sync baselines.</li>
+        <li>Exemptions from this device and shared cloud.</li>
+      </ul>
+      <p class="hint">It keeps town/station settings, Riders Data, Daily History, dashboard preferences, Clear Floor Rate, and CFR1. Historical cloud First Mile baseline files are retained.</p>
+      <div class="settings-clear-confirm">
+        <label for="settingsClearDataWord">Type <strong>CLEAR DATA</strong> to enable this action.</label>
+        <input id="settingsClearDataWord" type="text" autocomplete="off" spellcheck="false" placeholder="Type CLEAR DATA">
+        <button class="btn danger" id="clearData" type="button" disabled>Clear all data</button>
+      </div>
+    </div>
+    <span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none">
+  </div>
+
+  <div class="section settings-panel" id="settingsAppInfoPanel">
+    <h2>5. Application Information</h2>
+    <div class="settings-info-grid">
+      <div><span>Dashboard version</span><strong id="settingsDashboardVersion">—</strong></div>
+      <div><span>Required extension version</span><strong id="settingsRequiredExtension">—</strong></div>
+      <div><span>Detected extension</span><strong id="settingsDetectedExtension">—</strong></div>
+      <div><span>Browser</span><strong id="settingsBrowser">—</strong></div>
+    </div>
+    <p class="hint" id="settingsAppInfoNote">Extension status is detected on this device and may differ between browsers.</p>
+    <button class="btn" id="settingsRefreshAppInfo" type="button">Refresh Application Status</button>
+  </div>
+</section>
+
+<style id="badoc-settings-center-styles">
+#settings.settings-center{display:flex;flex-direction:column;gap:12px}
+#settings .settings-panel{margin:0;padding:16px}
+#settings .settings-panel>h2{margin:0 0 6px;font-size:16px}
+#settings .settings-panel>.hint{margin:0 0 12px}
+#settings .settings-status-grid,#settings .settings-storage-grid,#settings .settings-info-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}
+#settings .settings-status-item,#settings .settings-storage-item,#settings .settings-info-grid>div{min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel2)}
+#settings .settings-status-item>span,#settings .settings-storage-item>span,#settings .settings-info-grid>div>span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+#settings .settings-status-item>strong,#settings .settings-storage-item>strong,#settings .settings-info-grid>div>strong{display:block;margin-top:5px;font-size:14px;overflow-wrap:anywhere}
+#settings .settings-status-item>small,#settings .settings-storage-item>small{display:block;margin-top:4px;color:var(--muted);font-size:10px;line-height:1.35;overflow-wrap:anywhere}
+#settings .settings-actions-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+#settings #cloudTestCard{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0}
+#settings #cloudTestCard #cloudTestResult{font-size:11px}
+#settings .settings-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#settings .settings-storage-footnote{margin:10px 0 0;font-size:11px}
+#settings .settings-toggle-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+#settings .settings-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px;background:var(--panel2);cursor:pointer}
+#settings .settings-toggle-row+.settings-toggle-row{border-top:1px solid var(--line)}
+#settings .settings-toggle-row>span{display:flex;flex-direction:column;gap:3px}
+#settings .settings-toggle-row strong{font-size:13px}
+#settings .settings-toggle-row small{color:var(--muted);font-size:11px;line-height:1.35}
+#settings .settings-toggle-row input{width:19px;height:19px;flex:0 0 auto;accent-color:var(--blue)}
+#settings .settings-maintenance-group{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+#settings .settings-maintenance-group>div{min-width:0}
+#settings .settings-maintenance-group p{margin:4px 0 0}
+#settings .settings-cfr1-status{margin:8px 0 12px}
+#settings .settings-danger-zone{margin-top:12px;padding:13px;border:1px solid #b453533f;border-radius:10px;background:rgba(185,28,28,.055)}
+#settings .settings-danger-zone>strong{display:block;color:var(--danger,#ef7777);font-size:14px}
+#settings .settings-danger-zone p{margin:7px 0;font-size:12px}
+#settings .settings-danger-zone ul{margin:7px 0;padding-left:20px;color:var(--text);font-size:11px;line-height:1.6}
+#settings .settings-danger-zone .hint{color:var(--muted)}
+#settings .settings-clear-confirm{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+#settings .settings-clear-confirm label{width:100%;font-size:11px;color:var(--muted)}
+#settings .settings-clear-confirm input{flex:1 1 200px;min-width:180px;max-width:320px;padding:10px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--text)}
+#settings .settings-clear-confirm button:disabled{opacity:.45;cursor:not-allowed}
+#settings .settings-info-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+#settings .settings-info-grid>div{display:flex;flex-direction:column;gap:5px}
+#settings .settings-info-grid>div>strong{margin-top:0;font-size:13px}
+@media(max-width:900px){
+ #settings .settings-status-grid,#settings .settings-storage-grid,#settings .settings-info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+ #settings .settings-status-grid,#settings .settings-storage-grid,#settings .settings-info-grid{grid-template-columns:1fr}
+ #settings .settings-maintenance-group{align-items:flex-start;flex-direction:column}
+ #settings .settings-clear-confirm input{max-width:none;width:100%}
+}
+</style>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
     <div class="received-checking-frame-shell">
       <iframe
@@ -5312,14 +5425,35 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const schedule=new Set(["10:00","11:00","12:00","13:00","14:00","15:00","15:30","15:40","15:50","15:57","15:59","16:00"]);
     const statusEl=()=>document.getElementById("firstMileAutoAlertStatus");
     const manilaParts=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).reduce((o,p)=>(o[p.type]=p.value,o),{});
-    let lastAutoRun="",alarmEnabled=true,alarmActive=false,audioCtx=null,alarmTimer=null,knownUnassigned=null,soundBlocked=false;
+    const ALARM_PREF_KEY="badoc_first_mile_alarm_enabled_v1";
     const SOUND_PREF_KEY="badoc_first_mile_alarm_sound_enabled_v1";
+    const BROWSER_NOTIF_PREF_KEY="badoc_first_mile_browser_notifications_enabled_v1";
+    const readBoolPref=(key,fallback=true)=>{try{const value=localStorage.getItem(key);return value===null?fallback:value==="1";}catch(_){return fallback;}};
+    const writeBoolPref=(key,value)=>{try{localStorage.setItem(key,value?"1":"0");}catch(e){}};
+    let lastAutoRun="",alarmEnabled=readBoolPref(ALARM_PREF_KEY,true),soundEnabled=readBoolPref(SOUND_PREF_KEY,true),browserNotificationsEnabled=readBoolPref(BROWSER_NOTIF_PREF_KEY,true),alarmActive=false,audioCtx=null,alarmTimer=null,knownUnassigned=null,soundBlocked=false;
+    function refreshAlertSettingsStatus(){
+      const permission=("Notification" in window)?Notification.permission:"unsupported";
+      const permissionEl=document.getElementById("settingsNotificationPermission");
+      if(permissionEl)permissionEl.textContent=permission==="granted"?"Browser permission: Allowed":permission==="denied"?"Browser permission: Blocked in browser settings":permission==="default"?"Browser permission: Not requested":"Browser notifications are not supported";
+      const requestBtn=document.getElementById("settingsRequestNotificationPermission");
+      if(requestBtn)requestBtn.hidden=permission==="granted"||permission==="unsupported";
+      const alarm=document.getElementById("settingsAlarmEnabled");if(alarm)alarm.checked=alarmEnabled;
+      const sound=document.getElementById("settingsSoundEnabled");if(sound)sound.checked=soundEnabled;
+      const notifications=document.getElementById("settingsBrowserNotifications");if(notifications)notifications.checked=browserNotificationsEnabled;
+    }
     function setSoundState(ready,reason){
-      soundBlocked=!ready;
-      const b=document.getElementById("enableFirstMileAlarm");if(b)b.hidden=ready;
-      const el=statusEl();if(el){const notificationOn=("Notification" in window&&Notification.permission==="granted");el.textContent="Unassigned alarm: ON · Sound: "+(ready?"ON":"OFF")+(ready?"":" (Chrome blocked sound)")+" · Browser notifications: "+(notificationOn?"ON":"OFF")+(ready?"":". Click Enable alarm sound to turn sound ON.");}
+      soundBlocked=!!soundEnabled&&!ready;
+      const b=document.getElementById("enableFirstMileAlarm");if(b)b.hidden=ready||!soundEnabled;
+      const el=statusEl();
+      if(el){
+        const permission=("Notification" in window)?Notification.permission:"unsupported";
+        const notificationLabel=!browserNotificationsEnabled?"OFF":permission==="granted"?"ON":permission==="denied"?"BLOCKED":"NEEDS PERMISSION";
+        el.textContent="Unassigned alarm: "+(alarmEnabled?"ON":"OFF")+" · Sound: "+(!soundEnabled?"OFF":ready?"ON":"NOT READY")+" · Browser notifications: "+notificationLabel;
+      }
+      refreshAlertSettingsStatus();
     }
     async function tryRestoreSound(){
+      if(!soundEnabled){setSoundState(false,"sound disabled in Settings");return false;}
       try{
         const AC=window.AudioContext||window.webkitAudioContext;
         if(!AC){setSoundState(false,"Web Audio is unavailable");return false;}
@@ -5351,8 +5485,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         .filter(g=>fmAssignedRiderDisplay(g)==="Unassigned")
         .map(orderKey));
     }
-    function beep(){
-      if(!alarmEnabled||!alarmActive||!audioCtx)return;
+    function playAlarmTone(){
+      if(!soundEnabled||!audioCtx||audioCtx.state!=="running")return;
       try{
         const now=audioCtx.currentTime;
         [0,0.22,0.44].forEach(offset=>{
@@ -5366,13 +5500,17 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         });
       }catch(e){console.warn("Pickup alarm audio:",e);}
     }
+    function beep(){
+      if(!alarmEnabled||!alarmActive||!soundEnabled)return;
+      playAlarmTone();
+    }
     function startAlarm(count){
       if(!alarmEnabled||alarmActive)return;
       alarmActive=true;
       const ack=document.getElementById("ackFirstMileAlarm");if(ack)ack.hidden=false;
       const el=statusEl();if(el)el.textContent=count+" new unassigned pickup group(s) detected — alarm active.";
-      beep();alarmTimer=setInterval(beep,5000);
-      if("Notification" in window&&Notification.permission==="granted"){
+      if(soundEnabled){beep();alarmTimer=setInterval(beep,5000);}
+      if(browserNotificationsEnabled&&"Notification" in window&&Notification.permission==="granted"){
         try{new Notification("New Unassigned Pickup Detected!",{body:count+" new unassigned pickup group(s) appeared in Pickup.",tag:"badoc-first-mile-unassigned"});}catch(e){}
       }
     }
@@ -5385,12 +5523,77 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       try{
         const ok=await tryRestoreSound();
         if(ok){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}}
-        if("Notification" in window&&Notification.permission==="default")await Notification.requestPermission();
+        if(browserNotificationsEnabled&&"Notification" in window&&Notification.permission==="default")await Notification.requestPermission();
         if(alarmActive&&ok)beep();
+        refreshAlertSettingsStatus();
         if(knownUnassigned===null)knownUnassigned=currentUnassigned();
       }catch(e){setSoundState(false,e.message||"permission required");}
     }
     document.getElementById("enableFirstMileAlarm")?.addEventListener("click",unlockAlarmSound);
+    function setAlarmEnabled(value){
+      alarmEnabled=!!value;writeBoolPref(ALARM_PREF_KEY,alarmEnabled);
+      if(!alarmEnabled){
+        if(alarmTimer)clearInterval(alarmTimer);alarmTimer=null;alarmActive=false;
+        const ack=document.getElementById("ackFirstMileAlarm");if(ack)ack.hidden=true;
+      }
+      knownUnassigned=currentUnassigned();
+      const el=statusEl();if(el)el.textContent="Unassigned alarm "+(alarmEnabled?"enabled":"disabled")+" in Settings.";
+      setSoundState(audioCtx?.state==="running");
+    }
+    async function setSoundEnabled(value){
+      soundEnabled=!!value;writeBoolPref(SOUND_PREF_KEY,soundEnabled);
+      if(!soundEnabled){
+        if(alarmTimer)clearInterval(alarmTimer);alarmTimer=null;
+        try{if(audioCtx&&audioCtx.state==="running")await audioCtx.suspend();}catch(e){}
+        setSoundState(false,"sound disabled in Settings");
+      }else{
+        const ready=await tryRestoreSound();
+        if(alarmActive&&ready){beep();if(!alarmTimer)alarmTimer=setInterval(beep,5000);}
+      }
+      refreshAlertSettingsStatus();
+    }
+    function setBrowserNotificationsEnabled(value){
+      browserNotificationsEnabled=!!value;writeBoolPref(BROWSER_NOTIF_PREF_KEY,browserNotificationsEnabled);
+      refreshAlertSettingsStatus();
+      const el=statusEl();if(el)el.textContent="Browser notifications "+(browserNotificationsEnabled?"enabled":"disabled")+" in Settings.";
+    }
+    async function requestBrowserNotificationPermission(){
+      if(!("Notification" in window)){refreshAlertSettingsStatus();return "unsupported";}
+      try{const result=await Notification.requestPermission();refreshAlertSettingsStatus();return result;}
+      catch(e){refreshAlertSettingsStatus();return "error";}
+    }
+    async function testBrowserNotification(){
+      if(!browserNotificationsEnabled)return {ok:false,message:"Enable Browser Notifications in Settings first."};
+      const permission=await requestBrowserNotificationPermission();
+      if(permission!=="granted")return {ok:false,message:permission==="denied"?"Permission is blocked in browser settings.":"Notification permission was not granted."};
+      try{new Notification("Badoc Hub test notification",{body:"Browser notifications are working.",tag:"badoc-settings-test"});return {ok:true,message:"Test notification sent."};}
+      catch(e){return {ok:false,message:e?.message||String(e)};}
+    }
+    async function testAlarmSound(){
+      if(!soundEnabled)return {ok:false,message:"Enable Alarm Sound in Settings first."};
+      const ready=await tryRestoreSound();
+      if(!ready)return {ok:false,message:"Sound is not ready. Click Enable alarm sound in the Pickup menu, then try again."};
+      playAlarmTone();return {ok:true,message:"Test sound played."};
+    }
+    window.__badocAlertSettings={
+      getState:()=>({alarmEnabled,soundEnabled,browserNotificationsEnabled,permission:("Notification" in window)?Notification.permission:"unsupported"}),
+      setAlarmEnabled,setSoundEnabled,setBrowserNotificationsEnabled,
+      requestPermission:requestBrowserNotificationPermission,
+      testNotification:testBrowserNotification,testSound:testAlarmSound
+    };
+    document.getElementById("settingsAlarmEnabled")?.addEventListener("change",event=>setAlarmEnabled(event.target.checked));
+    document.getElementById("settingsSoundEnabled")?.addEventListener("change",event=>setSoundEnabled(event.target.checked));
+    document.getElementById("settingsBrowserNotifications")?.addEventListener("change",event=>setBrowserNotificationsEnabled(event.target.checked));
+    document.getElementById("settingsRequestNotificationPermission")?.addEventListener("click",requestBrowserNotificationPermission);
+    document.getElementById("settingsTestNotification")?.addEventListener("click",async()=>{
+      const result=await testBrowserNotification();
+      const el=document.getElementById("settingsNotificationPermission");if(el)el.textContent=result.message;
+    });
+    document.getElementById("settingsTestSound")?.addEventListener("click",async()=>{
+      const result=await testAlarmSound();
+      const el=statusEl();if(el)el.textContent=result.message;
+    });
+    refreshAlertSettingsStatus();
     // Restore the saved sound preference on every dashboard load. Chrome may
     // still require a fresh gesture; show the enable button only in that case.
     tryRestoreSound();
@@ -5817,7 +6020,7 @@ $("resetClearFloorRate").onclick=()=>{
   alert("Today's Clear Floor Rate has been reset to 0%.");
 };
 $("clearData").onclick=async()=>{
-  if(!confirm("Clear all uploaded data?\\n\\nThis removes Upload Exported and Linehaul Task data, all Exemptions, and Pickup Orders/Tasks from this device and shared cloud storage. The saved Pickup Point Name directory is also cleared. Your town/station settings will be kept."))return;
+  if(!confirm("Clear operational data from this device and shared cloud?\\n\\nThis removes Upload Exported parcel batches, Linehaul Task data, First Mile Pickup Orders/Tasks and the Pickup Point ID/name directory, plus Exemptions. Their current shared cloud copies are also cleared, affecting other devices.\\n\\nTown/station settings, Riders Data, Daily History, dashboard preferences, Clear Floor Rate, and CFR1 are kept. Historical cloud First Mile baseline files are retained.\\n\\nContinue?"))return;
   const clearBtn=$("clearData");
   if(clearBtn)clearBtn.disabled=true;
   try{
@@ -5868,7 +6071,9 @@ $("clearData").onclick=async()=>{
     console.error("Clear local data failed:",err);
     alert("Some data could not be cleared completely. Check the console, reconnect shared cloud storage, and try again.");
   }finally{
-    if(clearBtn)clearBtn.disabled=false;
+    const confirmWord=document.getElementById("settingsClearDataWord");
+    if(confirmWord)confirmWord.value="";
+    if(clearBtn)clearBtn.disabled=true;
   }
 };
 
@@ -14982,5 +15187,166 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   if(app&&window.MutationObserver){
     new MutationObserver(syncSidebarState).observe(app,{attributes:true,attributeFilter:['class']});
   }
+})();
+</script>
+
+<script id="badoc-settings-center-runtime">
+(function(){
+  "use strict";
+  if(window.__badocSettingsCenter)return;
+  window.__badocSettingsCenter=true;
+  const $=id=>document.getElementById(id);
+  const text=(selector,fallback="")=>document.querySelector(selector)?.textContent?.trim()||fallback;
+  const formatBytes=value=>{
+    const n=Number(value)||0;
+    if(n<1024)return n+" B";
+    if(n<1024*1024)return (n/1024).toFixed(1)+" KB";
+    if(n<1024*1024*1024)return (n/(1024*1024)).toFixed(2)+" MB";
+    return (n/(1024*1024*1024)).toFixed(2)+" GB";
+  };
+  const setState=(id,label,detail)=>{
+    const value=$(id);if(value)value.textContent=label;
+    const note=$(id+"Detail");if(note&&detail!==undefined)note.textContent=detail;
+  };
+  const timeLabel=value=>{
+    const stamp=Number(value);
+    if(!Number.isFinite(stamp)||stamp<=0)return "No timestamp recorded";
+    return new Intl.DateTimeFormat("en-PH",{timeZone:"Asia/Manila",dateStyle:"medium",timeStyle:"short"}).format(new Date(stamp));
+  };
+  function refreshConnection(){
+    const cloudBox=$("sharedStatus");
+    const cloudText=text("#sharedStatus .top-sync-text",cloudBox?.textContent||"Waiting for cloud status");
+    const cloudLower=cloudText.toLowerCase();
+    const cloudState=/failed|error|offline/.test(cloudLower)?"Attention needed":/connected|synced|\bok\b/.test(cloudLower)?"Connected":/connect|retry|syncing/.test(cloudLower)?"Connecting…":"Waiting";
+    setState("settingsDashboardCloudStatus",cloudState,cloudText||"No cloud status reported");
+    const pickupText=text("#firstMileCloudSyncStatus",text("#firstMileCombinedMeta","First Mile status has not been reported yet."));
+    const pickupLower=pickupText.toLowerCase();
+    const pickupState=/failed|unavailable|error/.test(pickupLower)?"Attention needed":/synced|shared cloud/.test(pickupLower)?"Synced":/pending|retry|connecting/.test(pickupLower)?"Pending":"Waiting";
+    setState("settingsPickupCloudStatus",pickupState,pickupText);
+    let bridge=false;try{bridge=!!(window.__badocSpxBridgeReady&&window.__badocSpxBridgeReady());}catch(e){}
+    const extensionText=text("#badocExtensionVersionStatus",bridge?"Extension bridge connected":"No extension bridge status yet");
+    setState("settingsExtensionStatus",bridge?"Connected":"Not connected",extensionText);
+    let last=0;try{last=Number(localStorage.getItem("badoc_last_sync_at")||0)}catch(e){}
+    const syncSummary=text("#syncAllLast","");
+    setState("settingsLastSync",last?timeLabel(last):(syncSummary||"Not recorded"),last?"Saved on this device":syncSummary||"No successful sync timestamp was found");
+    refreshAppInfo();
+  }
+  function browserLabel(){
+    const ua=navigator.userAgent||"";
+    if(/Firefox\//i.test(ua))return "Firefox";
+    if(/Edg\//i.test(ua))return "Microsoft Edge";
+    if(/Chrome\//i.test(ua))return "Chrome";
+    if(/Safari\//i.test(ua))return "Safari";
+    return "Other browser";
+  }
+  function refreshAppInfo(){
+    const version=document.querySelector('meta[name="badoc-app-version"]')?.content||"Unknown";
+    const firefox=/Firefox\//i.test(navigator.userAgent||"");
+    const required=firefox?"Firefox 69.3.7":"Chrome 1.2.5";
+    const bridgeText=text("#badocExtensionVersionStatus","");
+    let detected="Not detected";try{if(window.__badocSpxBridgeReady?.())detected=bridgeText||"Connected";else if(bridgeText)detected=bridgeText;}catch(e){}
+    if($("settingsDashboardVersion"))$("settingsDashboardVersion").textContent=version;
+    if($("settingsRequiredExtension"))$("settingsRequiredExtension").textContent=required;
+    if($("settingsDetectedExtension"))$("settingsDetectedExtension").textContent=detected;
+    if($("settingsBrowser"))$("settingsBrowser").textContent=browserLabel();
+  }
+  async function refreshStorage(){
+    const status=$("settingsStorageStatus");
+    const refresh=$("settingsStorageRefresh");
+    if(refresh)refresh.disabled=true;
+    if(status)status.textContent="Measuring browser storage…";
+    try{
+      let usage=null,quota=null,persisted=null;
+      if(navigator.storage?.estimate){
+        const estimate=await navigator.storage.estimate();
+        usage=Number.isFinite(estimate.usage)?estimate.usage:null;
+        quota=Number.isFinite(estimate.quota)?estimate.quota:null;
+      }
+      if(navigator.storage?.persisted){
+        try{persisted=await navigator.storage.persisted();}catch(e){}
+      }
+      setState("settingsStorageUsage",usage===null?"Not available":formatBytes(usage),usage===null?"Browser does not expose usage estimates":"Estimated origin-wide usage");
+      setState("settingsStorageQuota",quota===null?"Not available":formatBytes(quota),usage!==null&&quota?Math.max(0,quota-usage)>0?formatBytes(Math.max(0,quota-usage))+" remaining":"Quota reached":"Browser quota estimate");
+      setState("settingsStoragePersistence",persisted===null?"Not available":persisted?"Persistent":"Not persistent",persisted===null?"Browser permission not exposed":persisted?"Browser granted persistent storage":"Browser may evict site data under storage pressure");
+
+      let localBytes=0,localKeys=0;
+      try{
+        for(let i=0;i<localStorage.length;i++){
+          const key=localStorage.key(i)||"",value=localStorage.getItem(key)||"";
+          localBytes+=new Blob([key,value]).size;localKeys++;
+        }
+      }catch(e){}
+      setState("settingsLocalStorage",formatBytes(localBytes),localKeys+" localStorage keys");
+
+      let parcelCount=null,parcelRows=null,parcelBytes=null;
+      try{
+        if(indexedDB?.databases){
+          const dbs=await indexedDB.databases();
+          if(dbs.some(db=>db.name==="ParcelRoutingDashboardCleanStartV2")){
+            const db=await new Promise((resolve,reject)=>{
+              const request=indexedDB.open("ParcelRoutingDashboardCleanStartV2",1);
+              request.onsuccess=()=>resolve(request.result);
+              request.onerror=()=>reject(request.error||new Error("Could not open parcel database"));
+            });
+            if(db.objectStoreNames.contains("batches")){
+              const batches=await new Promise((resolve,reject)=>{
+                const request=db.transaction("batches","readonly").objectStore("batches").getAll();
+                request.onsuccess=()=>resolve(request.result||[]);
+                request.onerror=()=>reject(request.error);
+              });
+              parcelCount=batches.length;
+              parcelRows=batches.reduce((sum,batch)=>sum+(Array.isArray(batch.rows)?batch.rows.length:0),0);
+              parcelBytes=new Blob([JSON.stringify(batches)]).size;
+            }else{parcelCount=0;parcelRows=0;parcelBytes=0;}
+            db.close();
+          }else{parcelCount=0;parcelRows=0;parcelBytes=0;}
+        }
+      }catch(e){console.warn("Badoc storage information: parcel database",e);}
+      setState("settingsParcelStorage",parcelCount===null?"Not available":parcelCount.toLocaleString()+" batches",parcelRows===null?"IndexedDB size not available":parcelRows.toLocaleString()+" rows · approx. "+formatBytes(parcelBytes));
+
+      const readJson=key=>{try{return JSON.parse(localStorage.getItem(key)||"null")}catch(e){return null}};
+      const orders=readJson("badoc_first_mile_orders_csv_local_v1");
+      const tasks=readJson("badoc_first_mile_tasks_csv_local_v1");
+      const names=readJson("badoc_first_mile_point_names_v1");
+      const orderRows=Number(orders?.rowCount||0);
+      const taskRows=Number(tasks?.rowCount||0);
+      const nameCount=names&&typeof names==="object"?Object.keys(names).length:0;
+      const pickupBytes=["badoc_first_mile_orders_csv_local_v1","badoc_first_mile_tasks_csv_local_v1","badoc_first_mile_point_names_v1"].reduce((sum,key)=>{
+        try{return sum+new Blob([localStorage.getItem(key)||""]).size}catch(e){return sum}
+      },0);
+      setState("settingsPickupStorage",formatBytes(pickupBytes),orderRows.toLocaleString()+" Order rows · "+taskRows.toLocaleString()+" Task rows · "+nameCount.toLocaleString()+" point names");
+      setState("settingsCloudStorage","Usage not exposed","Shared cloud copies are separate; provider does not report total bucket usage here");
+      if(status)status.textContent="Storage measurement completed for this browser.";
+    }catch(error){
+      if(status)status.textContent="Storage measurement could not be completed: "+(error?.message||String(error));
+    }finally{
+      if(refresh)refresh.disabled=false;
+    }
+  }
+  function bind(){
+    $("settingsRefreshStatus")?.addEventListener("click",refreshConnection);
+    $("settingsRefreshAppInfo")?.addEventListener("click",refreshAppInfo);
+    $("settingsStorageRefresh")?.addEventListener("click",refreshStorage);
+    const word=$("settingsClearDataWord"),clear=$("clearData");
+    if(word&&clear){
+      const update=()=>{clear.disabled=word.value.trim().toUpperCase()!=="CLEAR DATA";};
+      word.addEventListener("input",update);update();
+    }
+    refreshConnection();
+    refreshAppInfo();
+    refreshAlertPermission();
+  }
+  function refreshAlertPermission(){
+    const state=window.__badocAlertSettings?.getState?.();
+    const el=$("settingsNotificationPermission");
+    if(!state||!el)return;
+    const permission=state.permission;
+    el.textContent=permission==="granted"?"Browser permission: Allowed":permission==="denied"?"Browser permission: Blocked in browser settings":permission==="default"?"Browser permission: Not requested":"Browser notifications are not supported";
+  }
+  window.__badocRefreshSettingsStatus=refreshConnection;
+  window.__badocRefreshSettingsStorage=refreshStorage;
+  window.__badocRefreshSettingsAppInfo=refreshAppInfo;
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bind,{once:true});
+  else bind();
 })();
 </script>
