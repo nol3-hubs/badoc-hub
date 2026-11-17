@@ -1,4 +1,4 @@
-BADOC HUB CHROME EXTENSION — Chrome v1.2.5 / Firefox v69.3.7
+BADOC HUB DASHBOARD v78 — Chrome v1.2.5 / Firefox v69.3.7
 First Mile Orders + Tasks integration
 
 SOURCE
@@ -90,3 +90,5 @@ UPDATE — 2026-11-17 · Pickup Info bridge completion
 - The response includes pickup status, ETA and pickup times, pickup point, assigned rider, and newest-first attempt history with task ID, rider/driver ID, geofence, remark, seller signature, and up to six photo references per attempt.
 - Chrome package bumped to v1.2.5; Firefox package bumped to v69.3.7. Dashboard minimum-version checks and the embedded Chrome installer bundle were updated to match.
 - JavaScript syntax checks and manifest JSON validation passed for both browser packages. Authenticated live SPX lookup still requires a browser test with a signed-in SPX tab.
+
+- Dashboard app version bumped from v77 to v78 and the PWA cache key was advanced so installed clients fetch the updated extension-version check and installer bundle.
