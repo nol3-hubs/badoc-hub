@@ -10496,9 +10496,18 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
 #badocPickupInfoModal .pickup-info-attempt-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700}
 #badocPickupInfoModal .pickup-info-attempt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;margin-top:8px;font-size:11px;color:#c4d4e5}
 #badocPickupInfoModal .pickup-info-photos{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;margin-top:10px}
-#badocPickupInfoModal .pickup-info-photos a{display:flex;flex-direction:column;align-items:center;gap:5px;width:112px;padding:6px;background:#0b1725;border:1px solid var(--border,#34506b);border-radius:8px;color:#a9d7ff;text-decoration:none;font-size:10px}
+#badocPickupInfoModal .pickup-info-photo{appearance:none;display:flex;flex-direction:column;align-items:center;gap:5px;width:112px;padding:6px;background:#0b1725;border:1px solid var(--border,#34506b);border-radius:8px;color:#a9d7ff;font:inherit;font-size:10px;cursor:zoom-in}
 #badocPickupInfoModal .pickup-info-photos img{display:block;width:100px;height:112px;object-fit:contain;background:#081321;border-radius:5px}
-#badocPickupInfoModal .pickup-info-photos a:hover{border-color:#38bdf8;color:#fff}
+#badocPickupInfoModal .pickup-info-photo:hover{border-color:#38bdf8;color:#fff}
+#badocPickupPhotoViewer{position:fixed;inset:0;z-index:10092;display:flex;align-items:center;justify-content:center;gap:18px;padding:64px 18px 20px;background:#02050df2}
+#badocPickupPhotoViewer[hidden]{display:none!important}
+#badocPickupPhotoViewer figure{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:100%;max-height:100%;margin:0}
+#badocPickupPhotoViewer img{display:block;max-width:min(86vw,1200px);max-height:calc(100vh - 125px);width:auto;height:auto;object-fit:contain;border-radius:8px;background:#081321;box-shadow:0 16px 55px #000b}
+#badocPickupPhotoViewer figcaption{color:#e7f3ff;font-size:12px;font-weight:700}
+#badocPickupPhotoViewer .pickup-photo-viewer-close{position:absolute;top:14px;right:18px;width:42px;height:42px;border:1px solid #ffffff40;border-radius:50%;background:#101c2b;color:#fff;font-size:28px;cursor:pointer}
+#badocPickupPhotoViewer .pickup-photo-viewer-nav{width:44px;height:54px;flex:0 0 auto;border:1px solid #ffffff40;border-radius:10px;background:#101c2b;color:#fff;font-size:32px;line-height:1;cursor:pointer}
+#badocPickupPhotoViewer .pickup-photo-viewer-nav:disabled{opacity:.28;cursor:default}
+@media(max-width:620px){#badocPickupPhotoViewer{gap:7px;padding:58px 8px 16px}#badocPickupPhotoViewer .pickup-photo-viewer-nav{width:34px;height:44px;font-size:26px}#badocPickupPhotoViewer img{max-width:calc(100vw - 100px);max-height:calc(100vh - 115px)}}
 #badocPickupInfoModal .pickup-info-no-photos{margin:8px 0;color:var(--muted,#9badbf);font-size:11px}
 #badocPickupInfoModal .pickup-info-error{color:#ff9898}
 @media(max-width:620px){#badocPickupInfoModal .pickup-info-summary{grid-template-columns:repeat(2,minmax(0,1fr))}#badocPickupInfoModal .pickup-info-attempt-grid{grid-template-columns:1fr}}
@@ -14384,6 +14393,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   if(window.__badocPickupInfoUi)return;
   window.__badocPickupInfoUi=true;
   const pending=new Map();
+  let activePhotoUrls=[];
+  let activePhotoIndex=0;
   const esc=value=>String(value??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
   const asTime=value=>{
     if(value===null||value===undefined||value==="")return "—";
@@ -14395,13 +14406,60 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   function ensureModal(){
     let modal=document.getElementById("badocPickupInfoModal");if(modal)return modal;
     modal=document.createElement("div");modal.id="badocPickupInfoModal";
-    modal.innerHTML='<section class="pickup-info-card" role="dialog" aria-modal="true" aria-labelledby="badocPickupInfoTitle"><header class="pickup-info-head"><strong id="badocPickupInfoTitle">Proof</strong><button type="button" class="pickup-info-close" aria-label="Close">×</button></header><div class="pickup-info-body"><p class="pickup-info-message" id="badocPickupInfoMessage">Loading Pickup Info…</p><div id="badocPickupInfoContent"></div></div></section>';
+    modal.innerHTML='<section class="pickup-info-card" role="dialog" aria-modal="true" aria-labelledby="badocPickupInfoTitle"><header class="pickup-info-head"><strong id="badocPickupInfoTitle">Proof</strong><button type="button" class="pickup-info-close" aria-label="Close">×</button></header><div class="pickup-info-body"><p class="pickup-info-message" id="badocPickupInfoMessage">Loading Pickup Info…</p><div id="badocPickupInfoContent"></div></div></section><div class="pickup-photo-viewer" id="badocPickupPhotoViewer" role="dialog" aria-modal="true" aria-label="Pickup proof photo viewer" hidden><button type="button" class="pickup-photo-viewer-close" aria-label="Close image viewer">×</button><button type="button" class="pickup-photo-viewer-nav pickup-photo-viewer-prev" data-photo-prev aria-label="Previous photo">‹</button><figure><img id="badocPickupPhotoViewerImage" alt="Pickup proof photo"><figcaption id="badocPickupPhotoViewerCaption"></figcaption></figure><button type="button" class="pickup-photo-viewer-nav pickup-photo-viewer-next" data-photo-next aria-label="Next photo">›</button></div>';
     document.body.appendChild(modal);
-    modal.addEventListener("click",event=>{if(event.target===modal||event.target.closest(".pickup-info-close"))closeModal();});
-    document.addEventListener("keydown",event=>{if(event.key==="Escape")closeModal();});
+    modal.addEventListener("click",event=>{
+      const target=event.target;
+      if(target===modal){closeModal();return;}
+      if(target.closest?.(".pickup-info-close")){closeModal();return;}
+      if(target.closest?.(".pickup-photo-viewer-close")){closePhotoViewer();return;}
+      if(target.closest?.("[data-photo-prev]")){movePhoto(-1);return;}
+      if(target.closest?.("[data-photo-next]")){movePhoto(1);return;}
+      if(target.id==="badocPickupPhotoViewer"){closePhotoViewer();return;}
+      const photo=target.closest?.(".pickup-info-photo");
+      if(photo){
+        event.preventDefault();
+        activePhotoUrls=Array.from(modal.querySelectorAll(".pickup-info-photo")).map(button=>button.dataset.photoUrl).filter(Boolean);
+        activePhotoIndex=activePhotoUrls.indexOf(photo.dataset.photoUrl);
+        showPhotoViewer(modal);
+      }
+    });
+    document.addEventListener("keydown",event=>{
+      const viewer=document.getElementById("badocPickupPhotoViewer");
+      if(event.key==="Escape"){
+        if(viewer&&!viewer.hidden)closePhotoViewer();else closeModal();
+      }else if(viewer&&!viewer.hidden&&event.key==="ArrowLeft")movePhoto(-1);
+      else if(viewer&&!viewer.hidden&&event.key==="ArrowRight")movePhoto(1);
+    });
     return modal;
   }
-  function closeModal(){const modal=document.getElementById("badocPickupInfoModal");if(modal)modal.classList.remove("open");}
+  function closeModal(){closePhotoViewer();const modal=document.getElementById("badocPickupInfoModal");if(modal)modal.classList.remove("open");}
+  function showPhotoViewer(modal){
+    if(!activePhotoUrls.length||activePhotoIndex<0)return;
+    const viewer=modal.querySelector("#badocPickupPhotoViewer");
+    const image=modal.querySelector("#badocPickupPhotoViewerImage");
+    const caption=modal.querySelector("#badocPickupPhotoViewerCaption");
+    image.src=activePhotoUrls[activePhotoIndex];
+    image.alt="Pickup proof photo "+(activePhotoIndex+1);
+    caption.textContent="Photo "+(activePhotoIndex+1)+" of "+activePhotoUrls.length;
+    const previous=viewer.querySelector("[data-photo-prev]");
+    const next=viewer.querySelector("[data-photo-next]");
+    previous.disabled=activePhotoIndex===0;
+    next.disabled=activePhotoIndex===activePhotoUrls.length-1;
+    viewer.hidden=false;
+  }
+  function movePhoto(direction){
+    const modal=document.getElementById("badocPickupInfoModal");
+    if(!modal||!activePhotoUrls.length)return;
+    const next=activePhotoIndex+direction;
+    if(next<0||next>=activePhotoUrls.length)return;
+    activePhotoIndex=next;showPhotoViewer(modal);
+  }
+  function closePhotoViewer(){
+    const viewer=document.getElementById("badocPickupPhotoViewer");
+    if(viewer){viewer.hidden=true;const image=viewer.querySelector("img");if(image)image.removeAttribute("src");}
+    activePhotoUrls=[];activePhotoIndex=0;
+  }
   function safePhoto(value){
     let raw="";
     if(typeof value==="string")raw=value;
@@ -14429,10 +14487,10 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       const photos=(Array.isArray(attempt.pl)?attempt.pl:[]).map(safePhoto).filter(Boolean);
       return '<article class="pickup-info-attempt"><div class="pickup-info-attempt-head"><span>Record '+(index+1)+' · '+esc(attempt.res||"No result")+'</span><span>'+esc(asTime(attempt.t))+'</span></div>'+
         '<div class="pickup-info-attempt-grid"><div>Pickup Attempt Time: '+esc(asTime(attempt.t))+'</div><div>Pickup Result: '+esc(attempt.res||"—")+'</div><div>Pickup Task: '+esc(attempt.task||"—")+'</div><div>Pickup Driver: '+esc(attempt.drv||"—")+'</div><div>Driver ID: '+esc(attempt.drvId||"—")+'</div><div>Within Geofence: '+esc(gf)+'</div><div>Seller signature: '+(attempt.sig?"Yes":"No")+'</div><div>Remark: '+esc(attempt.rm||"—")+'</div></div>'+
-        (photos.length?'<div class="pickup-info-photos" aria-label="Uploaded proof photos">'+photos.map((url,i)=>'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" title="Open full-size proof photo '+(i+1)+'"><img src="'+esc(url)+'" alt="Pickup proof photo '+(i+1)+'" loading="lazy" decoding="async"><span>Photo '+(i+1)+'</span></a>').join("")+'</div>':'<p class="pickup-info-no-photos">No uploaded proof photos were returned for this record.</p>')+'</article>';
+        (photos.length?'<div class="pickup-info-photos" aria-label="Uploaded proof photos">'+photos.map((url,i)=>'<button type="button" class="pickup-info-photo" data-photo-url="'+esc(url)+'" title="View full-size proof photo '+(i+1)+'"><img src="'+esc(url)+'" alt="Pickup proof photo '+(i+1)+'" loading="lazy" decoding="async"><span>Photo '+(i+1)+'</span></button>').join("")+'</div>':'<p class="pickup-info-no-photos">No uploaded proof photos were returned for this record.</p>')+'</article>';
     }).join(""):'<p class="pickup-info-message">SPX returned no pickup-attempt history for this order.</p>';
     const photoCount=attempts.reduce((count,attempt)=>count+(Array.isArray(attempt.pl)?attempt.pl.map(safePhoto).filter(Boolean).length:0),0);
-    content.innerHTML=summary+'<h4>Proof of Pickup Info ('+attempts.length+') · '+photoCount+' photo'+(photoCount===1?'':'s')+'</h4>'+list;
+    content.innerHTML='<h4>Proof of Pickup Info ('+attempts.length+') · '+photoCount+' photo'+(photoCount===1?'':'s')+'</h4>'+list+summary;
   }
   window.addEventListener("message",event=>{
     if(event.source!==window)return;
