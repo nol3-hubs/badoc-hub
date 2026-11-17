@@ -6,9 +6,6 @@ if (!chrome) { console.error("Badoc Hub POD/POOH Checker bridge is unavailable."
 const $ = id => document.getElementById(id);
 let results = [];
 let captures = [];
-let downloadedExports = [];
-let downloadedSummary = null;
-let downloadedPage = 1;
 let assignedParcelsLoading = false;
 let currentPage = 1;
 const PAGE_SIZE = 100;
@@ -260,85 +257,6 @@ function renderResults(){
  tableBody.replaceChildren(...rows);
 }
 
-function renderDownloadedData() {
-  const sources = Array.isArray(downloadedExports) ? downloadedExports : [];
-  const sourceFilter = $("downloadSource")?.value || "ALL";
-  const query = String($("downloadSearch")?.value || "").trim().toLowerCase();
-  const selected = sources.filter(source => sourceFilter === "ALL" || source.source === sourceFilter);
-  const columns = [];
-  const seen = new Set();
-  for (const source of sources) {
-    for (const header of (Array.isArray(source.headers) ? source.headers : [])) {
-      const key = String(header || "").trim().toLowerCase();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      columns.push({ key, label: String(header || "").trim() });
-    }
-  }
-  const records = [];
-  for (const source of selected) {
-    const headers = Array.isArray(source.headers) ? source.headers : [];
-    const rows = Array.isArray(source.rows) ? source.rows : [];
-    const indexByKey = new Map(headers.map((header, index) => [String(header || "").trim().toLowerCase(), index]));
-    for (const values of rows) {
-      const cells = Array.isArray(values) ? values : [];
-      const searchable = [source.source, ...cells].join(" ").toLowerCase();
-      if (query && !searchable.includes(query)) continue;
-      records.push({ source: source.source, cells, indexByKey });
-    }
-  }
-
-  const totalForward = sources.find(x => x.source === "Forward Order");
-  const totalReturn = sources.find(x => x.source === "Return Order");
-  const countRows = source => Array.isArray(source?.rows) ? source.rows.length : 0;
-  $("downloadedForwardRows").textContent = countRows(totalForward).toLocaleString();
-  $("downloadedReturnRows").textContent = countRows(totalReturn).toLocaleString();
-  $("downloadedUniqueOids").textContent = downloadedSummary
-    ? Number(downloadedSummary.uniqueOidCount || 0).toLocaleString()
-    : "0";
-  $("downloadedTotal").textContent = downloadedSummary
-    ? "(" + Number(downloadedSummary.totalRows || 0).toLocaleString() + " rows)"
-    : "";
-
-  const sourceWord = sourceFilter === "ALL" ? "both exports" : sourceFilter;
-  $("downloadedSummary").textContent = downloadedSummary
-    ? "Downloaded " + Number(downloadedSummary.totalRows || 0).toLocaleString() +
-      " CSV row(s) from Forward and Return exports. " +
-      Number(downloadedSummary.duplicateCount || 0).toLocaleString() +
-      " duplicate OID(s) were removed from the checker input. Showing " +
-      records.length.toLocaleString() + " " + sourceWord + " row(s)" +
-      (query ? " matching the search." : ".")
-    : "Click Assigned Parcels Today to download and inspect the Forward and Return SPX export rows.";
-
-  const pageSize = 50;
-  const totalPages = Math.max(1, Math.ceil(records.length / pageSize));
-  downloadedPage = Math.min(Math.max(1, downloadedPage), totalPages);
-  const start = (downloadedPage - 1) * pageSize;
-  const pageRows = records.slice(start, start + pageSize);
-  const head = $("downloadedHead");
-  const body = $("downloadedRows");
-  head.innerHTML = "<tr><th>Source</th>" + columns.map(column => "<th>" + esc(column.label) + "</th>").join("") + "</tr>";
-  if (!pageRows.length) {
-    body.innerHTML = '<tr><td colspan="' + (columns.length + 1) + '" class="muted">No downloaded rows match this view.</td></tr>';
-  } else {
-    body.innerHTML = pageRows.map(record => {
-      const cells = columns.map(column => {
-        const index = record.indexByKey.get(column.key);
-        const value = index == null ? "" : (record.cells[index] ?? "");
-        return "<td>" + (String(value).trim() ? esc(value) : '<span class="muted">—</span>') + "</td>";
-      }).join("");
-      return '<tr><td><span class="tag ' + (record.source === "Return Order" ? "return-source" : "forward-source") + '">' +
-        esc(record.source) + "</span></td>" + cells + "</tr>";
-    }).join("");
-  }
-  $("downloadedPageIndicator").textContent = "Page " + downloadedPage + " / " + totalPages;
-  $("downloadedRange").textContent = records.length
-    ? "Showing " + (start + 1).toLocaleString() + "–" + Math.min(start + pageSize, records.length).toLocaleString() + " of " + records.length.toLocaleString()
-    : "0 rows";
-  $("downloadedPrev").disabled = downloadedPage <= 1;
-  $("downloadedNext").disabled = downloadedPage >= totalPages;
-}
-
 async function refreshCaptures(){
  const r=await pageCommand("LIST");
  if(!r?.ok)throw new Error(r?.error||"Could not get captured requests.");
@@ -358,23 +276,13 @@ $('onholdToday')?.addEventListener("click", async () => {
       action: "EXPORT_ASSIGNED_PARCELS_TODAY"
     });
     if (!reply?.ok) throw new Error(reply?.error || "SPX assigned parcels could not be loaded.");
-    downloadedExports = Array.isArray(reply.downloadedData)
+    const exportFiles = Array.isArray(reply.downloadedData)
       ? reply.downloadedData.filter(source => source && typeof source === "object")
       : [];
-    const receivedCsvRows = downloadedExports.reduce(
-      (total, source) => total + (Array.isArray(source.rows) ? source.rows.length : 0), 0
-    );
-    const hasDownloadedCsvRows = downloadedExports.some(source =>
+    const hasDownloadedCsvRows = exportFiles.some(source =>
       Array.isArray(source.headers) && source.headers.length > 0 &&
       Array.isArray(source.rows) && source.rows.length > 0
     );
-    downloadedSummary = {
-      totalRows: Number(reply.forwardRowCount || 0) + Number(reply.returnRowCount || 0),
-      uniqueOidCount: Number(reply.oids?.length || 0),
-      duplicateCount: Number(reply.duplicateCount || 0)
-    };
-    downloadedPage = 1;
-    renderDownloadedData();
     const oids = [...new Set((Array.isArray(reply.oids) ? reply.oids : [])
       .map(value => String(value || "").trim().toUpperCase()).filter(Boolean))];
     $("oids").value = oids.join("\n");
@@ -382,7 +290,7 @@ $('onholdToday')?.addEventListener("click", async () => {
     const forwardCount = Number(reply.forwardOidCount || 0);
     const returnCount = Number(reply.returnOidCount || 0);
     const duplicateCount = Number(reply.duplicateCount || 0);
-    const assignedTimeUsesSpXRequest = downloadedExports.some(source =>
+    const assignedTimeUsesSpXRequest = exportFiles.some(source =>
       source.assignedTimeFilterSource === "SPX export request"
     );
     const assignedTimeDisplay = assignedTimeUsesSpXRequest
@@ -392,12 +300,12 @@ $('onholdToday')?.addEventListener("click", async () => {
       setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
     } else if (!hasDownloadedCsvRows) {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Chrome Extension v1.4.0 or Firefox SPX Bridge v69.5.1, refresh this page, and try again.`,
+        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Chrome Extension v1.4.1 or Firefox SPX Bridge v69.5.2, refresh this page, and try again.`,
         "error"
       );
     } else {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} filtered CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Created Date within the last 14 days, Current Station Badoc Hub, ${assignedTimeDisplay}, excluding Delivering and Delivered. Click Check OIDs to validate them.`,
+        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Created Date within the last 14 days, Current Station Badoc Hub, ${assignedTimeDisplay}, excluding Delivering and Delivered. Click Check OIDs to validate them.`,
         "good"
       );
     }
@@ -409,18 +317,6 @@ $('onholdToday')?.addEventListener("click", async () => {
     button.textContent = originalLabel;
   }
 });
-
-$("downloadSource")?.addEventListener("change", () => { downloadedPage = 1; renderDownloadedData(); });
-$("downloadSearch")?.addEventListener("input", () => { downloadedPage = 1; renderDownloadedData(); });
-$("downloadedPrev")?.addEventListener("click", () => { downloadedPage = Math.max(1, downloadedPage - 1); renderDownloadedData(); });
-$("downloadedNext")?.addEventListener("click", () => { downloadedPage++; renderDownloadedData(); });
-$("clearDownloaded")?.addEventListener("click", () => {
-  downloadedExports = [];
-  downloadedSummary = null;
-  downloadedPage = 1;
-  renderDownloadedData();
-});
-renderDownloadedData();
 
 $('check').addEventListener("click",async()=>{
  const oids=parseOids();if(!oids.length){setStatus("Paste at least one OID first.","error");return;}
