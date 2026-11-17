@@ -25,7 +25,7 @@ Both extension bridge scripts report their package version during the handshake.
 ## Pickup export and matching
 - Pickup Orders exports all statuses and all bulky types, limited only to Created Time in the last 14 days through the selected day.
 - Pickup Tasks exports all statuses without driver, vehicle, pickup-point, or created-time restrictions.
-- The daily Pickup results keep Orders whose ETA is today (Philippine time), match task driver details by Pickup Point ID, preserve orders without a task/driver as `Unassigned`, and use the order export's Status.
+- The daily Pickup results keep Orders whose ETA is today (Philippine time), match by Pickup Task Number when available and otherwise by Pickup Point ID, and preserve orders without a matching task/driver as `Unassigned`. The mapped Pickup Task statuses Accepted, Disabled, Pickup no order, and Inbounded take precedence; the Order status is the fallback for other task states.
 - Unmatched Inbounded and Onhold task-only rows created today appear in the main results and remain listed in the unmatched-task panel for reference. Their Order Number, Seller Name, and ETA stay blank when no matching current-day Pickup Order exists.
 - The combined Pickup CSV and Copy for Sheet use the same current search/status-filtered rows as the main table.
 
