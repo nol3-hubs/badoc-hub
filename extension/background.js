@@ -647,7 +647,8 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
   ]);
   const assignedTimeIndex = findAssignedExportColumn(headers, [
     "assigned time", "assigned datetime", "assign time", "assignment time", "assigned at",
-    "assigned date", "assign date", "assignment date", "assignment datetime"
+    "assigned date", "assign date", "assignment date", "assignment datetime",
+    "pick up time", "pickup time", "pick up datetime", "pickup datetime"
   ]);
   const statusAliases = [
     "status", "current status", "current status name", "order status",
