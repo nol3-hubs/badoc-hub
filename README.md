@@ -29,7 +29,7 @@ Both extension bridge scripts report their package version during the handshake.
 - Unmatched Inbounded and Onhold task-only rows created today appear in the main results and remain listed in the unmatched-task panel for reference. Their Order Number, Seller Name, and ETA stay blank when no matching current-day Pickup Order exists.
 - The combined Pickup CSV and Copy for Sheet use the same current search/status-filtered rows as the main table.
 
-- The first successful Pickup Orders and Pickup Tasks exports of each Philippine calendar day are saved as immutable status baselines locally and in shared cloud storage.
+- The first successful Pickup Orders and Pickup Tasks exports of each Philippine calendar day establish the baseline. Each Order ID / Pickup Task Number keeps its first-seen status for that day; newly appearing IDs are appended without overwriting existing baseline entries. Baselines are kept locally and in shared cloud storage.
 - Pickup Task Number is preferred for order/task association when present in both exports; otherwise the existing Pickup Point ID association is retained.
 - An explicit Disabled task is shown as **Cancelled after Assigned** only when its first-sync baseline was Assigned. Other Disabled records are omitted from the main results and unmatched-task panel.
 - Each Order Number has an on-demand **Pickup Info** action. It reads the authenticated SPX `pickup_info` endpoint and displays pickup status/times, attempt history, task/rider, geofence result, remarks, seller signature, and available photo links. It requires an open, signed-in SPX tab and does not bulk-fetch or cache order details.
