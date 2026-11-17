@@ -195,3 +195,10 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Handle SPX CSV without Assigned Ti
 - The downloaded data payload identifies whether Assigned Time was checked in the CSV or applied by the SPX export request; the checker displays that distinction.
 - Chrome bumped to v1.3.9; Firefox bumped to v69.5.0. Dashboard embedded installer and cache marker are refreshed.
 - Static JavaScript and manifest validation passed. Live export requires confirmation with the authenticated SPX account.
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Recognize Pick Up Time in CSV
+- Added `Pick Up Time` and `Pickup Time` header aliases to the Assigned Time CSV filter in Chrome and Firefox.
+- SPX's CSV header uses `Pick Up Time`; the checker now verifies that field against today's Philippine date instead of treating it as missing and relying only on the server-side export filter.
+- This correction makes the existing `pick_up_time` export filter verifiable in the downloaded CSV. It does not by itself recover an order that SPX omitted from the source CSV.
+- Chrome bumped to v1.4.0; Firefox bumped to v69.5.1; checker script cache and PWA cache marker refreshed.
+- Static JavaScript and manifest validation required; live Forward/Return export behavior still requires confirmation with authenticated SPX data.
