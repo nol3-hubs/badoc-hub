@@ -3,8 +3,8 @@
 Independent test repository merged from the newer `nol3-hubs/test` project while retaining Test2's extension-version validation and GitHub Actions workflows.
 
 ## Included
-- BADOC Hub dashboard v76
-- Chrome extension v1.2.3, including all-status First Mile Orders and Tasks exports
+- BADOC Hub dashboard v77
+- Chrome extension v1.2.4, including all-status First Mile Orders and Tasks exports
 - Firefox extension v69.3.5
 - First Mile XLSX-to-CSV support
 - Integrated POD/POOH checker
@@ -17,10 +17,10 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 The dashboard checks the installed extension package version separately from the bridge protocol version.
 
 Minimum versions:
-- Chrome: `1.2.3`
+- Chrome: `1.2.4`
 - Firefox: `69.3.5`
 
-Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer embeds the same v1.2.3 package.
+Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer embeds the same v1.2.4 package.
 
 ## Pickup export and matching
 - Pickup Orders exports all statuses and all bulky types, limited only to Created Time in the last 14 days through the selected day.
@@ -28,6 +28,11 @@ Both extension bridge scripts report their package version during the handshake.
 - The daily Pickup results keep Orders whose ETA is today (Philippine time), match task driver details by Pickup Point ID, preserve orders without a task/driver as `Unassigned`, and use the order export's Status.
 - Unmatched Inbounded and Onhold task-only rows created today appear in the main results and remain listed in the unmatched-task panel for reference. Their Order Number, Seller Name, and ETA stay blank when no matching current-day Pickup Order exists.
 - The combined Pickup CSV and Copy for Sheet use the same current search/status-filtered rows as the main table.
+
+- The first successful Pickup Orders and Pickup Tasks exports of each Philippine calendar day are saved as immutable status baselines locally and in shared cloud storage.
+- Pickup Task Number is preferred for order/task association when present in both exports; otherwise the existing Pickup Point ID association is retained.
+- An explicit Disabled task is shown as **Cancelled after Assigned** only when its first-sync baseline was Assigned. Other Disabled records are omitted from the main results and unmatched-task panel.
+- Each Order Number has an on-demand **Pickup Info** action. It reads the authenticated SPX `pickup_info` endpoint and displays pickup status/times, attempt history, task/rider, geofence result, remarks, seller signature, and available photo links. It requires an open, signed-in SPX tab and does not bulk-fetch or cache order details.
 
 ## Repository boundaries
 - This is the independent Test2 test repository.
