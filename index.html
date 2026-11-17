@@ -4781,44 +4781,54 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
   window.__badocCapturePickupFirstSyncBaseline=async function(kind,csvText,meta){
     if(!FM_PICKUP_BASELINE_KEYS[kind])return {saved:false};
     const date=fmPickupBaselineDate();
-    const existing=fmReadPickupBaseline(kind);
-    if(existing){
-      try{await window.__badocPickupCloudSaveBaseline?.(kind,existing);}catch(_){}
-      window.__badocUpdatePickupBaselineStatus?.();
-      return {saved:false,record:existing};
-    }
     const rows=typeof parseCsvText==="function"?parseCsvText(String(csvText||"")):[];
-    const byId={};
+    const incoming={};
     (Array.isArray(rows)?rows:[]).forEach(row=>{
       const id=kind==="orders"?fmOrderId(row):fmPickupTaskNumber(row);
       if(!id)return;
       const status=kind==="orders"
         ?fmOrderSheetStatus(row)
         :fmTaskStatusLabel(fmValue(row,["Status","Task Status","Pickup Task Status","status_name","status"]));
-      byId[fmNorm(id)]={
+      incoming[fmNorm(id)]={
         id:String(id),status:String(status||"Unknown"),
         pickupPointId:fmPickupPointId(row)||"",taskNumber:fmPickupTaskNumber(row)||""
       };
     });
-    const trackedCount=Object.keys(byId).length;
+    const trackedCount=Object.keys(incoming).length;
     if(!trackedCount){
       window.__badocUpdatePickupBaselineStatus?.();
       return {saved:false,reason:"No Order ID or Pickup Task Number was found in the export."};
     }
-    const record={
-      schemaVersion:1,date,kind,capturedAt:Date.now(),taskId:String(meta?.taskId||""),
-      rowCount:Array.isArray(rows)?rows.length:0,trackedCount,byId
-    };
-    try{localStorage.setItem(FM_PICKUP_BASELINE_KEYS[kind],JSON.stringify(record));}
-    catch(error){console.warn("Pickup first-sync baseline local save failed:",error);}
+    let record=fmReadPickupBaseline(kind);
+    let added=0;
+    if(record){
+      const merged={...(record.byId||{})};
+      Object.entries(incoming).forEach(([key,value])=>{
+        if(!Object.prototype.hasOwnProperty.call(merged,key)){merged[key]=value;added++;}
+      });
+      if(added){
+        record={...record,byId:merged,trackedCount:Object.keys(merged).length,updatedAt:Date.now()};
+        try{localStorage.setItem(FM_PICKUP_BASELINE_KEYS[kind],JSON.stringify(record));}
+        catch(error){console.warn("Pickup baseline append failed:",error);}
+      }
+    }else{
+      record={
+        schemaVersion:1,date,kind,capturedAt:Date.now(),taskId:String(meta?.taskId||""),
+        rowCount:Array.isArray(rows)?rows.length:0,trackedCount,byId:incoming
+      };
+      try{localStorage.setItem(FM_PICKUP_BASELINE_KEYS[kind],JSON.stringify(record));}
+      catch(error){console.warn("Pickup first-sync baseline local save failed:",error);}
+      added=trackedCount;
+    }
     try{
       const cloud=await window.__badocPickupCloudSaveBaseline?.(kind,record);
       if(cloud?.record){
-        try{localStorage.setItem(FM_PICKUP_BASELINE_KEYS[kind],JSON.stringify(cloud.record));}catch(_){}
+        record=cloud.record;
+        try{localStorage.setItem(FM_PICKUP_BASELINE_KEYS[kind],JSON.stringify(record));}catch(_){}
       }
     }catch(error){console.warn("Pickup first-sync baseline cloud save pending:",error);}
     window.__badocUpdatePickupBaselineStatus?.();
-    return {saved:true,record};
+    return {saved:added>0,added,record};
   };
   function fmPickupOrderStatus(order){
     return fmValue(order,[
@@ -13843,25 +13853,50 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   }
   async function saveCloudBaselineFirst(kind,record){
     const existing=await readCloudBaseline(kind,record.date);
-    if(existing){writeLocalBaseline(kind,existing);return existing;}
-    const blob=new Blob([JSON.stringify(record)],{type:"application/json"});
-    const result=await storage().upload(baselinePath(kind,record.date),blob,{contentType:"application/json",upsert:false,cacheControl:"0"});
+    let next=record;
+    let changed=false;
+    if(existing){
+      const merged={...(existing.byId||{})};
+      Object.entries(record.byId||{}).forEach(([key,value])=>{
+        if(!Object.prototype.hasOwnProperty.call(merged,key)){merged[key]=value;changed=true;}
+      });
+      if(!changed){writeLocalBaseline(kind,existing);return existing;}
+      next={...existing,byId:merged,trackedCount:Object.keys(merged).length,updatedAt:Date.now()};
+    }
+    const blob=new Blob([JSON.stringify(next)],{type:"application/json"});
+    const result=await storage().upload(baselinePath(kind,record.date),blob,{
+      contentType:"application/json",upsert:!!existing,cacheControl:"0"
+    });
     if(result.error){
       const winner=await readCloudBaseline(kind,record.date);
-      if(winner){writeLocalBaseline(kind,winner);return winner;}
+      if(winner){
+        const missing=Object.entries(next.byId||{}).filter(([key])=>!winner.byId?.[key]);
+        if(!missing.length){writeLocalBaseline(kind,winner);return winner;}
+      }
       throw Error(result.error.message||"Pickup baseline cloud upload failed.");
     }
-    writeLocalBaseline(kind,record);
+    writeLocalBaseline(kind,next);
     await announce("baseline-"+kind);
-    return record;
+    return next;
   }
   async function syncPickupBaselines(){
     if(!started)return;
     const date=baselineDate();
     for(const kind of ["orders","tasks"]){
       const remote=await readCloudBaseline(kind,date);
-      if(remote){writeLocalBaseline(kind,remote);continue;}
       const local=readLocalBaseline(kind);
+      if(remote){
+        if(local&&local.date===date){
+          const merged={...remote,byId:{...(remote.byId||{})}};
+          let added=false;
+          Object.entries(local.byId||{}).forEach(([key,value])=>{
+            if(!Object.prototype.hasOwnProperty.call(merged.byId,key)){merged.byId[key]=value;added=true;}
+          });
+          if(added)await saveCloudBaselineFirst(kind,{...merged,trackedCount:Object.keys(merged.byId).length});
+          else writeLocalBaseline(kind,remote);
+        }else writeLocalBaseline(kind,remote);
+        continue;
+      }
       if(local&&local.date===date)await saveCloudBaselineFirst(kind,local);
     }
     window.__badocUpdatePickupBaselineStatus?.();
