@@ -2,8 +2,8 @@
   "manifest_version": 2,
   "name": "SPX BRIDGE for BADOC HUB",
   "short_name": "SPX BRIDGE",
-  "version": "69.3.6",
-  "description": "Firefox Android-compatible BADOC HUB SPX bridge with verified connection handshakes and disconnect recovery.",
+  "version": "69.3.7",
+  "description": "Firefox Android-compatible BADOC HUB SPX bridge with live Pickup Info attempt history and verified connection recovery.",
   "permissions": [
     "cookies",
     "scripting",
