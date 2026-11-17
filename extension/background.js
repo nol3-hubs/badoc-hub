@@ -60,7 +60,7 @@ const PARCEL_FORWARD_EXPORT_LOOKBACK_DAYS = 14;
 // Delivering / Delivered / OnHold population.
 const PARCEL_DELIVERY_STATUS_IDS = [4, 2, 5];
 const PARCEL_DELIVERY_STATUS_NAMES = ["Delivered", "Delivering", "OnHold"];
-const PARCEL_DELIVERY_LOOKBACK_DAYS = 30;
+const PARCEL_DELIVERY_LOOKBACK_DAYS = 14;
 const PARCEL_DELIVERY_STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
 
 // Current native SPX Inbound -> TO List export endpoint captured from
