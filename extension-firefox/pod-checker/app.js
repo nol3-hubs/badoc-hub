@@ -391,7 +391,7 @@ $('onholdToday')?.addEventListener("click", async () => {
       );
     } else {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} filtered CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Current Station Badoc Hub, Onhold Time today, excluding Delivering and Delivered. Click Check OIDs to validate them.`,
+        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} filtered CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Created Date within the last 14 days, Current Station Badoc Hub, Assigned Time today, excluding Delivering and Delivered. Click Check OIDs to validate them.`,
         "good"
       );
     }
