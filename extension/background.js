@@ -548,11 +548,10 @@ function parseAssignedExportCsvRows(source) {
   return rows;
 }
 
-function extractAssignedParcelOids(csvText) {
-  const rows = parseAssignedExportCsvRows(csvText);
-  if (!rows.length) throw new Error("SPX returned an empty parcel export.");
-  const headers = rows[0].map(value => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
-  const orderIdColumns = headers
+function extractAssignedParcelOidsFromRows(headers, rows) {
+  const normalizedHeaders = (Array.isArray(headers) ? headers : [])
+    .map(value => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const orderIdColumns = normalizedHeaders
     .map((header, index) => ({ header, index }))
     .filter(item => /^(oid|orderid|orderno|ordernumber|ordersn|shipmentid|shipmentno)$/.test(item.header))
     .map(item => item.index);
@@ -564,36 +563,148 @@ function extractAssignedParcelOids(csvText) {
       if (oidPattern.test(value)) found.add(value);
     }
   };
-  for (const row of rows.slice(1)) {
+  for (const row of (Array.isArray(rows) ? rows : [])) {
     if (orderIdColumns.length) addValues(orderIdColumns.map(index => row[index]));
     else addValues(row);
   }
   if (!found.size && orderIdColumns.length) {
-    for (const row of rows.slice(1)) addValues(row);
+    for (const row of rows) addValues(row);
   }
+  return [...found];
+}
+
+function normalizeAssignedExportHeader(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function findAssignedExportColumn(headers, aliases) {
+  const wanted = new Set(aliases.map(normalizeAssignedExportHeader));
+  return (Array.isArray(headers) ? headers : []).findIndex(header =>
+    wanted.has(normalizeAssignedExportHeader(header))
+  );
+}
+
+function philippineDateKey(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d{10}$/.test(raw) || /^\d{13}$/.test(raw)) {
+    const millis = raw.length === 10 ? Number(raw) * 1000 : Number(raw);
+    const date = new Date(millis);
+    if (!Number.isFinite(date.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(date);
+    const part = type => parts.find(item => item.type === type)?.value || "";
+    return part("year") + "-" + part("month") + "-" + part("day");
+  }
+
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) return iso[1];
+
+  const slash = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (slash) {
+    const first = Number(slash[1]), second = Number(slash[2]), year = Number(slash[3]);
+    const month = first > 12 ? second : first;
+    const day = first > 12 ? first : second;
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+    }
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isFinite(parsed.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(parsed);
+  const part = type => parts.find(item => item.type === type)?.value || "";
+  return part("year") + "-" + part("month") + "-" + part("day");
+}
+
+function filterAssignedTodayExportRows(extracted, todayDate, label) {
+  const headers = Array.isArray(extracted?.headers) ? extracted.headers : [];
+  const rows = Array.isArray(extracted?.rows) ? extracted.rows : [];
+  const stationIndex = findAssignedExportColumn(headers, [
+    "current station", "current station name", "current hub", "current hub name"
+  ]);
+  const onholdTimeIndex = findAssignedExportColumn(headers, [
+    "onhold time", "on hold time", "on-hold time", "onhold datetime", "on hold datetime"
+  ]);
+  const statusAliases = [
+    "status", "current status", "current status name", "order status",
+    "tracking status", "status log", "status name"
+  ];
+  const normalizedStatusAliases = new Set(statusAliases.map(normalizeAssignedExportHeader));
+  const statusIndexes = headers
+    .map((header, index) => ({ key: normalizeAssignedExportHeader(header), index }))
+    .filter(item => normalizedStatusAliases.has(item.key))
+    .map(item => item.index);
+  const missing = [];
+  if (stationIndex < 0) missing.push("Current Station");
+  if (onholdTimeIndex < 0) missing.push("Onhold Time");
+  if (!statusIndexes.length) missing.push("Status");
+  if (missing.length) {
+    throw new Error(label + " CSV is missing required filter column(s): " + missing.join(", ") +
+      ". No OIDs were loaded because the requested filters could not be verified.");
+  }
+
+  const kept = [];
+  const excluded = { otherStation: 0, otherOnholdDate: 0, deliveringOrDelivered: 0 };
+  for (const row of rows) {
+    const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!station.includes("badoc hub")) { excluded.otherStation++; continue; }
+    if (philippineDateKey(row[onholdTimeIndex]) !== todayDate) { excluded.otherOnholdDate++; continue; }
+    const statusValues = statusIndexes.map(index =>
+      String(row[index] ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
+    );
+    if (statusValues.some(status => /\b(delivering|delivered)\b/i.test(status))) {
+      excluded.deliveringOrDelivered++;
+      continue;
+    }
+    kept.push(row);
+  }
+
   return {
-    oids: [...found],
-    rowCount: Math.max(0, rows.length - 1),
-    headers: rows[0].map(value => String(value ?? "").trim()),
-    rows: rows.slice(1).map(row => row.map(value => String(value ?? "")))
+    headers,
+    rows: kept,
+    rowCount: kept.length,
+    rawRowCount: rows.length,
+    oids: extractAssignedParcelOidsFromRows(headers, kept),
+    excluded
+  };
+}
+
+function extractAssignedParcelOids(csvText) {
+  const rows = parseAssignedExportCsvRows(csvText);
+  if (!rows.length) throw new Error("SPX returned an empty parcel export.");
+  const headers = rows[0].map(value => String(value ?? "").trim());
+  const dataRows = rows.slice(1).map(row => row.map(value => String(value ?? "")));
+  return {
+    oids: extractAssignedParcelOidsFromRows(headers, dataRows),
+    rowCount: dataRows.length,
+    headers,
+    rows: dataRows
   };
 }
 
 async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false }) {
-  // Both Forward and Return exports use an empty tracking_status and no Status Log
-  // condition. The only actual data restriction is Assigned Time for today.
+  // Request the Badoc Hub parcels placed Onhold today across all statuses.
+  // Delivering and Delivered are removed by strict CSV row filtering below.
   const body = {
     bulky_type: "1,0,2",
-    pick_up_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
+    onhold_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
     format_condition:
+      "Current Station= Badoc Hub; " +
+      "Onhold Time= " + range.todayDate + " 00:00:00," + range.todayDate + " 23:59:59; " +
       "Bulky Type= Bulky,N/A,Non-Bulky; " +
-      "Assigned Time= " + range.todayDate + " 00:00:00," + range.todayDate + " 23:59:59; " +
       "Driver= All"
   };
 
-  progress("Submitting SPX " + label + " export for " + range.todayDate + " (Assigned Time only; all statuses)…", {
+  progress("Submitting SPX " + label + " export for " + range.todayDate +
+    " (Current Station: Badoc Hub; Onhold Time: today; excluding Delivering and Delivered)…", {
     phase: "pod-assigned-today-export", kind: job.kind, source: label,
-    dateStart: range.todayDate, dateEnd: range.todayDate
+    dateStart: range.todayDate, dateEnd: range.todayDate,
+    currentStation: "Badoc Hub", onholdDate: range.todayDate,
+    excludedStatuses: ["Delivering", "Delivered"]
   });
 
   const response = await extensionFetchText(SPX_ORIGIN + endpoint, {
@@ -626,13 +737,16 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   });
   const signedUrl = await getSignedDownloadUrl(taskId);
   const csv = await downloadCsv(signedUrl);
-  const extracted = extractAssignedParcelOids(csv.text);
+  const raw = extractAssignedParcelOids(csv.text);
+  const filtered = filterAssignedTodayExportRows(raw, range.todayDate, label);
   return {
     taskId,
-    rowCount: extracted.rowCount,
-    oids: extracted.oids,
-    headers: extracted.headers,
-    rows: extracted.rows,
+    rowCount: filtered.rowCount,
+    rawRowCount: filtered.rawRowCount,
+    oids: filtered.oids,
+    headers: filtered.headers,
+    rows: filtered.rows,
+    excluded: filtered.excluded,
     fileName: csv.fileName
   };
 }
@@ -667,13 +781,20 @@ async function exportAssignedParcelsTodayFromSpx() {
     returnTaskId: returned.taskId,
     forwardRowCount: forward.rowCount,
     returnRowCount: returned.rowCount,
+    forwardRawRowCount: forward.rawRowCount,
+    returnRawRowCount: returned.rawRowCount,
+    filterCriteria: {
+      currentStation: "Badoc Hub",
+      onholdDate: range.todayDate,
+      excludedStatuses: ["Delivering", "Delivered"]
+    },
     forwardOidCount: forward.oids.length,
     returnOidCount: returned.oids.length,
     duplicateCount: forward.oids.length + returned.oids.length - oids.length,
     oids,
     downloadedData: [
-      { source: "Forward Order", headers: forward.headers, rows: forward.rows },
-      { source: "Return Order", headers: returned.headers, rows: returned.rows }
+      { source: "Forward Order", headers: forward.headers, rows: forward.rows, rawRowCount: forward.rawRowCount, excluded: forward.excluded },
+      { source: "Return Order", headers: returned.headers, rows: returned.rows, rawRowCount: returned.rawRowCount, excluded: returned.excluded }
     ],
     fileName: "Forward_and_Return_Assigned_Today.csv"
   };
