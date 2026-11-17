@@ -143,3 +143,11 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Forward/Return required export tim
 - Chrome package bumped to v1.3.3; Firefox package bumped to v69.4.5; POD Checker cache/bridge marker bumped to 1.3.3 / 1.5.53.
 - Refreshed the root dashboard index.html embedded Chrome package, direct installer copy, ZIP installer contents, minimum-version checks, and settings version text to match.
 - The source and installer contents were cross-checked. The SPX export must still be tested live in the signed-in account; a successful task/CSV download has not yet been confirmed.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Assigned Today task polling and visible progress
+- Fixed the Chrome and Firefox Assigned Parcels Today task wait. The checker now looks up the submitted task ID across the FMS, FM, and default SPX export task lists, rather than checking only the default task list.
+- Added live task/progress messages to the POD/POOH Checker and a 4-minute task-completion timeout with a source-specific error instead of the previous 25-minute generic wait.
+- Forward and Return exports remain sequential. Existing Badoc Hub, today's Onhold Time, and Delivering/Delivered exclusion rules are unchanged.
+- Chrome extension bumped to v1.3.4; Firefox extension bumped to v69.4.6; checker bridge marker bumped to 1.5.54.
+- Dashboard root index.html embedded installer and required-version checks are refreshed to match. Live task visibility and CSV download still need confirmation in a signed-in SPX session.
