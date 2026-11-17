@@ -1,6 +1,6 @@
 # SPX BRIDGE for BADOC HUB — Firefox Android
 
-**Package version:** 69.4.8  
+**Package version:** 69.4.9  
 **Existing Mozilla add-on ID:** `spx-bridge-badoc-hub@nol3-hubs.github.io`  
 **Minimum Firefox version:** 128.0
 
@@ -16,9 +16,9 @@ This separate Firefox-targeted build is based on the current source in the repos
 ## Download
 After the GitHub Actions package job completes, the unsigned update package is published at:
 
-`downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.8.xpi`
+`downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.9.xpi`
 
-[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.8.xpi)
+[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.9.xpi)
 
 ## Submit as an update to the existing Mozilla listing
 1. Download the `.xpi` package above.
