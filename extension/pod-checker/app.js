@@ -154,6 +154,36 @@ async function refreshCaptures(){
  if(!r?.ok)throw new Error(r?.error||"Could not get captured requests.");
  captures=r.captures||[];renderCaptures();
 }
+$('onholdToday')?.addEventListener("click", async () => {
+  const button = $("onholdToday");
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "Loading Onhold Parcels…";
+  setStatus("Getting today's OnHold parcels from the SPX Forward Order export…");
+  try {
+    const reply = await chrome.runtime.sendMessage({
+      target: "POD_CHECKER_BACKGROUND",
+      action: "EXPORT_ONHOLD_PARCELS_TODAY"
+    });
+    if (!reply?.ok) throw new Error(reply?.error || "SPX OnHold parcels could not be loaded.");
+    const oids = [...new Set((Array.isArray(reply.oids) ? reply.oids : [])
+      .map(value => String(value || "").trim().toUpperCase()).filter(Boolean))];
+    $("oids").value = oids.join("\n");
+    saveOids().catch(error => console.warn("POD Checker could not save the OnHold OID list:", error));
+    if (!oids.length) {
+      setStatus(`No OnHold parcels were assigned on ${reply.todayDate || "today"}.`, "good");
+    } else {
+      setStatus(`Loaded ${oids.length.toLocaleString()} unique OnHold parcel OID(s) assigned on ${reply.todayDate}. Click Check OIDs to validate them.`, "good");
+    }
+  } catch (error) {
+    setStatus(error?.message || String(error), "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+});
+
 $('check').addEventListener("click",async()=>{
  const oids=parseOids();if(!oids.length){setStatus("Paste at least one OID first.","error");return;}
  const checkButton=$('check');
