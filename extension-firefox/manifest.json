@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "SPX BRIDGE for BADOC HUB",
   "short_name": "SPX BRIDGE",
-  "version": "69.5.1",
+  "version": "69.5.2",
   "description": "Firefox Android-compatible BADOC HUB SPX bridge with SPX Pick Up Time CSV verification, 14-day Created Date lookback, robust task discovery, and live Pickup Info.",
   "permissions": [
     "cookies",
