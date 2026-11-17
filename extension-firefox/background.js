@@ -405,7 +405,7 @@ function parseOnholdExportCsvRows(source) {
   return rows;
 }
 
-function extractOnholdParcelOids(csvText) {
+function extractAssignedParcelOids(csvText) {
   const rows = parseOnholdExportCsvRows(csvText);
   if (!rows.length) throw new Error("SPX returned an empty OnHold parcel export.");
   const headers = rows[0].map(value => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
@@ -431,22 +431,20 @@ function extractOnholdParcelOids(csvText) {
   return { oids: [...found], rowCount: Math.max(0, rows.length - 1) };
 }
 
-async function exportOnholdParcelsTodayFromSpx() {
+async function exportAssignedParcelsTodayFromSpx() {
   const range = parcelDeliveryDateRange();
-  const job = { kind: "pod-onhold-today", startedAt: Date.now(), cancelled: false };
+  const job = { kind: "pod-assigned-today", startedAt: Date.now(), cancelled: false };
   const body = {
-    tracking_status: "5",
     bulky_type: "1,0,2",
     pick_up_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
     format_condition:
-      "Status Log= OnHold; " +
       "Bulky Type= Bulky,N/A,Non-Bulky; " +
       "Assigned Time= " + range.todayDate + " 00:00:00," + range.todayDate + " 23:59:59; " +
       "Driver= All"
   };
 
-  progress("Submitting SPX OnHold parcel export for " + range.todayDate + " (Assigned Time only)…", {
-    phase: "pod-onhold-today-export", kind: job.kind, statusName: "OnHold",
+  progress("Submitting SPX Forward Order export for " + range.todayDate + " (Assigned Time only; all statuses)…", {
+    phase: "pod-assigned-today-export", kind: job.kind,
     dateStart: range.todayDate, dateEnd: range.todayDate
   });
 
@@ -455,13 +453,13 @@ async function exportOnholdParcelsTodayFromSpx() {
     headers: { "Content-Type": "application/json", "Accept": "application/json, text/plain, */*" },
     body: JSON.stringify(body)
   });
-  const json = parseJsonResponse("SPX OnHold parcel export", response);
+  const json = parseJsonResponse("SPX assigned-today Forward Order export", response);
   if (!response.ok || Number(json?.retcode) !== 0) {
-    throw new Error(json?.message || "SPX OnHold parcel export failed (HTTP " + response.status + ").");
+    throw new Error(json?.message || "SPX Forward Order export failed (HTTP " + response.status + ").");
   }
 
   const taskId = Number(json?.data?.task_id || json?.task_id || 0);
-  if (!taskId) throw new Error("SPX accepted the OnHold export request but returned no task ID.");
+  if (!taskId) throw new Error("SPX accepted the Forward Order export request but returned no task ID.");
 
   const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
   const completed = await waitForCompletion(taskId, waitStartSec, job);
@@ -469,18 +467,12 @@ async function exportOnholdParcelsTodayFromSpx() {
       String(completed?.biz_name || "") !== PARCEL_EXPORT_BIZ_NAME) {
     throw new Error("The completed SPX task is not a Forward Order export.");
   }
-  const completedStatuses = String(parseTaskCondition(completed)?.tracking_status || "")
-    .split(",").map(value => value.trim()).filter(Boolean);
-  if (!setsEqual(completedStatuses, ["5"])) {
-    throw new Error("The completed SPX export did not match the OnHold-only request.");
-  }
-
-  progress("SPX OnHold export task " + taskId + " is complete. Downloading the CSV…", {
-    phase: "pod-onhold-today-download", kind: job.kind, taskId
+  progress("SPX assigned-today Forward Order task " + taskId + " is complete. Downloading the CSV…", {
+    phase: "pod-assigned-today-download", kind: job.kind, taskId
   });
   const signedUrl = await getSignedDownloadUrl(taskId);
   const csv = await downloadCsv(signedUrl);
-  const extracted = extractOnholdParcelOids(csv.text);
+  const extracted = extractAssignedParcelOids(csv.text);
   return {
     ok: true,
     todayDate: range.todayDate,
@@ -2053,10 +2045,10 @@ extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
 extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.target !== "POD_CHECKER_BACKGROUND") return false;
 
-  if (message.action === "EXPORT_ONHOLD_PARCELS_TODAY") {
+  if (message.action === "EXPORT_ASSIGNED_PARCELS_TODAY") {
     (async () => {
       try {
-        sendResponse(await exportOnholdParcelsTodayFromSpx());
+        sendResponse(await exportAssignedParcelsTodayFromSpx());
       } catch (error) {
         sendResponse({ ok: false, error: error?.message || String(error) });
       }
