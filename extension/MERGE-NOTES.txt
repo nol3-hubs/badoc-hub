@@ -92,3 +92,11 @@ UPDATE — 2026-11-17 · Pickup Info bridge completion
 - JavaScript syntax checks and manifest JSON validation passed for both browser packages. Authenticated live SPX lookup still requires a browser test with a signed-in SPX tab.
 
 - Dashboard app version bumped from v77 to v78 and the PWA cache key was advanced so installed clients fetch the updated extension-version check and installer bundle.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Onhold Parcel Today
+- Added an Onhold Parcel Today button to the Chrome and Firefox POD/POOH Checker screens.
+- The button requests the native SPX Forward Order export with tracking status ID 5 (OnHold), all bulky types, and all drivers. Its only date restriction is Assigned Time from 00:00:00 through 23:59:59 for the current Asia/Manila date; no Created Date range is applied.
+- The extension waits for the export task, validates that the returned task is the Forward Order OnHold export, downloads the CSV, extracts unique Order IDs, and fills the checker OID box. The user can then click Check OIDs to run the existing POD/POOH validation.
+- Chrome package bumped to v1.2.6 and Firefox package bumped to v69.3.8. The POD Checker iframe build marker is 1.5.48.
+- Live export still requires a signed-in SPX session and has not been tested against a live account in this update.
