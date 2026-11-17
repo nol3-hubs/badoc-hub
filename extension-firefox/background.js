@@ -328,14 +328,30 @@ function parseJsonResponse(label, response) {
   }
 }
 
-async function listTasks(startSec) {
-  const url = `${SPX_ORIGIN}${TASK_LIST_PATH}?start_time=${encodeURIComponent(startSec)}&count=100&pageno=1`;
+async function listTasks(startSec, source = "", page = 1, omitStartTime = false, taskId = 0) {
+  const sourceParam = source ? `&source=${encodeURIComponent(source)}` : "";
+  const startParam = omitStartTime ? "" : `start_time=${encodeURIComponent(startSec)}&`;
+  const taskIdParam = taskId ? `&task_ids=${encodeURIComponent(taskId)}` : "";
+  const url = `${SPX_ORIGIN}${TASK_LIST_PATH}?${startParam}count=100&pageno=${Math.max(1, Number(page) || 1)}${sourceParam}${taskIdParam}`;
   const response = await extensionFetchText(url);
   const json = parseJsonResponse("SPX export task list", response);
   if (Number(json?.retcode) !== 0) {
     throw new Error(json?.message || "SPX task list request failed.");
   }
-  return Array.isArray(json?.data?.task_list) ? json.data.task_list : [];
+  const candidates = [
+    json?.data?.task_list, json?.data?.list, json?.data?.tasks,
+    json?.task_list, json?.list, json?.tasks,
+    Array.isArray(json?.data) ? json.data : null
+  ];
+  const rows = candidates.find(Array.isArray);
+  if (rows) return rows;
+  const data = json?.data;
+  if (data && typeof data === "object") {
+    for (const [key, value] of Object.entries(data)) {
+      if (Array.isArray(value) && /task|list|record/i.test(key)) return value;
+    }
+  }
+  return [];
 }
 
 async function getSignedDownloadUrl(taskId) {
@@ -543,6 +559,72 @@ function extractAssignedParcelOids(csvText) {
   };
 }
 
+async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
+  const deadline = Date.now() + 4 * 60 * 1000;
+  let lastStatus = null;
+  let lastQueue = null;
+  let lastMessageAt = 0;
+
+  while (Date.now() < deadline) {
+    if (job.cancelled) throw new Error("Assigned Parcels Today export cancelled.");
+
+    // SPX files this export under different task-list partitions on some accounts.
+    // Look up the exact task ID in FMS, FM, and the default list instead of polling
+    // only the default list and waiting forever for a task that is stored elsewhere.
+    const lookups = await Promise.allSettled(
+      ["fms", "fm", ""].map(source => listTasks(startSec, source, 1, false, taskId))
+    );
+    const available = lookups.filter(result => result.status === "fulfilled");
+    if (!available.length) {
+      const detail = lookups.map(result => result.reason?.message || "task lookup failed").join("; ");
+      throw new Error(label + " task " + taskId + " was created, but SPX task status could not be checked: " + detail);
+    }
+
+    const task = available
+      .flatMap(result => result.value || [])
+      .find(item => Number(item?.task_id || item?.taskId || item?.export_task_id || 0) === Number(taskId));
+
+    let message = "";
+    if (task) {
+      const status = Number(task?.export_status ?? -1);
+      const queue = String(task?.queue_position || "");
+      if (status === 2) return task;
+      if (status === 3 || task?.failed_reason) {
+        throw new Error(task?.failed_reason || (label + " SPX export task " + taskId + " failed."));
+      }
+      const elapsed = Math.floor((Date.now() - job.startedAt) / 1000);
+      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const ss = String(elapsed % 60).padStart(2, "0");
+      message = label + " export task " + taskId + " is processing" +
+        (queue ? " · queue " + queue : "") + " · elapsed " + mm + ":" + ss + "…";
+      if (status !== lastStatus || queue !== lastQueue || Date.now() - lastMessageAt >= 5000) {
+        lastStatus = status;
+        lastQueue = queue;
+        lastMessageAt = Date.now();
+      } else {
+        message = "";
+      }
+    } else {
+      const elapsed = Math.floor((Date.now() - job.startedAt) / 1000);
+      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const ss = String(elapsed % 60).padStart(2, "0");
+      message = "SPX accepted " + label + " task " + taskId +
+        "; checking FMS, FM, and default export queues · elapsed " + mm + ":" + ss + "…";
+      if (Date.now() - lastMessageAt < 5000) message = "";
+      else lastMessageAt = Date.now();
+    }
+
+    if (message) {
+      progress(message, { phase: "pod-assigned-task", kind: job.kind, taskId, source: label });
+      notifyPodCheckerAssignedProgress(message);
+    }
+    await sleep(4000);
+  }
+
+  throw new Error(label + " export task " + taskId +
+    " did not reach Completed within 4 minutes. SPX was checked by task ID in the FMS, FM, and default export queues. Check the SPX export task monitor and retry.");
+}
+
 async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false }) {
   // Request the Badoc Hub parcels placed Onhold today across all statuses.
   // Delivering and Delivered are removed by strict CSV row filtering below.
@@ -584,7 +666,7 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   if (!taskId) throw new Error("SPX accepted the " + label + " export request but returned no task ID.");
 
   const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
-  const completed = await waitForCompletion(taskId, waitStartSec, job);
+  const completed = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, label);
 
   if (isForward) {
     if (String(completed?.export_name || "") !== PARCEL_EXPORT_NAME ||
@@ -1832,6 +1914,16 @@ function isTargetTask(task, job) {
   // returned by the export request we just submitted, which is the primary
   // identity check; station_name is an optional hub-aware guard.
   return String(condition?.status ?? "") === "0" || Object.keys(condition).length === 0;
+}
+
+function notifyPodCheckerAssignedProgress(message) {
+  try {
+    const pending = extApi.runtime.sendMessage({
+      target: "POD_CHECKER_ASSIGNED_PROGRESS",
+      message: String(message || "")
+    });
+    if (pending && typeof pending.catch === "function") pending.catch(() => {});
+  } catch (_) {}
 }
 
 async function waitForCompletion(taskId, startSec, job, pollIntervalMs = POLL_MS) {
