@@ -4989,8 +4989,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       if(typeof value==="object")return JSON.stringify(value);
       return String(value);
     };
-    const lines=[headers.map(clean).join("\\t"),...rows.map(row=>headers.map(header=>clean(row?.[header]).replace(/[\\t\\r\\n]+/g," ")).join("\\t"))];
-    const payload=lines.join("\\r\\n");
+    const lines=[headers.map(clean).join("\t"),...rows.map(row=>headers.map(header=>clean(row?.[header]).replace(/[\t\r\n]+/g," ")).join("\t"))];
+    const payload=lines.join("\r\n");
     let copied=false;
     try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(payload);copied=true;}}catch(_){}
     if(!copied){
