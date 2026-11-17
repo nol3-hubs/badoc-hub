@@ -250,7 +250,16 @@ $('onholdToday')?.addEventListener("click", async () => {
       action: "EXPORT_ASSIGNED_PARCELS_TODAY"
     });
     if (!reply?.ok) throw new Error(reply?.error || "SPX assigned parcels could not be loaded.");
-    downloadedExports = Array.isArray(reply.downloadedData) ? reply.downloadedData : [];
+    downloadedExports = Array.isArray(reply.downloadedData)
+      ? reply.downloadedData.filter(source => source && typeof source === "object")
+      : [];
+    const receivedCsvRows = downloadedExports.reduce(
+      (total, source) => total + (Array.isArray(source.rows) ? source.rows.length : 0), 0
+    );
+    const hasDownloadedCsvRows = downloadedExports.some(source =>
+      Array.isArray(source.headers) && source.headers.length > 0 &&
+      Array.isArray(source.rows) && source.rows.length > 0
+    );
     downloadedSummary = {
       totalRows: Number(reply.forwardRowCount || 0) + Number(reply.returnRowCount || 0),
       uniqueOidCount: Number(reply.oids?.length || 0),
@@ -267,8 +276,16 @@ $('onholdToday')?.addEventListener("click", async () => {
     const duplicateCount = Number(reply.duplicateCount || 0);
     if (!oids.length) {
       setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
+    } else if (!hasDownloadedCsvRows) {
+      setStatus(
+        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Badoc Hub Extension v1.3.0, refresh this page, and try again.`,
+        "error"
+      );
     } else {
-      setStatus(`Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; ${duplicateCount.toLocaleString()} duplicate(s) removed. Click Check OIDs to validate them.`, "good");
+      setStatus(
+        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Click Check OIDs to validate them.`,
+        "good"
+      );
     }
   } catch (error) {
     setStatus(error?.message || String(error), "error");
