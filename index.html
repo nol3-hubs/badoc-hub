@@ -1527,6 +1527,18 @@ html[data-theme="light"] .side > .theme-switch-row{
 }
 </style>
 
+<style id="badoc-first-mile-virtualization">
+/* The Pickup table uses a 48px row pitch so scroll-window spacers remain stable. */
+#firstMile .first-mile-combined-table tbody tr.fm-virtual-row{height:48px}
+#firstMile .first-mile-combined-table tbody tr.fm-virtual-row>td{
+  box-sizing:border-box;height:48px;max-height:48px;padding:7px 10px!important;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:middle;
+}
+#firstMile .first-mile-combined-table tbody tr.fm-virtual-row .fm-assigned-rider-cell{white-space:nowrap!important}
+#firstMile .first-mile-combined-table tbody tr.fm-virtual-row .fm-order-id-item{display:inline-block;line-height:1.2;white-space:nowrap}
+#firstMile .first-mile-combined-table tbody tr.fm-virtual-row .fm-pickup-info-actions{flex-direction:row;align-items:center}
+#firstMile .first-mile-combined-table tbody tr.fm-virtual-spacer>td{min-height:0!important;max-height:none!important;overflow:hidden!important}
+</style>
 </head>
 <body data-app-version="21">
 
@@ -4158,6 +4170,8 @@ let sharedFilterSyncClient=null;
 let sharedFilterSyncReady=false;
 let sharedFilterSyncPending=null;
 let sharedFilterPollTimer=null;
+let sharedFilterRealtimeReady=false;
+let sharedFilterPollInFlight=null;
 let sharedFilterLastUpdatedAt="";
 
 function sharedFilterState(){
@@ -4226,22 +4240,28 @@ function queueSharedFilterPublish(){
   sharedFilterSyncTimer=setTimeout(publishSharedFilterState,250);
 }
 async function pollSharedFilterState(){
-  if(!sharedFilterSyncClient||!sharedFilterSyncReady||sharedFilterSyncApplying)return;
-  try{
-    const r=await sharedFilterSyncClient.from("shared_filter_state")
-      .select("state,updated_at").eq("id","global").maybeSingle();
-    if(r.error)throw r.error;
-    const u=String(r.data?.updated_at||"");
-    if(r.data && u && u!==sharedFilterLastUpdatedAt){
-      if(Date.now()-sharedFilterLastLocalEditAt<1200)return;
-      sharedFilterLastUpdatedAt=u;
-      applySharedFilterState(r.data.state||{search:"",town:[],station:[],status:[]});
-    }
-  }catch(e){console.warn("Shared filter poll failed:",e)}
+  if(sharedFilterRealtimeReady||!sharedFilterSyncClient||!sharedFilterSyncReady||sharedFilterSyncApplying)return;
+  if(sharedFilterPollInFlight)return sharedFilterPollInFlight;
+  sharedFilterPollInFlight=(async()=>{
+    try{
+      const r=await sharedFilterSyncClient.from("shared_filter_state")
+        .select("state,updated_at").eq("id","global").maybeSingle();
+      if(r.error)throw r.error;
+      const u=String(r.data?.updated_at||"");
+      if(r.data && u && u!==sharedFilterLastUpdatedAt){
+        if(Date.now()-sharedFilterLastLocalEditAt<1200)return;
+        sharedFilterLastUpdatedAt=u;
+        applySharedFilterState(r.data.state||{search:"",town:[],station:[],status:[]});
+      }
+    }catch(e){console.warn("Shared filter fallback poll failed:",e)}
+  })();
+  try{return await sharedFilterPollInFlight}
+  finally{sharedFilterPollInFlight=null}
 }
 function startSharedFilterPolling(){
   clearInterval(sharedFilterPollTimer);
-  sharedFilterPollTimer=__badocEvery(pollSharedFilterState,5000);
+  // Realtime notifications are immediate while connected. This is fallback-only.
+  sharedFilterPollTimer=__badocEvery(pollSharedFilterState,30000);
   pollSharedFilterState();
 }
 async function startSharedFilterSync(){
@@ -4276,8 +4296,14 @@ async function startSharedFilterSync(){
             if(!sharedFilterSyncApplying)applySharedFilterState(payload.new.state||{});
           }
         })
-      .subscribe();
-  }catch(e){console.warn("Shared filter sync unavailable:",e)}
+      .subscribe(status=>{
+        sharedFilterRealtimeReady=status==="SUBSCRIBED";
+        if(!sharedFilterRealtimeReady)pollSharedFilterState();
+      });
+  }catch(e){
+    sharedFilterRealtimeReady=false;
+    console.warn("Shared filter sync unavailable:",e);
+  }
 }
 
 function recordFiltersActive(){
@@ -5400,24 +5426,56 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       ["PROOF",g=>fmPickupInfoButtonsHtml(g)]
     ];
     if(table && $("firstMile")?.classList.contains("active")){
-      if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No pickup orders or task-only Inbounded / Onhold records match this search.</div>';
-      else table.innerHTML=`<table><thead><tr>${columns.map(c=>`<th>${fmEsc(c[0])}</th>`).join("")}</tr></thead><tbody>${filtered.slice(0,2000).map(g=>
-        `<tr>${columns.map(c=>{
+      if(!filtered.length){
+        table.innerHTML='<div class="first-mile-combined-empty">No pickup orders or task-only Inbounded / Onhold records match this search.</div>';
+      }else{
+        const maxRows=Math.min(filtered.length,2000);
+        const rowHeight=48,overscan=8;
+        const columnsHtml='<thead><tr>'+columns.map(c=>'<th>'+fmEsc(c[0])+'</th>').join('')+'</tr></thead>';
+        const rowHtml=g=>'<tr class="fm-virtual-row">'+columns.map(c=>{
           const value=c[1](g);
           if(c[0]==="Status"){
             const key=fmNorm(value);
             const tone=({assigned:"assigned",accepted:"assigned",pickedup:"done",pickupdone:"done",onhold:"onhold",pickupnoorder:"onhold",inbounded:"inbounded",cancelled:"cancelled",disabled:"cancelled",cancelledafterassigned:"cancelled"})[key]||"other";
-            return `<td><span class="fm-task-pill fm-task-${tone}">${fmEsc(value)}</span></td>`;
+            return '<td><span class="fm-task-pill fm-task-'+tone+'">'+fmEsc(value)+'</span></td>';
           }
-          if(c[0]==="Order Number")return `<td>${fmOrderLinksHtml(g)}</td>`;
+          if(c[0]==="Order Number")return '<td>'+fmOrderLinksHtml(g)+'</td>';
           if(c[0]==="Assigned Rider"){
             const rider=value==="Unassigned"?'<span class="fm-task-pill fm-task-unassigned">Unassigned</span>':fmEsc(value);
             return '<td class="fm-assigned-rider-cell" title="'+fmEsc(value)+'">'+rider+'</td>';
           }
           if(c[0]==="PROOF")return '<td class="fm-pickup-info-cell">'+(value||"—")+'</td>';
-          return `<td title="${fmEsc(value)}">${fmEsc(value)}</td>`;
-        }).join("")}</tr>`
-      ).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} rows.</div>`:""}`;
+          return '<td title="'+fmEsc(value)+'">'+fmEsc(value)+'</td>';
+        }).join('')+'</tr>';
+        const renderWindow=()=>{
+          const viewportHeight=table.clientHeight||560;
+          const rowsPerViewport=Math.max(1,Math.ceil(Math.max(120,viewportHeight-44)/rowHeight));
+          let start=Math.max(0,Math.floor(Math.max(0,table.scrollTop-44)/rowHeight)-overscan);
+          const windowSize=rowsPerViewport+overscan*2;
+          let end=Math.min(maxRows,start+windowSize);
+          if(end-start<windowSize)start=Math.max(0,end-windowSize);
+          const topHeight=start*rowHeight,bottomHeight=(maxRows-end)*rowHeight;
+          const topSpacer=topHeight?'<tr class="fm-virtual-spacer" aria-hidden="true"><td colspan="'+columns.length+'" style="height:'+topHeight+'px;padding:0;border:0;line-height:0"></td></tr>':'';
+          const bottomSpacer=bottomHeight?'<tr class="fm-virtual-spacer" aria-hidden="true"><td colspan="'+columns.length+'" style="height:'+bottomHeight+'px;padding:0;border:0;line-height:0"></td></tr>':'';
+          table.innerHTML='<table>'+columnsHtml+'<tbody>'+topSpacer+filtered.slice(start,end).map(rowHtml).join('')+bottomSpacer+'</tbody></table>'+
+            (filtered.length>2000?'<div class="first-mile-combined-empty">Showing first 2,000 of '+filtered.length.toLocaleString()+' rows.</div>':'');
+          table.dataset.virtualStart=String(start);
+          table.dataset.virtualEnd=String(end);
+        };
+        if(!table.__badocVirtualScrollBound){
+          table.addEventListener("scroll",()=>{
+            if(table.__badocVirtualRaf)return;
+            table.__badocVirtualRaf=requestAnimationFrame(()=>{
+              table.__badocVirtualRaf=0;
+              if(typeof table.__badocVirtualRender==="function")table.__badocVirtualRender();
+            });
+          },{passive:true});
+          table.__badocVirtualScrollBound=true;
+        }
+        table.__badocVirtualRender=renderWindow;
+        table.scrollTop=0;
+        renderWindow();
+      }
     }
   }
   window.__badocRenderFirstMileCombined=renderFirstMileCombined;
@@ -5613,10 +5671,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       if(added)startAlarm(added);
     }
     window.__badocCheckNewUnassigned=checkForNewUnassigned;
-    const pickupTable=document.getElementById("firstMileCombinedTable");
-    if(pickupTable&&typeof MutationObserver!=="undefined"){
-      new MutationObserver(()=>checkForNewUnassigned()).observe(pickupTable,{childList:true,subtree:true});
-    }
+    // Unassigned groups are checked directly after the Pickup dataset is rebuilt.
+    // Do not observe the virtualized table DOM: scrolling only swaps visible rows.
     // Check frequently so background-tab timer throttling does not create duplicate clicks.
     setInterval(()=>{
       const p=manilaParts(),hm=p.hour+":"+p.minute,key=p.year+"-"+p.month+"-"+p.day+" "+hm;
@@ -10433,7 +10489,10 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
     status("GOOGLE SHEET • LIVE • "+rows.length+" shown / "+performanceRows.length+" total");
   }
 
+  let performanceLoading=false,performanceLastLoadAt=0;
   async function load(){
+    if(performanceLoading)return;
+    performanceLoading=true;
     status("GOOGLE SHEET • CONNECTING");
     try{
       const rows=await readGoogle();
@@ -10447,19 +10506,26 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
       status("GOOGLE SHEET • UNAVAILABLE");
       const body=$("performanceTableBody");
       if(body)body.innerHTML='<tr><td style="padding:18px;color:#ff8a8a">'+esc(e.message||"Unable to load Performance data.")+"</td></tr>";
+    }finally{
+      performanceLoading=false;
+      performanceLastLoadAt=Date.now();
     }
   }
 
   let started=false;
   function init(){
-    if(started)return;
+    if(started){
+      if(Date.now()-performanceLastLoadAt>=REFRESH_MS)load();
+      return;
+    }
     started=true;
     $("performanceRefreshBtn")?.addEventListener("click",load);
     $("performanceSearch")?.addEventListener("input",render);
     $("performanceDateFilter")?.addEventListener("change",render);
     $("performanceAreaFilter")?.addEventListener("change",render);
     load();
-    __badocEvery(load,REFRESH_MS);
+    // Refresh only while visible; reopening the menu refreshes stale data.
+    __badocEvery(()=>{if(document.getElementById("dailyPerformance")?.classList.contains("active"))load();},REFRESH_MS);
   }
 
   window.__badocInitDailyPerformance=init;
@@ -10616,7 +10682,10 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
     status("GOOGLE SHEET • LIVE • "+rows.length+" shown / "+pickupRows.length+" total");
   }
 
+  let pickupLoading=false,pickupLastLoadAt=0;
   async function load(){
+    if(pickupLoading)return;
+    pickupLoading=true;
     status("GOOGLE SHEET • CONNECTING");
     try{
       const rows=await readGoogle();
@@ -10630,6 +10699,9 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
       status("GOOGLE SHEET • UNAVAILABLE");
       const body=$("pickupTableBody");
       if(body)body.innerHTML='<tr><td style="padding:18px;color:#ff8a8a">'+esc(e.message||"Unable to load Pickup data.")+"</td></tr>";
+    }finally{
+      pickupLoading=false;
+      pickupLastLoadAt=Date.now();
     }
   }
 
@@ -10639,14 +10711,18 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
 
   let started=false;
   function init(){
-    if(started)return;
+    if(started){
+      if(Date.now()-pickupLastLoadAt>=REFRESH_MS)load();
+      return;
+    }
     started=true;
     $("pickupRefreshBtn")?.addEventListener("click",load);
     $("pickupSearch")?.addEventListener("input",render);
     $("pickupDateFilter")?.addEventListener("change",render);
     $("pickupStatusFilter")?.addEventListener("change",render);
     load();
-    __badocEvery(load,REFRESH_MS);
+    // Poll only while this menu is visible; reopening refreshes stale data.
+    __badocEvery(()=>{if(document.getElementById("dailyPickup")?.classList.contains("active"))load();},REFRESH_MS);
   }
 
   window.__badocInitDailyPickup=init;
@@ -12312,10 +12388,16 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   }
   async function refreshSelected(){await show(curDate||todayDate(),true)}
 
+  let dailyHistoryRefreshInFlight=null;
   window.__badocRefreshDailyHistory=async function(){
-    snapCache.clear();
-    await refreshDates();
-    await show(curDate||todayDate(),true);
+    if(dailyHistoryRefreshInFlight)return dailyHistoryRefreshInFlight;
+    dailyHistoryRefreshInFlight=(async()=>{
+      snapCache.clear();
+      await refreshDates();
+      await show(curDate||todayDate(),true);
+    })();
+    try{return await dailyHistoryRefreshInFlight}
+    finally{dailyHistoryRefreshInFlight=null}
   };
   window.renderDailyHistory=function(date){return show(date||curDate||todayDate())};
 
@@ -12879,10 +12961,16 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       }
     });
     // refresh whenever the page is opened, and every 20s while viewing today
-    const obs=new MutationObserver(()=>{if(page.classList.contains("active")){if(!page.__wasActive){page.__wasActive=true;window.__badocRefreshDailyHistory()}}else page.__wasActive=false});
+    page.__wasActive=page.classList.contains("active");
+    const obs=new MutationObserver(()=>{
+      if(page.classList.contains("active")){
+        if(!page.__wasActive){page.__wasActive=true;window.__badocRefreshDailyHistory()}
+      }else page.__wasActive=false;
+    });
     obs.observe(page,{attributes:true,attributeFilter:["class"]});
     __badocEvery(()=>{if(page.classList.contains("active")&&(curDate||todayDate())===todayDate())show(todayDate())},20000);
-    setTimeout(()=>window.__badocRefreshDailyHistory(),700);
+    // Only load snapshots at startup if Data is already the visible page.
+    if(page.classList.contains("active"))window.__badocRefreshDailyHistory();
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
