@@ -12649,7 +12649,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 (function(){
   const BRIDGE_VERSION="1";
   const BRIDGE_CHECK_TIMEOUT=5000;
-  const REQUIRED_CHROME_VERSION="1.2.4";
+  const REQUIRED_CHROME_VERSION="1.2.5";
   const REQUIRED_FIREFOX_VERSION="69.3.6";
   let installedPackageVersion="";
   const isFirefox=/Firefox\//i.test(navigator.userAgent);
@@ -12761,7 +12761,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
           await writeBridgeFile(dir,name,base64ToBytes(BRIDGE_FILES_BASE64[name]));
         }
 
-        setBridgeDownloadStatus("✅ Badoc Hub Extension v1.2.4 installed directly into the selected folder. Open chrome://extensions → Developer mode → Load unpacked → select this folder.");
+        setBridgeDownloadStatus("✅ Badoc Hub Extension v1.2.5 installed directly into the selected folder. Open chrome://extensions → Developer mode → Load unpacked → select this folder.");
         return;
       }catch(err){
         if(err?.name==="AbortError"){
@@ -13031,7 +13031,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       <div class="badoc-op-icon" id="badocOpIcon" aria-hidden="true">↻</div>
       <div style="min-width:0;flex:1">
         <div class="badoc-op-title" id="badocOpTitle">Working…</div>
-        <div class="badoc-op-subtitle">BADOC HUB · Badoc Hub Extension v1.2.4</div>
+        <div class="badoc-op-subtitle">BADOC HUB · Badoc Hub Extension v1.2.5</div>
       </div>
       <span class="badoc-op-state busy" id="badocOpState">In progress</span>
     </div>
