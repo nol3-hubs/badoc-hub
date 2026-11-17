@@ -13864,6 +13864,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       const local=readLocalBaseline(kind);
       if(local&&local.date===date)await saveCloudBaselineFirst(kind,local);
     }
+    window.__badocUpdatePickupBaselineStatus?.();
+    window.__badocRenderFirstMileCombined?.();
   }
   let client=null,channel=null,started=false,pulling=false,refreshQueued=false;
   let pollTimer=null;
