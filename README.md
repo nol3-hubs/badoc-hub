@@ -19,7 +19,7 @@ The dashboard checks the installed extension package version separately from the
 
 Minimum versions:
 - Chrome: `1.2.4`
-- Firefox: `69.3.5`
+- Firefox: `69.3.7`
 
 Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer embeds the same v1.2.4 package.
 
