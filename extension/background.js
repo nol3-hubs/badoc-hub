@@ -2475,3 +2475,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   })().then(result => sendResponse({ ok: true, result })).catch(error => sendResponse({ ok: false, error: error?.message || String(error) }));
   return true;
 });
+
+
+// ───────── Pickup Info detail lookup (read-only, on demand from the Pickup menu) ─────────
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.target !== "BADOC_PICKUP_LOOKUP") return false;
+  const orderId = String(message.orderId || "").trim();
+  if (!/^[A-Za-z0-9_-]{6,48}$/.test(orderId)) {
+    sendResponse({ ok: false, error: "Invalid Order ID." });
+    return false;
+  }
+  (async () => {
+    const tabs = await chrome.tabs.query({ url: "https://spx.shopee.ph/*" });
+    const preferredWindowId = sender?.tab?.windowId;
+    const usable = tabs.filter(tab => !tab.discarded);
+    usable.sort((a, b) => {
+      const aw = a.windowId === preferredWindowId ? 1 : 0;
+      const bw = b.windowId === preferredWindowId ? 1 : 0;
+      if (aw !== bw) return bw - aw;
+      return (b.lastAccessed || 0) - (a.lastAccessed || 0);
+    });
+    const tab = usable[0] || tabs[0];
+    if (!tab?.id) throw new Error("Open an SPX page in this browser and sign in, then retry Pickup Info.");
+
+    const injected = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: "MAIN",
+      args: [orderId],
+      func: async id => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 25000);
+        try {
+          const response = await fetch(
+            "/api/fleet_order/order/detail/pickup_info?shipment_id=" + encodeURIComponent(id),
+            { method:"GET", credentials:"include", cache:"no-store",
+              headers:{ "Accept":"application/json, text/plain, */*" }, signal:controller.signal }
+          );
+          const text = await response.text();
+          if (!response.ok) throw new Error("SPX returned HTTP " + response.status + ".");
+          let payload;
+          try { payload = JSON.parse(text); }
+          catch (_) { throw new Error("SPX did not return Pickup Info JSON. Confirm that the SPX tab is signed in."); }
+          if (!payload?.data) throw new Error("SPX did not return Pickup Info for this Order ID.");
+          const list = Array.isArray(payload.data.pickup_info_list) ? payload.data.pickup_info_list : [];
+          if (!list.length) throw new Error("No Pickup Info record was returned for this Order ID.");
+          const first = list[0] || {};
+          const attempts = [];
+          list.forEach(row => {
+            (Array.isArray(row.pickup_order_tracking) ? row.pickup_order_tracking : []).forEach(attempt => {
+              attempts.push({
+                res:attempt.pickup_result||"", t:attempt.ctime||0, task:attempt.pickup_task_id||"",
+                drv:attempt.pickup_driver_name||"", drvId:attempt.pickup_driver||"",
+                gf:attempt.with_geofence==null?"":String(attempt.with_geofence),
+                rm:String(attempt.remark||"").slice(0,90),
+                pl:(Array.isArray(attempt.photo_list)?attempt.photo_list:[]).slice(0,6),
+                sig:attempt.seller_signature?1:0
+              });
+            });
+          });
+          attempts.sort((a,b)=>(Number(b.t)||0)-(Number(a.t)||0));
+          return { id, pk:{
+            st:first.pickup_status||"", eta:first.eta||0, s0:first.pickup_start_time||0,
+            s1:first.pickup_end_time||0, as:first.assigned_time||0, picked:first.pickedup_time||0,
+            tag:((first.tag_list||[])[0]||{}).tag_name||"", pp:first.pickup_point_id||"",
+            drv:(first.driver_name||[])[0]||"", att:attempts
+          }};
+        } finally { clearTimeout(timer); }
+      }
+    });
+    const item = injected?.[0]?.result;
+    if (!item?.pk) throw new Error("The SPX tab did not return Pickup Info. Reload SPX and retry.");
+    sendResponse({ ok:true, item });
+  })().catch(error => sendResponse({ ok:false, error:String(error?.message||error).slice(0,220) }));
+  return true;
+});
