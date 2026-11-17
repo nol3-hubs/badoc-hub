@@ -299,7 +299,7 @@ $('onholdToday')?.addEventListener("click", async () => {
       setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
     } else if (!hasDownloadedCsvRows) {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Chrome Extension v1.3.6 or Firefox SPX Bridge v69.4.8, refresh this page, and try again.`,
+        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Chrome Extension v1.3.7 or Firefox SPX Bridge v69.4.9, refresh this page, and try again.`,
         "error"
       );
     } else {
