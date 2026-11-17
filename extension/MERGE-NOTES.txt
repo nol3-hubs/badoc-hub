@@ -80,3 +80,5 @@ UPDATE — 2026-11-17 · Pickup Info lookup and daily first-sync baseline
 Firefox follow-up — 2026-11-17
 - Bumped the Firefox extension package to v69.3.6 and added the same on-demand Pickup Info lookup through the signed-in SPX tab.
 - The Firefox content bridge relays the validated Order ID request to its WebExtensions background worker and returns the Pickup Info attempt metadata to the dashboard.
+
+- Baseline refinement: later same-day exports append newly encountered Order IDs / Pickup Task Numbers while preserving the first-seen status already saved for every existing ID.
