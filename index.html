@@ -1847,6 +1847,8 @@ html[data-theme="light"] .side > .theme-switch-row{
               <option value="all">All statuses</option>
             </select>
             <button class="btn" id="copyFirstMileForSheet" type="button" disabled title="Copy visible pickup orders as tab-separated rows for the spreadsheet">Copy for Sheet</button>
+            <button class="btn" id="copyFMHubInventory" type="button" disabled title="Copy Pickup Orders with ETA today">FM Hub Inventory</button>
+            <button class="btn" id="copyPickupTaskManagement" type="button" disabled title="Copy Pickup Tasks created today">Pickup Task Management</button>
             <button class="btn primary" id="syncFirstMileAll" type="button">↻ Sync First Mile</button>
           </div>
           <span id="firstMileCombinedMeta">Sync Orders and Tasks to build the combined pickup list.</span>
@@ -4964,8 +4966,52 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
   let firstMileCombinedRows=[];
   let firstMileAlertRows=[];
   let firstMileVisibleRows=[];
+  function fmTodayExportRows(kind){
+    const stored=getStoredFirstMile(kind);
+    if(!stored||!Array.isArray(stored.rows))return [];
+    const today=getBadocManilaDayBounds().date;
+    return stored.rows.filter(row=>kind==="orders"?fmEtaDate(row)===today:fmTaskCreateDate(row)===today);
+  }
+  function fmUpdateRawCopyButtons(){
+    const orders=fmTodayExportRows("orders");
+    const tasks=fmTodayExportRows("tasks");
+    const orderButton=$("copyFMHubInventory");
+    const taskButton=$("copyPickupTaskManagement");
+    if(orderButton){orderButton.disabled=!orders.length;orderButton.textContent="FM Hub Inventory"+(orders.length?" ("+orders.length.toLocaleString()+")":"");}
+    if(taskButton){taskButton.disabled=!tasks.length;taskButton.textContent="Pickup Task Management"+(tasks.length?" ("+tasks.length.toLocaleString()+")":"");}
+  }
+  async function fmCopyRawExportRows(kind,button,baseLabel){
+    const rows=fmTodayExportRows(kind);
+    if(!rows.length){fmUpdateRawCopyButtons();return;}
+    const headers=[...new Set(rows.flatMap(row=>Object.keys(row||{})))];
+    const clean=value=>{
+      if(value===null||value===undefined)return "";
+      if(typeof value==="object")return JSON.stringify(value);
+      return String(value);
+    };
+    const lines=[headers.map(clean).join("\\t"),...rows.map(row=>headers.map(header=>clean(row?.[header]).replace(/[\\t\\r\\n]+/g," ")).join("\\t"))];
+    const payload=lines.join("\\r\\n");
+    let copied=false;
+    try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(payload);copied=true;}}catch(_){}
+    if(!copied){
+      const area=document.createElement("textarea");
+      area.value=payload;area.setAttribute("readonly","");
+      area.style.position="fixed";area.style.left="-9999px";area.style.top="0";
+      document.body.appendChild(area);area.select();
+      try{copied=document.execCommand("copy");}catch(_){copied=false;}
+      area.remove();
+    }
+    if(button){
+      const count=rows.length;
+      button.textContent=copied?("Copied "+count.toLocaleString()+" rows"): "Copy failed";
+      setTimeout(()=>{if(button.isConnected)fmUpdateRawCopyButtons();},2200);
+    }
+  }
+  $("copyFMHubInventory")?.addEventListener("click",event=>fmCopyRawExportRows("orders",event.currentTarget,"FM Hub Inventory"));
+  $("copyPickupTaskManagement")?.addEventListener("click",event=>fmCopyRawExportRows("tasks",event.currentTarget,"Pickup Task Management"));
   function renderFirstMileCombined(){
     const ordersData=getStoredFirstMile("orders"),tasksData=getStoredFirstMile("tasks");
+    fmUpdateRawCopyButtons();
     const stats=$("firstMileCombinedStats"),table=$("firstMileCombinedTable"),meta=$("firstMileCombinedMeta"),downloadBtn=$("downloadFirstMileCombined");
     if(!ordersData||!tasksData){
       firstMileCombinedRows=[];
