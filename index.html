@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v80">
+<meta name="badoc-app-version" content="v81">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -4910,7 +4910,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     const ids=(group?.eligibleOrders||[]).map(fmOrderId).filter(Boolean);
     if(!ids.length)return "";
     return '<span class="fm-pickup-info-actions">'+ids.map(id=>
-      '<button class="fm-pickup-info-btn" type="button" data-order-id="'+fmEsc(id)+'" title="Load pickup attempts, geofence, photos and remarks">Pickup Info</button>'
+      '<button class="fm-pickup-info-btn" type="button" data-order-id="'+fmEsc(id)+'" aria-label="View proof photos for order '+fmEsc(id)+'" title="View uploaded pickup proof photos"><span aria-hidden="true">📷</span> Proof</button>'
     ).join("")+'</span>';
   }
   const FM_ETA_DATE_FORMATTER=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"});
@@ -5282,7 +5282,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       ["ETA",g=>fmValue(g.eligibleOrders?.[0]||{},["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","eta_date","eta_time"])||"—"],
       ["Status",g=>fmCombinedPickupStatus(g)||"Unknown"],
       ["Assigned Rider",g=>fmAssignedRiderDisplay(g)],
-      ["Pickup Info",g=>fmPickupInfoButtonsHtml(g)]
+      ["PROOF",g=>fmPickupInfoButtonsHtml(g)]
     ];
     if(table && $("firstMile")?.classList.contains("active")){
       if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No pickup orders or task-only Inbounded / Onhold records match this search.</div>';
@@ -5299,7 +5299,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
             const rider=value==="Unassigned"?'<span class="fm-task-pill fm-task-unassigned">Unassigned</span>':fmEsc(value);
             return '<td class="fm-assigned-rider-cell" title="'+fmEsc(value)+'">'+rider+'</td>';
           }
-          if(c[0]==="Pickup Info")return '<td class="fm-pickup-info-cell">'+(value||"—")+'</td>';
+          if(c[0]==="PROOF")return '<td class="fm-pickup-info-cell">'+(value||"—")+'</td>';
           return `<td title="${fmEsc(value)}">${fmEsc(value)}</td>`;
         }).join("")}</tr>`
       ).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} rows.</div>`:""}`;
@@ -10495,8 +10495,11 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
 #badocPickupInfoModal .pickup-info-attempt{padding:12px 0;border-top:1px solid var(--border,#34506b)}
 #badocPickupInfoModal .pickup-info-attempt-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700}
 #badocPickupInfoModal .pickup-info-attempt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;margin-top:8px;font-size:11px;color:#c4d4e5}
-#badocPickupInfoModal .pickup-info-photos{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
-#badocPickupInfoModal .pickup-info-photos a{font-size:11px;color:#70c7ff;text-decoration:underline}
+#badocPickupInfoModal .pickup-info-photos{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;margin-top:10px}
+#badocPickupInfoModal .pickup-info-photos a{display:flex;flex-direction:column;align-items:center;gap:5px;width:112px;padding:6px;background:#0b1725;border:1px solid var(--border,#34506b);border-radius:8px;color:#a9d7ff;text-decoration:none;font-size:10px}
+#badocPickupInfoModal .pickup-info-photos img{display:block;width:100px;height:112px;object-fit:contain;background:#081321;border-radius:5px}
+#badocPickupInfoModal .pickup-info-photos a:hover{border-color:#38bdf8;color:#fff}
+#badocPickupInfoModal .pickup-info-no-photos{margin:8px 0;color:var(--muted,#9badbf);font-size:11px}
 #badocPickupInfoModal .pickup-info-error{color:#ff9898}
 @media(max-width:620px){#badocPickupInfoModal .pickup-info-summary{grid-template-columns:repeat(2,minmax(0,1fr))}#badocPickupInfoModal .pickup-info-attempt-grid{grid-template-columns:1fr}}
 </style>
@@ -14392,7 +14395,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   function ensureModal(){
     let modal=document.getElementById("badocPickupInfoModal");if(modal)return modal;
     modal=document.createElement("div");modal.id="badocPickupInfoModal";
-    modal.innerHTML='<section class="pickup-info-card" role="dialog" aria-modal="true" aria-labelledby="badocPickupInfoTitle"><header class="pickup-info-head"><strong id="badocPickupInfoTitle">Pickup Info</strong><button type="button" class="pickup-info-close" aria-label="Close">×</button></header><div class="pickup-info-body"><p class="pickup-info-message" id="badocPickupInfoMessage">Loading Pickup Info…</p><div id="badocPickupInfoContent"></div></div></section>';
+    modal.innerHTML='<section class="pickup-info-card" role="dialog" aria-modal="true" aria-labelledby="badocPickupInfoTitle"><header class="pickup-info-head"><strong id="badocPickupInfoTitle">Proof</strong><button type="button" class="pickup-info-close" aria-label="Close">×</button></header><div class="pickup-info-body"><p class="pickup-info-message" id="badocPickupInfoMessage">Loading Pickup Info…</p><div id="badocPickupInfoContent"></div></div></section>';
     document.body.appendChild(modal);
     modal.addEventListener("click",event=>{if(event.target===modal||event.target.closest(".pickup-info-close"))closeModal();});
     document.addEventListener("keydown",event=>{if(event.key==="Escape")closeModal();});
@@ -14418,17 +14421,18 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       ["Assigned time",asTime(pk.as)],["Picked-up time",asTime(pk.picked)],["Tag",pk.tag],
       ["Pickup Point ID",pk.pp],["Assigned rider",pk.drv]
     ];
-    message.textContent="Order "+String(item?.id||"")+" · Retrieved live from the signed-in SPX session. This lookup is on demand and is not cached.";
+    message.textContent="Order "+String(item?.id||"")+" · Uploaded proof photos and pickup attempt details from the signed-in SPX session.";
     const summary='<div class="pickup-info-summary">'+fields.map(([label,value])=>'<div><small>'+esc(label)+'</small><strong>'+esc(value||"—")+'</strong></div>').join("")+'</div>';
     const attempts=Array.isArray(pk.att)?pk.att:[];
     const list=attempts.length?attempts.map((attempt,index)=>{
       const gf=attempt.gf==="1"||attempt.gf==="true"?"Inside geofence":attempt.gf==="0"||attempt.gf==="false"?"Outside geofence":"Not available";
       const photos=(Array.isArray(attempt.pl)?attempt.pl:[]).map(safePhoto).filter(Boolean);
-      return '<article class="pickup-info-attempt"><div class="pickup-info-attempt-head"><span>Attempt '+(index+1)+' · '+esc(attempt.res||"No result")+'</span><span>'+esc(asTime(attempt.t))+'</span></div>'+
-        '<div class="pickup-info-attempt-grid"><div>Pickup Task: '+esc(attempt.task||"—")+'</div><div>Rider: '+esc(attempt.drv||"—")+'</div><div>Driver ID: '+esc(attempt.drvId||"—")+'</div><div>Geofence: '+esc(gf)+'</div><div>Seller signature: '+(attempt.sig?"Yes":"No")+'</div><div>Remark: '+esc(attempt.rm||"—")+'</div></div>'+
-        (photos.length?'<div class="pickup-info-photos">'+photos.map((url,i)=>'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">Open photo '+(i+1)+'</a>').join("")+'</div>':'')+'</article>';
+      return '<article class="pickup-info-attempt"><div class="pickup-info-attempt-head"><span>Record '+(index+1)+' · '+esc(attempt.res||"No result")+'</span><span>'+esc(asTime(attempt.t))+'</span></div>'+
+        '<div class="pickup-info-attempt-grid"><div>Pickup Attempt Time: '+esc(asTime(attempt.t))+'</div><div>Pickup Result: '+esc(attempt.res||"—")+'</div><div>Pickup Task: '+esc(attempt.task||"—")+'</div><div>Pickup Driver: '+esc(attempt.drv||"—")+'</div><div>Driver ID: '+esc(attempt.drvId||"—")+'</div><div>Within Geofence: '+esc(gf)+'</div><div>Seller signature: '+(attempt.sig?"Yes":"No")+'</div><div>Remark: '+esc(attempt.rm||"—")+'</div></div>'+
+        (photos.length?'<div class="pickup-info-photos" aria-label="Uploaded proof photos">'+photos.map((url,i)=>'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" title="Open full-size proof photo '+(i+1)+'"><img src="'+esc(url)+'" alt="Pickup proof photo '+(i+1)+'" loading="lazy" decoding="async"><span>Photo '+(i+1)+'</span></a>').join("")+'</div>':'<p class="pickup-info-no-photos">No uploaded proof photos were returned for this record.</p>')+'</article>';
     }).join(""):'<p class="pickup-info-message">SPX returned no pickup-attempt history for this order.</p>';
-    content.innerHTML=summary+'<h4>Pickup attempt history ('+attempts.length+')</h4>'+list;
+    const photoCount=attempts.reduce((count,attempt)=>count+(Array.isArray(attempt.pl)?attempt.pl.map(safePhoto).filter(Boolean).length:0),0);
+    content.innerHTML=summary+'<h4>Proof of Pickup Info ('+attempts.length+') · '+photoCount+' photo'+(photoCount===1?'':'s')+'</h4>'+list;
   }
   window.addEventListener("message",event=>{
     if(event.source!==window)return;
@@ -14436,11 +14440,11 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     if(data.source!=="BADOC_SPX_BRIDGE"||data.type!=="BADOC_PICKUP_INFO_RESULT")return;
     const key=String(data.reqId||""),request=pending.get(key);if(!request)return;
     clearTimeout(request.timer);pending.delete(key);
-    if(data.ok)request.resolve(data.item);else request.reject(new Error(data.error||"Pickup Info lookup failed."));
+    if(data.ok)request.resolve(data.item);else request.reject(new Error(data.error||"Proof lookup failed."));
   });
   async function lookup(orderId,button){
     const modal=ensureModal(),message=modal.querySelector("#badocPickupInfoMessage"),content=modal.querySelector("#badocPickupInfoContent");
-    modal.classList.add("open");modal.querySelector("#badocPickupInfoTitle").textContent="Pickup Info · "+orderId;
+    modal.classList.add("open");modal.querySelector("#badocPickupInfoTitle").textContent="Proof · "+orderId;
     message.textContent="Connecting to the signed-in SPX tab…";message.classList.remove("pickup-info-error");content.innerHTML="";
     if(button)button.disabled=true;
     try{
@@ -14448,7 +14452,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       if(ready===false)throw new Error("Badoc Hub Extension is not connected or is out of date. Update the extension, then reload BADOC HUB.");
       const reqId="pickup-info-"+Date.now()+"-"+Math.random().toString(36).slice(2,8);
       const item=await new Promise((resolve,reject)=>{
-        const timer=setTimeout(()=>{pending.delete(reqId);reject(new Error("Pickup Info lookup timed out. Reload the SPX tab and try again."));},35000);
+        const timer=setTimeout(()=>{pending.delete(reqId);reject(new Error("Proof lookup timed out. Reload the SPX tab and try again."));},35000);
         pending.set(reqId,{resolve,reject,timer});
         window.postMessage({source:"BADOC_PAGE",type:"BADOC_LOOKUP_PICKUP_INFO",reqId,orderId},"*");
       });
