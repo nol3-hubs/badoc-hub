@@ -1626,6 +1626,16 @@ html[data-theme="light"] .side > .theme-switch-row{
 #firstMile .first-mile-combined-table tbody tr.fm-virtual-row .fm-pickup-info-actions{flex-direction:row;align-items:center}
 #firstMile .first-mile-combined-table tbody tr.fm-virtual-spacer>td{min-height:0!important;max-height:none!important;overflow:hidden!important}
 </style>
+
+<style id="instructions-simple-style">
+#instructions.page.active{display:block}
+#instructions .instructions-simple{width:100%;max-width:1480px;margin:0 auto;padding:2px 0 22px}
+#instructions .instructions-simple-panel{padding:20px;border:1px solid var(--border,#dfe5ec);border-radius:14px;background:var(--panel,#fff);box-shadow:0 1px 3px #14243a0a}
+#instructions .instructions-simple-panel h3{margin:0 0 12px;padding-left:12px;border-left:4px solid #2878ed;color:var(--text,#17263b);font-size:16px;font-weight:800;line-height:1.3}
+#instructions .instructions-simple-list{display:grid;gap:0;padding:8px 14px;border:1px solid var(--border,#e0e5eb);border-radius:10px;background:var(--surface,#f6f7f9)}
+#instructions .instructions-simple-list p{margin:0;padding:9px 0;color:var(--text,#17263b);font-size:13px;line-height:1.45}
+@media(max-width:700px){#instructions .instructions-simple-panel{padding:14px}#instructions .instructions-simple-list{padding:6px 11px}}
+</style>
 </head>
 <body data-app-version="21">
 
@@ -2318,83 +2328,16 @@ html[data-theme="light"] .side > .theme-switch-row{
 </section>
 
 <section id="instructions" class="page">
-  <div class="instructions-editor">
-    <header class="instructions-hero">
-      <div class="instructions-hero-copy">
-        <div class="instructions-kicker"><span class="instructions-kicker-dot"></span> OPERATIONS PLAYBOOK</div>
-        <h2>Daily sync routine</h2>
-        <p>Your quick reference for the five sync checkpoints used throughout the day.</p>
-      </div>
-      <div class="instructions-hero-metric" aria-label="Five sync checkpoints">
-        <strong>05</strong>
-        <span>SYNC CHECKPOINTS</span>
-      </div>
-      <div class="instructions-hero-orbit" aria-hidden="true"></div>
-    </header>
-
-    <div class="instructions-section-heading">
-      <div>
-        <span class="instructions-section-eyebrow">DAILY WORKFLOW</span>
-        <h3>Sync schedule</h3>
-        <p>Follow each checkpoint at its designated stage of the day.</p>
-      </div>
-      <span class="instructions-count"><span></span> 5 steps</span>
-    </div>
-
-    <div id="instructionsContent" class="sync-guide-grid" aria-label="Daily sync instructions">
-      <article class="sync-guide-card sync-guide-featured">
-        <div class="sync-guide-icon sync-guide-icon-featured" aria-hidden="true">↻</div>
-        <div class="sync-guide-main">
-          <div class="sync-guide-meta"><span class="sync-guide-index">01</span><span class="sync-guide-label">FULL SYNC</span></div>
-          <h4>Sync All</h4>
-          <p>SYNC ALL</p>
-        </div>
-        <div class="sync-guide-feature-tag">COMPLETE SYNC</div>
-      </article>
-
-      <article class="sync-guide-card">
-        <div class="sync-guide-top">
-          <div class="sync-guide-icon" aria-hidden="true">◷</div>
-          <span class="sync-guide-index">02</span>
-        </div>
-        <div class="sync-guide-meta"><span class="sync-guide-label">MORNING SYNC</span></div>
-        <div class="sync-guide-time">03:00 <small>AM</small></div>
-        <h4>Planning</h4>
+  <div class="instructions-simple">
+    <div class="instructions-simple-panel">
+      <h3>SYNC INSTRUCTIONS</h3>
+      <div id="instructionsContent" class="instructions-simple-list" aria-label="Daily sync instructions">
+        <p>SYNC ALL</p>
         <p>3AM - FOR PLANNING</p>
-      </article>
-
-      <article class="sync-guide-card">
-        <div class="sync-guide-top">
-          <div class="sync-guide-icon" aria-hidden="true">◷</div>
-          <span class="sync-guide-index">03</span>
-        </div>
-        <div class="sync-guide-meta"><span class="sync-guide-label">MORNING SYNC</span></div>
-        <div class="sync-guide-time">04:00 <small>AM</small></div>
-        <h4>CFR1</h4>
         <p>4AM - FOR CFR1</p>
-      </article>
-
-      <article class="sync-guide-card">
-        <div class="sync-guide-top">
-          <div class="sync-guide-icon" aria-hidden="true">⇥</div>
-          <span class="sync-guide-index">04</span>
-        </div>
-        <div class="sync-guide-meta"><span class="sync-guide-label">AFTER OPERATIONS</span></div>
-        <div class="sync-guide-time sync-guide-time-text">AFTER</div>
-        <h4>Dispatch</h4>
         <p>AFTER DISPATCH</p>
-      </article>
-
-      <article class="sync-guide-card">
-        <div class="sync-guide-top">
-          <div class="sync-guide-icon" aria-hidden="true">▣</div>
-          <span class="sync-guide-index">05</span>
-        </div>
-        <div class="sync-guide-meta"><span class="sync-guide-label">END OF DAY</span></div>
-        <div class="sync-guide-time sync-guide-time-text">EOD</div>
-        <h4>Final Sync</h4>
         <p>EOD</p>
-      </article>
+      </div>
     </div>
   </div>
 </section>
