@@ -9,12 +9,18 @@ let captures = [];
 let downloadedExports = [];
 let downloadedSummary = null;
 let downloadedPage = 1;
+let assignedParcelsLoading = false;
 let currentPage = 1;
 const PAGE_SIZE = 100;
 function parseOids() {
   return [...new Set($('oids').value.split(/[\s,;]+/).map(s=>s.trim()).filter(Boolean))];
 }
 function setStatus(text,type="") {$('status').textContent=text;$('status').className="status "+type;}
+chrome.runtime.onMessage.addListener(message => {
+  if (message?.target === "POD_CHECKER_ASSIGNED_PROGRESS" && assignedParcelsLoading && message.message) {
+    setStatus(String(message.message));
+  }
+});
 async function getSpxTab() {
   const tabs = await chrome.tabs.query({url:"https://spx.shopee.ph/*"});
   const proofTabs = tabs.filter(t => /PROOF_OF_ONHOLD/i.test(String(t.url||"")) && /proof_of_onhold/i.test(String(t.url||"")));
@@ -327,6 +333,7 @@ async function refreshCaptures(){
 $('onholdToday')?.addEventListener("click", async () => {
   const button = $("onholdToday");
   if (!button || button.disabled) return;
+  assignedParcelsLoading = true;
   button.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = "Loading Assigned Parcels…";
@@ -365,7 +372,7 @@ $('onholdToday')?.addEventListener("click", async () => {
       setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
     } else if (!hasDownloadedCsvRows) {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Badoc Hub Extension v1.3.3, refresh this page, and try again.`,
+        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Badoc Hub Extension v1.3.4, refresh this page, and try again.`,
         "error"
       );
     } else {
@@ -377,6 +384,7 @@ $('onholdToday')?.addEventListener("click", async () => {
   } catch (error) {
     setStatus(error?.message || String(error), "error");
   } finally {
+    assignedParcelsLoading = false;
     button.disabled = false;
     button.textContent = originalLabel;
   }
