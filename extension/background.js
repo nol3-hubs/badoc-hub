@@ -690,11 +690,12 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   // Request the Badoc Hub parcels placed Onhold today across all statuses.
   // Delivering and Delivered are removed by strict CSV row filtering below.
   const body = {
-    // Keep SPX's required export fields explicit while requesting All statuses
-    // and no Created Date restriction. Apply the status exclusions after CSV download.
-    tracking_status: "",
+    // SPX's Forward/Return export requires ctime and pick_up_time.
+    // Keep both broad so Onhold Time remains the only date filter.
+    // Omit tracking_status to request All statuses; exclude two statuses after download.
     bulky_type: "1,0,2",
-    ctime: "",
+    ctime: "0," + String(range.assignedEndSec),
+    pick_up_time: "0," + String(range.assignedEndSec),
     onhold_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
     format_condition:
       "Current Station= Badoc Hub; " +
