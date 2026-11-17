@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v83">
+<meta name="badoc-app-version" content="v84">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2329,7 +2329,8 @@ EOD</div>
 </section>
 
 <style id="badoc-settings-center-styles">
-#settings.settings-center{display:flex;flex-direction:column;gap:12px}
+#settings.settings-center{display:none;flex-direction:column;gap:12px}
+#settings.settings-center.active{display:flex}
 #settings .settings-panel{margin:0;padding:16px}
 #settings .settings-panel>h2{margin:0 0 6px;font-size:16px}
 #settings .settings-panel>.hint{margin:0 0 12px}
