@@ -1,6 +1,6 @@
 # SPX BRIDGE for BADOC HUB — Firefox Android
 
-**Package version:** 69.4.0  
+**Package version:** 69.4.1  
 **Existing Mozilla add-on ID:** `spx-bridge-badoc-hub@nol3-hubs.github.io`  
 **Minimum Firefox version:** 128.0
 
@@ -16,9 +16,9 @@ This separate Firefox-targeted build is based on the current source in the repos
 ## Download
 After the GitHub Actions package job completes, the unsigned update package is published at:
 
-`downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.0.xpi`
+`downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.1.xpi`
 
-[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.0.xpi)
+[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.4.1.xpi)
 
 ## Submit as an update to the existing Mozilla listing
 1. Download the `.xpi` package above.
@@ -45,3 +45,6 @@ The content script uses Firefox's `browser.*` namespace first and reports bridge
 
 
 **Assigned Parcels Today update in 69.4.0:** The POD/POOH Checker now requests both Forward and Return exports with all statuses and today's Assigned Time window, then merges and deduplicates the OIDs. Live Return export behavior still requires testing with a signed-in SPX account.
+
+
+**Downloaded Data display in 69.4.1:** The POD/POOH Checker displays the actual Forward and Return CSV rows with source filtering, field search, and pagination. Live rendering still needs verification against real SPX exports.
