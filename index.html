@@ -5473,7 +5473,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
             const active=audioCtx.state==="running";
             if(active){try{localStorage.setItem(SOUND_PREF_KEY,"1");}catch(e){}}
             setSoundState(active,active?"":"autoplay permission is required");
-            if(active&&alarmActive)beep();
+            if(active&&alarmActive){beep();if(soundEnabled&&!alarmTimer)alarmTimer=setInterval(beep,5000);}
           });
         }
         return ready;
