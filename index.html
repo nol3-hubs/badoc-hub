@@ -2264,7 +2264,7 @@ EOD</div>
       <div class="settings-storage-item"><span>First Mile files</span><strong id="settingsPickupStorage">Not checked</strong><small id="settingsPickupStorageDetail">Orders, Tasks, and point names</small></div>
       <div class="settings-storage-item"><span>Browser app settings</span><strong id="settingsLocalStorage">Not checked</strong><small id="settingsLocalStorageDetail">Local storage size</small></div>
       <div class="settings-storage-item"><span>Storage persistence</span><strong id="settingsStoragePersistence">Not checked</strong><small id="settingsStoragePersistenceDetail">Browser eviction protection</small></div>
-      <div class="settings-storage-item"><span>Shared cloud storage</span><strong id="settingsCloudStorage">Usage not exposed</strong><small id="settingsCloudStorageDetail">Current cloud API does not report total bucket usage</small></div>
+      <div class="settings-storage-item"><span>Shared cloud storage</span><strong id="settingsCloudStorage">Not checked</strong><small id="settingsCloudStorageDetail">Shared exported-files bucket</small></div>
     </div>
     <p class="hint settings-storage-footnote" id="settingsStorageStatus" aria-live="polite">Select Refresh to measure this browser's stored data.</p>
   </div>
@@ -15280,8 +15280,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 
       let parcelCount=null,parcelRows=null,parcelBytes=null;
       try{
-        if(indexedDB?.databases){
-          const dbs=await indexedDB.databases();
+        if(window.indexedDB?.databases){
+          const dbs=await window.indexedDB.databases();
           if(dbs.some(db=>db.name==="ParcelRoutingDashboardCleanStartV2")){
             const db=await new Promise((resolve,reject)=>{
               const request=indexedDB.open("ParcelRoutingDashboardCleanStartV2",1);
@@ -15315,8 +15315,38 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         try{return sum+new Blob([localStorage.getItem(key)||""]).size}catch(e){return sum}
       },0);
       setState("settingsPickupStorage",formatBytes(pickupBytes),orderRows.toLocaleString()+" Order rows · "+taskRows.toLocaleString()+" Task rows · "+nameCount.toLocaleString()+" point names");
-      setState("settingsCloudStorage","Usage not exposed","Shared cloud copies are separate; provider does not report total bucket usage here");
-      if(status)status.textContent="Storage measurement completed for this browser.";
+      try{
+        const cfg=window.BADOC_SHARED_CONFIG||{};
+        if(!window.BadocCloud||!cfg.url||!cfg.key)throw new Error("Shared cloud configuration is unavailable.");
+        const client=window.BadocCloud.createClient(cfg.url,cfg.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+        const bucket=client.storage.from("exported-files");
+        const folders=[""];let cloudFiles=0,cloudBytes=0,visitedFolders=0,partialListing=false;
+        while(folders.length&&visitedFolders<100){
+          const folder=folders.shift();visitedFolders++;
+          for(let offset=0;offset<10000;offset+=1000){
+            const result=await bucket.list(folder,{limit:1000,offset});
+            if(result.error)throw new Error(result.error.message||"Shared storage listing failed.");
+            const entries=Array.isArray(result.data)?result.data:[];
+            for(const item of entries){
+              const isFolder=item&&item.id==null&&!item.metadata;
+              if(isFolder){
+                const name=String(item.name||"").trim();
+                if(name)folders.push(folder?folder+"/"+name:name);
+              }else{
+                cloudFiles++;
+                cloudBytes+=Number(item?.metadata?.size??item?.size??item?.metadata?.contentLength??0)||0;
+              }
+            }
+            if(entries.length<1000)break;
+            if(offset>=9000)partialListing=true;
+          }
+        }
+        if(folders.length)partialListing=true;
+        setState("settingsCloudStorage",cloudFiles.toLocaleString()+" files · "+formatBytes(cloudBytes),partialListing?"Approximate total · listing limit reached":"Approximate total in exported-files bucket");
+      }catch(cloudError){
+        setState("settingsCloudStorage","Unavailable",cloudError?.message||String(cloudError));
+      }
+      if(status)status.textContent="Storage measurement completed for this browser and shared storage where accessible.";
     }catch(error){
       if(status)status.textContent="Storage measurement could not be completed: "+(error?.message||String(error));
     }finally{
