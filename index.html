@@ -8063,19 +8063,7 @@ linehaulTasks=[];renderLinehaul();setTimeout(()=>window.updateOperationProgress?
 window.DASHBOARD_V2_READY = true;
 </script>
 
-<script id="v3-m1-handler">
-(function(){
-  const t=$("m1Toggle"), w=$("kpiM1Wrap");
-  if(t&&w){
-    t.addEventListener("click",()=>{
-      const open=w.classList.toggle("m1-open");
-      t.setAttribute("aria-expanded",open?"true":"false");
-      const em=t.querySelector("em");
-      if(em)em.textContent=open?"▾ EXPANDED":"▸ COLLAPSED";
-    });
-  }
-})();
-</script>
+<!-- Removed duplicate M-1 click handler; the primary toggle handler owns this control. -->
 
 <script id="v3-6-location-runtime-disabled">
 /* Header clock/weather intentionally disabled. Operational health indicators replace them. */
@@ -10127,17 +10115,7 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
     }
   }
 
-  function bind(){
-    document.querySelectorAll('.side .nav button[data-page="kpi"]').forEach(function(btn){
-      if(btn.__badocKpiBound)return;
-      btn.__badocKpiBound=true;
-      btn.addEventListener("click",openKpi,true);
-      btn.addEventListener("keydown",function(e){
-        if(e.key==="Enter"||e.key===" ")openKpi(e);
-      },true);
-    });
-  }
-
+  // One delegated path supports existing and dynamically inserted KPI buttons.
   document.addEventListener("click",function(e){
     var btn=e.target.closest && e.target.closest('.side .nav button[data-page="kpi"]');
     if(btn)openKpi(e);
@@ -10145,14 +10123,11 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
 
   document.addEventListener("keydown",function(e){
     var btn=e.target.closest && e.target.closest('.side .nav button[data-page="kpi"]');
-    if(btn && (e.key==="Enter"||e.key===" "))openKpi(e);
+    if(btn && (e.key==="Enter"||e.key===" ")){
+      e.preventDefault();
+      openKpi(e);
+    }
   },true);
-
-  if(document.readyState==="loading"){
-    document.addEventListener("DOMContentLoaded",bind,{once:true});
-  }else{
-    bind();
-  }
 })();
 </script>
 
