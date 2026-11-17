@@ -1917,13 +1917,11 @@ function isTargetTask(task, job) {
 }
 
 function notifyPodCheckerAssignedProgress(message) {
-  try {
-    const pending = extApi.runtime.sendMessage({
-      target: "POD_CHECKER_ASSIGNED_PROGRESS",
-      message: String(message || "")
-    });
-    if (pending && typeof pending.catch === "function") pending.catch(() => {});
-  } catch (_) {}
+  // Send progress over the dashboard's already-connected BADOC_PAGE port.
+  // runtime.sendMessage cannot deliver a push notification to a hosted page shim.
+  sendToBadoc("BADOC_POD_CHECKER_ASSIGNED_PROGRESS", {
+    message: String(message || "")
+  });
 }
 
 async function waitForCompletion(taskId, startSec, job, pollIntervalMs = POLL_MS) {
