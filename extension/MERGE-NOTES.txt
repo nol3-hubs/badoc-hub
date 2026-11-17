@@ -178,3 +178,11 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Use Assigned Time rather than On H
 - The previous checker incorrectly sent onhold_time=today and filtered rows by Onhold Time. That field and row filter are now replaced by Assigned Time.
 - Chrome extension bumped to v1.3.7; Firefox extension bumped to v69.4.9. The dashboard embedded installer/cache will be refreshed to match.
 - Static JavaScript and manifest validation passed; live export still requires testing with the signed-in SPX account.
+
+
+UPDATE — 2026-11-17 · Assigned Parcels Today — Created Date lookback
+- Set the Chrome Assigned Parcels Today Created Date lookback to 14 calendar days before the current Philippine date through today. The existing Assigned Time filter remains today only.
+- Confirmed the Firefox build already uses a 14-day lookback.
+- This lookback constant is only used by parcelDeliveryDateRange(), which is called by the Assigned Parcels Today Forward and Return export flow.
+- Corrected the POD Checker helper text to show Created Date within the last 14 days, Assigned Time today, Current Station Badoc Hub, and exclusion of Delivering / Delivered.
+- Chrome extension bumped to v1.3.8. Firefox package remains v69.4.9.
