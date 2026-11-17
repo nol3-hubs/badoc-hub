@@ -428,7 +428,12 @@ function extractAssignedParcelOids(csvText) {
   if (!found.size && orderIdColumns.length) {
     for (const row of rows.slice(1)) addValues(row);
   }
-  return { oids: [...found], rowCount: Math.max(0, rows.length - 1) };
+  return {
+    oids: [...found],
+    rowCount: Math.max(0, rows.length - 1),
+    headers: rows[0].map(value => String(value ?? "").trim()),
+    rows: rows.slice(1).map(row => row.map(value => String(value ?? "")))
+  };
 }
 
 async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false }) {
@@ -483,6 +488,8 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
     taskId,
     rowCount: extracted.rowCount,
     oids: extracted.oids,
+    headers: extracted.headers,
+    rows: extracted.rows,
     fileName: csv.fileName
   };
 }
@@ -521,6 +528,10 @@ async function exportAssignedParcelsTodayFromSpx() {
     returnOidCount: returned.oids.length,
     duplicateCount: forward.oids.length + returned.oids.length - oids.length,
     oids,
+    downloadedData: [
+      { source: "Forward Order", headers: forward.headers, rows: forward.rows },
+      { source: "Return Order", headers: returned.headers, rows: returned.rows }
+    ],
     fileName: "Forward_and_Return_Assigned_Today.csv"
   };
 }
