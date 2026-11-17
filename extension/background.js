@@ -454,6 +454,31 @@ function parseJsonResponse(label, response) {
   }
 }
 
+function getExportTaskId(task, depth = 0) {
+  if (task == null || depth > 4) return 0;
+  if (Array.isArray(task)) { for (const item of task) { const id = getExportTaskId(item, depth + 1); if (id) return id; } return 0; }
+  if (typeof task !== "object") return 0;
+  for (const key of ["task_id", "taskId", "export_task_id", "exportTaskId", "id"]) {
+    const id = Number(task[key] || 0); if (Number.isFinite(id) && id > 0) return id;
+  }
+  for (const key of ["task", "export_task", "exportTask", "data", "result"]) { const id = getExportTaskId(task[key], depth + 1); if (id) return id; }
+  return 0;
+}
+function findExportTaskRows(value, depth = 0) {
+  if (value == null || depth > 6) return null;
+  if (Array.isArray(value)) {
+    if (value.some(item => getExportTaskId(item) > 0)) return value;
+    for (const item of value) { const nested = findExportTaskRows(item, depth + 1); if (nested) return nested; }
+    return null;
+  }
+  if (typeof value !== "object") return null;
+  const entries = Object.entries(value).sort(([a], [b]) => {
+    const score = key => /task/i.test(key) ? 0 : /list|record|result|data/i.test(key) ? 1 : 2;
+    return score(a) - score(b);
+  });
+  for (const [, child] of entries) { const nested = findExportTaskRows(child, depth + 1); if (nested) return nested; }
+  return null;
+}
 async function listTasks(startSec, source = "", page = 1, omitStartTime = false, taskId = 0) {
   const sourceParam = source ? `&source=${encodeURIComponent(source)}` : "";
   const startParam = omitStartTime ? "" : `start_time=${encodeURIComponent(startSec)}&`;
@@ -461,37 +486,30 @@ async function listTasks(startSec, source = "", page = 1, omitStartTime = false,
   const url = `${SPX_ORIGIN}${TASK_LIST_PATH}?${startParam}count=100&pageno=${Math.max(1, Number(page) || 1)}${sourceParam}${taskIdParam}`;
   const response = await extensionFetchText(url);
   const json = parseJsonResponse("SPX export task list", response);
-  if (Number(json?.retcode) !== 0) {
-    throw new Error(json?.message || "SPX task list request failed.");
-  }
-  // SPX has returned different task-list envelopes across portal modules.
-  // Do not silently turn an unfamiliar but successful response into [].
-  const candidates = [
-    json?.data?.task_list, json?.data?.list, json?.data?.tasks,
-    json?.task_list, json?.list, json?.tasks,
-    Array.isArray(json?.data) ? json.data : null
-  ];
-  const rows = candidates.find(Array.isArray);
-  if (rows) return rows;
-  const data = json?.data;
-  if (data && typeof data === "object") {
-    for (const [key, value] of Object.entries(data)) {
-      if (Array.isArray(value) && /task|list|record/i.test(key)) return value;
-    }
-  }
-  return [];
+  if (Number(json?.retcode) !== 0) throw new Error(json?.message || "SPX task list request failed.");
+  const known = [json?.data?.task_list,json?.data?.list,json?.data?.tasks,json?.task_list,json?.list,json?.tasks,Array.isArray(json?.data)?json.data:null].filter(Array.isArray);
+  const populated = known.find(rows => rows.length && rows.some(row => getExportTaskId(row) > 0));
+  if (populated) return populated;
+  const nested = findExportTaskRows(json?.data) || findExportTaskRows(json);
+  if (nested) return nested;
+  return known[0] || [];
 }
 
-async function getSignedDownloadUrl(taskId) {
-  const url = `${SPX_ORIGIN}${SIGNED_URL_PATH}?source=fms&task_id=${encodeURIComponent(taskId)}`;
-  const response = await extensionFetchText(url);
-  const json = parseJsonResponse("SPX signed download URL", response);
-  if (Number(json?.retcode) !== 0) {
-    throw new Error(json?.message || "SPX did not return a signed download URL.");
+async function getSignedDownloadUrl(taskId, preferredSource = "fms") {
+  let lastError = "";
+  const sources = [...new Set([preferredSource, "fms", "fm", ""])];
+  for (const source of sources) {
+    const query = `${source ? `source=${encodeURIComponent(source)}&` : ""}task_id=${encodeURIComponent(taskId)}`;
+    try {
+      const response = await extensionFetchText(`${SPX_ORIGIN}${SIGNED_URL_PATH}?${query}`);
+      const json = parseJsonResponse("SPX signed download URL", response);
+      if (Number(json?.retcode) !== 0) { lastError = json?.message || "SPX did not return a signed download URL."; continue; }
+      const url = String(json?.data?.download_url || json?.data?.url || json?.download_url || "").trim();
+      if (url) return url;
+      lastError = `SPX returned no signed download URL for the ${source || "default"} queue.`;
+    } catch (error) { lastError = error?.message || String(error); }
   }
-  const signedUrl = String(json?.data?.download_url || "");
-  if (!signedUrl) throw new Error("SPX returned no signed download URL.");
-  return signedUrl;
+  throw new Error(lastError || "SPX did not return a signed download URL.");
 }
 
 function fileNameFromSignedUrl(signedUrl) {
@@ -688,69 +706,67 @@ function extractAssignedParcelOids(csvText) {
 }
 
 async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
-  const deadline = Date.now() + 4 * 60 * 1000;
-  let lastStatus = null;
-  let lastQueue = null;
-  let lastMessageAt = 0;
-
+  const deadline = Date.now() + 4 * 60 * 1000, sources = ["fms", "fm", ""];
+  let lastStatus = null, lastQueue = null, lastMessageAt = 0, lastWideScanAt = 0, lastTaskPreview = "", lookupErrors = [];
+  const locate = results => {
+    for (const result of results) {
+      if (result.status !== "fulfilled") continue;
+      const task = (result.value || []).find(item => getExportTaskId(item) === Number(taskId));
+      if (task) return { task, source: result.source };
+    }
+    return null;
+  };
   while (Date.now() < deadline) {
     if (job.cancelled) throw new Error("Assigned Parcels Today export cancelled.");
-
-    // SPX files this export under different task-list partitions on some accounts.
-    // Look up the exact task ID in FMS, FM, and the default list instead of polling
-    // only the default list and waiting forever for a task that is stored elsewhere.
-    const lookups = await Promise.allSettled(
-      ["fms", "fm", ""].map(source => listTasks(startSec, source, 1, false, taskId))
-    );
-    const available = lookups.filter(result => result.status === "fulfilled");
-    if (!available.length) {
-      const detail = lookups.map(result => result.reason?.message || "task lookup failed").join("; ");
-      throw new Error(label + " task " + taskId + " was created, but SPX task status could not be checked: " + detail);
-    }
-
-    const task = available
-      .flatMap(result => result.value || [])
-      .find(item => Number(item?.task_id || item?.taskId || item?.export_task_id || 0) === Number(taskId));
-
-    let message = "";
-    if (task) {
-      const status = Number(task?.export_status ?? -1);
-      const queue = String(task?.queue_position || "");
-      if (status === 2) return task;
-      if (status === 3 || task?.failed_reason) {
-        throw new Error(task?.failed_reason || (label + " SPX export task " + taskId + " failed."));
+    const exactRaw = await Promise.allSettled(sources.map(source => listTasks(startSec, source, 1, false, taskId)));
+    const exact = exactRaw.map((result,index)=>({...result,source:sources[index]}));
+    lookupErrors = exact.filter(r=>r.status==="rejected").map(r=>r.reason?.message||"task lookup failed");
+    let located = locate(exact);
+    if (!located && Date.now()-lastWideScanAt >= 12000) {
+      lastWideScanAt=Date.now();
+      const firstRaw=await Promise.allSettled(sources.map(source=>listTasks(startSec,source,1,false,0)));
+      const first=firstRaw.map((result,index)=>({...result,source:sources[index]}));
+      for (const result of first) {
+        if(result.status!=="fulfilled"){lookupErrors.push(result.reason?.message||"unfiltered scan failed");continue;}
+        let rows=result.value||[];
+        let task=rows.find(item=>getExportTaskId(item)===Number(taskId));
+        if(task){located={task,source:result.source};break;}
+        lastTaskPreview=rows.slice(0,8).map(item=>"#"+(getExportTaskId(item)||"?")+" status "+String(item?.export_status??item?.status??"?")).join(" | ");
+        for(let page=2;rows.length>=100&&page<=5;page++){
+          try{rows=await listTasks(startSec,result.source,page,false,0);task=rows.find(item=>getExportTaskId(item)===Number(taskId));if(task){located={task,source:result.source};break;}}
+          catch(error){lookupErrors.push(error?.message||String(error));break;}
+        }
+        if(located)break;
       }
-      const elapsed = Math.floor((Date.now() - job.startedAt) / 1000);
-      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-      const ss = String(elapsed % 60).padStart(2, "0");
-      message = label + " export task " + taskId + " is processing" +
-        (queue ? " · queue " + queue : "") + " · elapsed " + mm + ":" + ss + "…";
-      if (status !== lastStatus || queue !== lastQueue || Date.now() - lastMessageAt >= 5000) {
-        lastStatus = status;
-        lastQueue = queue;
-        lastMessageAt = Date.now();
-      } else {
-        message = "";
-      }
-    } else {
-      const elapsed = Math.floor((Date.now() - job.startedAt) / 1000);
-      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-      const ss = String(elapsed % 60).padStart(2, "0");
-      message = "SPX accepted " + label + " task " + taskId +
-        "; checking FMS, FM, and default export queues · elapsed " + mm + ":" + ss + "…";
-      if (Date.now() - lastMessageAt < 5000) message = "";
-      else lastMessageAt = Date.now();
     }
-
-    if (message) {
-      progress(message, { phase: "pod-assigned-task", kind: job.kind, taskId, source: label });
-      notifyPodCheckerAssignedProgress(message);
+    if(!located && Date.now()-lastWideScanAt<3500){
+      const raw=await Promise.allSettled(sources.map(source=>listTasks(0,source,1,true,taskId)));
+      const results=raw.map((result,index)=>({...result,source:sources[index]}));
+      located=locate(results);
+      for(const r of results)if(r.status==="rejected")lookupErrors.push(r.reason?.message||"unbounded lookup failed");
     }
+    let message="";
+    if(located?.task){
+      const task=located.task, raw=task?.export_status??task?.status??task?.task_status??"";
+      const status=Number(raw), statusText=String(raw).trim().toLowerCase(), queue=String(task?.queue_position||"");
+      const complete=status===2||/^(complete|completed|success|succeeded|finished)$/.test(statusText);
+      const failed=status===3||/^(failed|failure|error|cancelled|canceled)$/.test(statusText)||!!task?.failed_reason;
+      if(complete)return {task,source:located.source};
+      if(failed)throw new Error(task?.failed_reason||(label+" SPX export task "+taskId+" failed ("+(statusText||status)+")."));
+      const elapsed=Math.floor((Date.now()-job.startedAt)/1000);
+      message=label+" export task "+taskId+" is processing"+(queue?" · queue "+queue:"")+" · "+(located.source||"default")+" queue · elapsed "+String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0")+"…";
+      if(status!==lastStatus||queue!==lastQueue||Date.now()-lastMessageAt>=5000){lastStatus=status;lastQueue=queue;lastMessageAt=Date.now();}else message="";
+    }else{
+      const elapsed=Math.floor((Date.now()-job.startedAt)/1000);
+      message="SPX accepted "+label+" task "+taskId+"; searching FMS, FM, and default queues (including unfiltered task rows) · elapsed "+String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0")+"…";
+      if(Date.now()-lastMessageAt<5000)message="";else lastMessageAt=Date.now();
+    }
+    if(message){progress(message,{phase:"pod-assigned-task",kind:job.kind,taskId,source:label});notifyPodCheckerAssignedProgress(message);}
     await sleep(4000);
   }
-
-  throw new Error(label + " export task " + taskId +
-    " did not reach Completed within 4 minutes. SPX was checked by task ID in the FMS, FM, and default export queues. Check the SPX export task monitor and retry.");
+  const diagnostic=lastStatus!==null?" Last task status: "+String(lastStatus)+(lastQueue?", queue "+lastQueue:"")+".":" The task ID was not found in returned task rows."+(lastTaskPreview?" Recent task rows: "+lastTaskPreview+".":"");
+  const errors=lookupErrors.length?" Lookup errors: "+[...new Set(lookupErrors)].slice(0,3).join("; ")+".":"";
+  throw new Error(label+" task "+taskId+" was accepted by SPX but did not become downloadable within 4 minutes."+diagnostic+errors+" Open the SPX export task monitor to confirm its state.");
 }
 
 async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false }) {
@@ -794,7 +810,8 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   if (!taskId) throw new Error("SPX accepted the " + label + " export request but returned no task ID.");
 
   const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
-  const completed = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, label);
+  const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, label);
+  const completed = completedInfo.task;
 
   if (isForward) {
     if (String(completed?.export_name || "") !== PARCEL_EXPORT_NAME ||
@@ -808,7 +825,7 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   progress("SPX " + label + " task " + taskId + " is complete. Downloading the CSV…", {
     phase: "pod-assigned-today-download", kind: job.kind, source: label, taskId
   });
-  const signedUrl = await getSignedDownloadUrl(taskId);
+  const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source);
   const csv = await downloadCsv(signedUrl);
   const raw = extractAssignedParcelOids(csv.text);
   const filtered = filterAssignedTodayExportRows(raw, range.todayDate, label);
