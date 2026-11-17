@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v79">
+<meta name="badoc-app-version" content="v80">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -1846,19 +1846,26 @@ html[data-theme="light"] .side > .theme-switch-row{
             <select id="firstMileTaskStatusFilter" aria-label="Filter by pickup status">
               <option value="all">All statuses</option>
             </select>
-            <button class="btn" id="copyFirstMileForSheet" type="button" disabled title="Copy visible pickup orders as tab-separated rows for the spreadsheet">Copy for Sheet</button>
-            <button class="btn" id="copyFMHubInventory" type="button" disabled title="Copy Pickup Orders with ETA today">FM Hub Inventory</button>
-            <button class="btn" id="copyPickupTaskManagement" type="button" disabled title="Copy Pickup Tasks created today">Pickup Task Management</button>
+            <div class="pickup-copy-actions" aria-label="Copy pickup data">
+              <button class="btn" id="copyFirstMileForSheet" type="button" disabled title="Copy visible pickup orders as tab-separated rows for the spreadsheet">Copy for Sheet</button>
+              <button class="btn" id="copyFMHubInventory" type="button" disabled title="Copy Pickup Orders with ETA today">FM Hub Inventory</button>
+              <button class="btn" id="copyPickupTaskManagement" type="button" disabled title="Copy Pickup Tasks created today">Pickup Task Management</button>
+            </div>
             <button class="btn primary" id="syncFirstMileAll" type="button">↻ Sync First Mile</button>
           </div>
-          <span id="firstMileCombinedMeta">Sync Orders and Tasks to build the combined pickup list.</span>
-          <div id="firstMileAutoAlertControls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-            <button class="btn" id="enableFirstMileAlarm" type="button" hidden>Enable alarm sound</button>
-            <button class="btn" id="ackFirstMileAlarm" type="button" hidden>Acknowledge Alarm</button>
-            <span id="firstMileAutoAlertStatus" class="hint" aria-live="polite">Checking unassigned alarm and sound…</span>
+          <div class="pickup-status-strip">
+            <span id="firstMileCombinedMeta">Sync Orders and Tasks to build the combined pickup list.</span>
+            <div id="firstMileAutoAlertControls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+              <button class="btn" id="enableFirstMileAlarm" type="button" hidden>Enable alarm sound</button>
+              <button class="btn" id="ackFirstMileAlarm" type="button" hidden>Acknowledge Alarm</button>
+              <span id="firstMileAutoAlertStatus" class="hint" aria-live="polite">Checking unassigned alarm and sound…</span>
+            </div>
           </div>
-          <div id="firstMileLastUpdated" class="hint" style="margin-top:5px;font-size:11px" aria-live="polite">Last updated (PHT) — Orders: Not yet · Tasks: Not yet</div>
-          <div id="firstMileBaselineStatus" class="hint" style="margin-top:4px;font-size:11px" aria-live="polite">First-sync baseline will be saved automatically before today’s first successful export is replaced.</div>
+          <details class="pickup-sync-details">
+            <summary>Sync details</summary>
+            <div id="firstMileLastUpdated" class="hint" style="margin-top:5px;font-size:11px" aria-live="polite">Last updated (PHT) — Orders: Not yet · Tasks: Not yet</div>
+            <div id="firstMileBaselineStatus" class="hint" style="margin-top:4px;font-size:11px" aria-live="polite">First-sync baseline will be saved automatically before today’s first successful export is replaced.</div>
+          </details>
         </div>
         <div id="firstMileCombinedTable" class="first-mile-combined-table"><div class="first-mile-combined-empty">Combined pickup information will appear here after both exports are saved.</div></div>
         <details id="firstMileUnmatchedPanel" hidden style="margin-top:12px;border:1px solid var(--border-color,#d8e0e8);border-radius:10px;padding:10px 12px;background:var(--card-bg,transparent)" open>
@@ -14457,6 +14464,45 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
 })();
 </script>
 
+<style id="pickup-toolbar-clean-layout-v1">
+/* Pickup toolbar: keep the three copy actions grouped and Sync First Mile separate. */
+#firstMile .pickup-combined-toolbar{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:9px!important;margin:0 0 12px!important}
+#firstMile .pickup-combined-controls{display:grid!important;grid-template-columns:minmax(260px,1fr) minmax(155px,185px) auto auto!important;align-items:center!important;gap:9px!important;width:100%!important}
+#firstMile .pickup-combined-controls #firstMileCombinedSearch{width:100%!important;min-width:0!important;min-height:40px!important;flex:initial!important}
+#firstMile #firstMileTaskStatusFilter{width:100%!important;min-width:0!important;min-height:40px!important;padding:9px 12px!important;border:1px solid var(--line)!important;border-radius:9px!important;background:var(--panel2)!important;color:var(--text)!important;font:inherit!important;font-size:13px!important}
+#firstMile .pickup-copy-actions{display:flex!important;align-items:center!important;justify-content:flex-start!important;flex-wrap:nowrap!important;gap:8px!important;min-width:0!important}
+#firstMile #copyFirstMileForSheet,#firstMile #copyFMHubInventory,#firstMile #copyPickupTaskManagement{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:0!important;min-height:40px!important;padding:9px 12px!important;margin:0!important;background:var(--panel2)!important;border:1px solid var(--line)!important;border-radius:9px!important;color:var(--text)!important;font-size:12px!important;font-weight:700!important;line-height:1.2!important;white-space:nowrap!important;box-shadow:none!important}
+#firstMile #copyFirstMileForSheet:hover:not(:disabled),#firstMile #copyFMHubInventory:hover:not(:disabled),#firstMile #copyPickupTaskManagement:hover:not(:disabled){border-color:var(--blue)!important;color:var(--blue)!important}
+#firstMile #copyFirstMileForSheet:disabled,#firstMile #copyFMHubInventory:disabled,#firstMile #copyPickupTaskManagement:disabled{opacity:.5!important;cursor:not-allowed!important}
+#firstMile #copyFirstMileForSheet[data-copy-state="success"]{background:rgba(22,163,74,.10)!important;border-color:#16a34a!important;color:#15803d!important}
+#firstMile #copyFirstMileForSheet[data-copy-state="error"]{background:rgba(220,38,38,.08)!important;border-color:#dc2626!important;color:#dc2626!important}
+#firstMile #syncFirstMileAll{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:auto!important;min-width:165px!important;max-width:100%!important;min-height:40px!important;padding:9px 16px!important;margin:0!important;align-self:stretch!important;background:var(--blue)!important;border:1px solid var(--blue)!important;border-radius:9px!important;color:#fff!important;font-size:13px!important;font-weight:700!important;line-height:1.2!important;box-shadow:none!important;white-space:nowrap!important}
+#firstMile #syncFirstMileAll:hover{filter:brightness(.94)}
+#firstMile #syncFirstMileAll:disabled{opacity:.65!important;cursor:wait!important}
+#firstMile .pickup-status-strip{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:5px 16px!important;width:100%!important;min-width:0!important;padding-top:2px!important}
+#firstMile #firstMileCombinedMeta{display:block!important;flex:1 1 360px!important;width:auto!important;min-width:0!important;margin:0!important;font-size:11px!important;line-height:1.35!important;color:var(--muted)!important}
+#firstMile #firstMileCloudSyncStatus{display:inline-flex!important;align-items:center!important;flex:0 1 auto!important;margin:0!important;font-size:10px!important;line-height:1.35!important;color:var(--muted)!important}
+#firstMile #firstMileAutoAlertControls{display:inline-flex!important;align-items:center!important;gap:7px!important;flex:0 1 auto!important;margin:0!important}
+#firstMile #firstMileAutoAlertStatus{font-size:10px!important;line-height:1.3!important;color:var(--muted)!important}
+#firstMile .pickup-sync-details{margin-top:3px!important;font-size:10px!important;color:var(--muted)!important}
+#firstMile .pickup-sync-details summary{display:inline-block!important;cursor:pointer!important;user-select:none!important;line-height:1.4!important;color:var(--muted)!important}
+#firstMile .pickup-sync-details>div{margin:4px 0 0!important;font-size:10px!important;line-height:1.4!important;color:var(--muted)!important}
+@media(max-width:1180px){
+  #firstMile .pickup-combined-controls{grid-template-columns:minmax(0,1fr) minmax(150px,190px)!important}
+  #firstMile .pickup-copy-actions{grid-column:1!important;grid-row:2!important;flex-wrap:wrap!important}
+  #firstMile #syncFirstMileAll{grid-column:2!important;grid-row:2!important;justify-self:stretch!important}
+}
+@media(max-width:620px){
+  #firstMile .pickup-combined-controls{grid-template-columns:minmax(0,1fr) minmax(125px,42%)!important;gap:8px!important}
+  #firstMile .pickup-combined-controls #firstMileCombinedSearch{grid-column:1/-1!important}
+  #firstMile .pickup-copy-actions{grid-column:1/-1!important;grid-row:auto!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important}
+  #firstMile #copyFirstMileForSheet,#firstMile #copyFMHubInventory,#firstMile #copyPickupTaskManagement{width:100%!important;padding:9px 7px!important;font-size:11px!important;white-space:normal!important}
+  #firstMile #copyPickupTaskManagement{grid-column:1/-1!important}
+  #firstMile #syncFirstMileAll{grid-column:1/-1!important;grid-row:auto!important;width:100%!important;min-width:0!important}
+  #firstMile .pickup-status-strip{gap:6px 10px!important}
+  #firstMile #firstMileCombinedMeta{flex-basis:100%!important}
+}
+</style>
 </body>
 
 <script id="badoc-live-onhold-gsheet-v251">
