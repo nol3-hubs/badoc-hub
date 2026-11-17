@@ -162,6 +162,7 @@
       "BADOC_START_PARCEL_SECONDARY_SYNC",
       "BADOC_START_FIRST_MILE_ORDERS_SYNC",
       "BADOC_START_FIRST_MILE_TASKS_SYNC",
+      "BADOC_LOOKUP_PICKUP_INFO",
       "BADOC_ABORT_SYNC",    ]);
     if (!supported.has(data.type)) return;
     if (!port) {
@@ -180,6 +181,7 @@
     }
     try {
       const payload = { type: data.type };
+      if (data.type === "BADOC_LOOKUP_PICKUP_INFO") { payload.reqId=String(data.reqId||""); payload.orderId=String(data.orderId||"").trim(); }
       if (data.type === "BADOC_START_DELIVERING_RECONCILE") payload.trackingNumbers = Array.isArray(data.trackingNumbers) ? data.trackingNumbers.map(v => String(v || "").trim()).filter(Boolean) : [];
       if (data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC") {
         if (data.selectedDate !== undefined) payload.selectedDate = String(data.selectedDate || "");
