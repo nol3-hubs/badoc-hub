@@ -520,7 +520,7 @@ async function downloadCsv(signedUrl) {
 }
 
 
-function parseOnholdExportCsvRows(source) {
+function parseAssignedExportCsvRows(source) {
   const input = String(source || "").replace(/^\uFEFF/, "");
   const rows = [];
   let row = [], field = "", quoted = false;
@@ -549,8 +549,8 @@ function parseOnholdExportCsvRows(source) {
 }
 
 function extractAssignedParcelOids(csvText) {
-  const rows = parseOnholdExportCsvRows(csvText);
-  if (!rows.length) throw new Error("SPX returned an empty OnHold parcel export.");
+  const rows = parseAssignedExportCsvRows(csvText);
+  if (!rows.length) throw new Error("SPX returned an empty parcel export.");
   const headers = rows[0].map(value => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
   const orderIdColumns = headers
     .map((header, index) => ({ header, index }))
@@ -574,9 +574,9 @@ function extractAssignedParcelOids(csvText) {
   return { oids: [...found], rowCount: Math.max(0, rows.length - 1) };
 }
 
-async function exportAssignedParcelsTodayFromSpx() {
-  const range = parcelDeliveryDateRange();
-  const job = { kind: "pod-assigned-today", startedAt: Date.now(), cancelled: false };
+async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false }) {
+  // Both Forward and Return exports use an empty tracking_status and no Status Log
+  // condition. The only actual data restriction is Assigned Time for today.
   const body = {
     bulky_type: "1,0,2",
     pick_up_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
@@ -586,43 +586,85 @@ async function exportAssignedParcelsTodayFromSpx() {
       "Driver= All"
   };
 
-  progress("Submitting SPX Forward Order export for " + range.todayDate + " (Assigned Time only; all statuses)…", {
-    phase: "pod-assigned-today-export", kind: job.kind,
+  progress("Submitting SPX " + label + " export for " + range.todayDate + " (Assigned Time only; all statuses)…", {
+    phase: "pod-assigned-today-export", kind: job.kind, source: label,
     dateStart: range.todayDate, dateEnd: range.todayDate
   });
 
-  const response = await extensionFetchText(SPX_ORIGIN + PARCEL_FORWARD_EXPORT_PATH, {
+  const response = await extensionFetchText(SPX_ORIGIN + endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Accept": "application/json, text/plain, */*" },
     body: JSON.stringify(body)
   });
-  const json = parseJsonResponse("SPX assigned-today Forward Order export", response);
+  const json = parseJsonResponse("SPX " + label + " export", response);
   if (!response.ok || Number(json?.retcode) !== 0) {
-    throw new Error(json?.message || "SPX Forward Order export failed (HTTP " + response.status + ").");
+    throw new Error(json?.message || "SPX " + label + " export failed (HTTP " + response.status + ").");
   }
 
   const taskId = Number(json?.data?.task_id || json?.task_id || 0);
-  if (!taskId) throw new Error("SPX accepted the Forward Order export request but returned no task ID.");
+  if (!taskId) throw new Error("SPX accepted the " + label + " export request but returned no task ID.");
 
   const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
   const completed = await waitForCompletion(taskId, waitStartSec, job);
-  if (String(completed?.export_name || "") !== PARCEL_EXPORT_NAME ||
-      String(completed?.biz_name || "") !== PARCEL_EXPORT_BIZ_NAME) {
-    throw new Error("The completed SPX task is not a Forward Order export.");
+
+  if (isForward) {
+    if (String(completed?.export_name || "") !== PARCEL_EXPORT_NAME ||
+        String(completed?.biz_name || "") !== PARCEL_EXPORT_BIZ_NAME) {
+      throw new Error("The completed SPX task is not a Forward Order export.");
+    }
+  } else if (Number(completed?.station_id || 0) !== PARCEL_STATION_ID) {
+    throw new Error("The Return Order export task station did not match BADOC HUB.");
   }
-  progress("SPX assigned-today Forward Order task " + taskId + " is complete. Downloading the CSV…", {
-    phase: "pod-assigned-today-download", kind: job.kind, taskId
+
+  progress("SPX " + label + " task " + taskId + " is complete. Downloading the CSV…", {
+    phase: "pod-assigned-today-download", kind: job.kind, source: label, taskId
   });
   const signedUrl = await getSignedDownloadUrl(taskId);
   const csv = await downloadCsv(signedUrl);
   const extracted = extractAssignedParcelOids(csv.text);
   return {
-    ok: true,
-    todayDate: range.todayDate,
     taskId,
     rowCount: extracted.rowCount,
     oids: extracted.oids,
     fileName: csv.fileName
+  };
+}
+
+async function exportAssignedParcelsTodayFromSpx() {
+  const range = parcelDeliveryDateRange();
+  const job = { kind: "pod-assigned-today", startedAt: Date.now(), cancelled: false };
+
+  // Keep the two SPX export types separate, then merge their OIDs below.
+  // Run sequentially to follow the established SPX export-task handling flow.
+  const forward = await runAssignedTodayExportSource({
+    endpoint: PARCEL_FORWARD_EXPORT_PATH,
+    label: "Forward Order",
+    range,
+    job,
+    isForward: true
+  });
+  const returned = await runAssignedTodayExportSource({
+    endpoint: PARCEL_RETURN_EXPORT_PATH,
+    label: "Return Order",
+    range,
+    job,
+    isForward: false
+  });
+
+  const oids = [...new Set([...forward.oids, ...returned.oids])];
+  return {
+    ok: true,
+    todayDate: range.todayDate,
+    taskId: forward.taskId,
+    forwardTaskId: forward.taskId,
+    returnTaskId: returned.taskId,
+    forwardRowCount: forward.rowCount,
+    returnRowCount: returned.rowCount,
+    forwardOidCount: forward.oids.length,
+    returnOidCount: returned.oids.length,
+    duplicateCount: forward.oids.length + returned.oids.length - oids.length,
+    oids,
+    fileName: "Forward_and_Return_Assigned_Today.csv"
   };
 }
 
