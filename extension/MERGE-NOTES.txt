@@ -109,3 +109,13 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Assigned Today (all statuses)
 - The button still uses the SPX Forward Order export endpoint. It does not include Return Order export rows; that is a separate endpoint used by the secondary parcel sync.
 - Chrome extension bumped to v1.2.7, Firefox extension bumped to v69.3.9, and the POD Checker iframe marker bumped to 1.5.49.
 - Live all-status export behavior still requires verification with an authenticated SPX session.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Forward + Return Assigned Today
+- Expanded the Assigned Parcels Today button to run both the SPX Forward Order export and the separate SPX Return Order export.
+- Both export requests omit tracking_status and Status Log conditions. Both use Assigned Time from 00:00:00 through 23:59:59 for the current Asia/Manila date; no Created Date restriction is sent.
+- The Return export uses /api/admin/tracking/am_hub/return/export. The previous Return_LMHub_Received-only status ID and Created Date lookback are not used by this button.
+- OIDs are extracted from each CSV, normalized, combined, and deduplicated. The checker reports Forward OID count, Return OID count, and duplicates removed.
+- Visible button label changed to Assigned Parcels Today. Chrome package bumped to v1.2.8, Firefox to v69.4.0, and checker iframe marker to 1.5.50.
+- Static JavaScript syntax and manifest validation are required. Live Return Order Assigned Time filtering still requires confirmation with an authenticated SPX export session.
+- The embedded Chrome installer bundle has not yet been refreshed; use the updated extension source package until that bundle is rebuilt.
