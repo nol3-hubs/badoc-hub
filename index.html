@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v84">
+<meta name="badoc-app-version" content="v85">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -900,7 +900,8 @@ html[data-theme="dark"] #firstMile.page{color:#e7f0fb}
 #firstMile .fm-task-cancelled{color:#ff9292;background:rgba(239,68,68,.15);border-color:rgba(248,113,113,.38)}
 #firstMile .fm-task-onhold{color:#ffc36b;background:rgba(249,115,22,.16);border-color:rgba(251,146,60,.4)}
 #firstMile .fm-task-inbounded{color:#77e3a6;background:rgba(34,197,94,.15);border-color:rgba(74,222,128,.38)}
-#firstMile .fm-task-done{color:#77e3a6;background:rgba(34,197,94,.15);border-color:rgba(74,222,128,.38)}
+/* Picked Up is intentionally lighter than Inbounded for quick visual distinction. */
+#firstMile .fm-task-done{color:#d5ffe2;background:rgba(134,239,172,.24);border-color:rgba(187,247,208,.72)}
 #firstMile .fm-task-unassigned{color:#ff9292;background:rgba(239,68,68,.15);border-color:rgba(248,113,113,.38)}
 #firstMile .fm-task-other{color:#c4d2e2;background:rgba(148,163,184,.12);border-color:rgba(148,163,184,.25)}
 #firstMile .first-mile-combined-empty{padding:24px;text-align:center;color:#8da4bd;font-size:12px}
@@ -1024,8 +1025,8 @@ body.pickup-page-active .top .title{display:block!important;visibility:visible!i
 html[data-theme="light"] #firstMile .fm-task-assigned{color:#1d4ed8!important;background:#eff6ff!important;border-color:#bfdbfe!important}
 html[data-theme="light"] #firstMile .fm-task-cancelled{color:#b91c1c!important;background:#fef2f2!important;border-color:#fecaca!important}
 html[data-theme="light"] #firstMile .fm-task-onhold{color:#c2410c!important;background:#fff7ed!important;border-color:#fed7aa!important}
-html[data-theme="light"] #firstMile .fm-task-inbounded{color:#15803d!important;background:#f0fdf4!important;border-color:#bbf7d0!important}
-html[data-theme="light"] #firstMile .fm-task-done{color:#15803d!important;background:#f0fdf4!important;border-color:#bbf7d0!important}
+html[data-theme="light"] #firstMile .fm-task-inbounded{color:#166534!important;background:#dcfce7!important;border-color:#86efac!important}
+html[data-theme="light"] #firstMile .fm-task-done{color:#166534!important;background:#f0fdf4!important;border-color:#bbf7d0!important}
 html[data-theme="light"] #firstMile .fm-task-unassigned{color:#b91c1c!important;background:#fef2f2!important;border-color:#fecaca!important}
 html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;background:#f2f4f7!important;border-color:#d0d5dd!important}
 @media(max-width:520px){
