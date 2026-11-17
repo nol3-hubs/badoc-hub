@@ -159,3 +159,13 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Repair dashboard click handler sta
 - Changed Chrome and Firefox background progress notifications to publish to the connected dashboard port.
 - Chrome extension bumped to v1.3.5; Firefox extension bumped to v69.4.7; checker bridge marker bumped to 1.5.55.
 - The root dashboard index.html embedded installer is refreshed with the matching Chrome files.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Recover SPX export tasks reliably
+- Fixed task-list parsing so an empty task_list field does not hide a populated task array in another SPX response envelope.
+- Expanded task ID recognition to task_id, taskId, export_task_id, exportTaskId, and id, including nested task payloads.
+- Kept exact-ID lookups across FMS, FM, and default queues, and added periodic unfiltered scans of recent queue pages when SPX does not honor the task_ids filter.
+- The completed task's discovered queue is now used first when requesting its signed CSV download URL, with FMS, FM, and default fallbacks.
+- Kept the existing Forward + Return export endpoints, export request fields, Badoc Hub / today's Onhold Time row filtering, and Delivering / Delivered exclusions unchanged.
+- Chrome extension bumped to v1.3.6; Firefox extension bumped to v69.4.8. The POD Checker iframe app cache marker and embedded Chrome installer bundle are refreshed.
+- Static JavaScript and manifest validation passed before commit. A live export still requires verification in the user's authenticated SPX session.

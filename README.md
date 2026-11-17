@@ -3,9 +3,9 @@
 Independent test repository merged from the newer `nol3-hubs/test` project while retaining Test2's extension-version validation and GitHub Actions workflows.
 
 ## Included
-- BADOC Hub dashboard v78
-- Chrome extension v1.3.5, including Downloaded Data display in the POD/POOH Checker
-- Firefox extension v69.4.7
+- BADOC Hub dashboard v91
+- Chrome extension v1.3.6, including Downloaded Data display in the POD/POOH Checker
+- Firefox extension v69.4.8
 - First Mile XLSX-to-CSV support
 - On-demand Pickup Info lookup from the signed-in SPX tab, including pickup attempts, geofence, remarks, photos, and seller signature
 - Integrated POD/POOH checker with an Assigned Parcels Today button that exports Forward and Return Orders across all statuses and filters only Assigned Time to the current Philippine calendar day
@@ -18,10 +18,10 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 The dashboard checks the installed extension package version separately from the bridge protocol version.
 
 Minimum versions:
-- Chrome: `1.3.5`
-- Firefox: `69.4.7`
+- Chrome: `1.3.6`
+- Firefox: `69.4.8`
 
-Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer bundle still needs to be refreshed to include the latest v1.2.9 source package.
+Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer bundle is synchronized with the current Chrome source package.
 
 ## Pickup export and matching
 - Pickup Orders exports all statuses and all bulky types, limited only to Created Time in the last 14 days through the selected day.
