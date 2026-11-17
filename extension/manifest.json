@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badoc Hub Extension",
-  "version": "1.3.8",
-  "description": "Badoc Hub extension with a 14-day Created Date lookback, today's Assigned Time exports, robust SPX task discovery, and live Pickup Info.",
+  "version": "1.3.9",
+  "description": "Badoc Hub extension with SPX Assigned Time CSV fallback, a 14-day Created Date lookback, robust export-task discovery, and live Pickup Info.",
   "permissions": [
     "cookies",
     "scripting",
