@@ -659,10 +659,9 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
     .filter(item => normalizedStatusAliases.has(item.key))
     .map(item => item.index);
 
-  // Some SPX Forward/Return CSV layouts omit the Assigned Time column entirely.
-  // The export request itself already sends pick_up_time for today's Assigned Time.
-  // When SPX omits the column, rely on that server-side filter instead of rejecting
-  // the entire export. When a matching column exists, independently verify it here.
+  // SPX Forward/Return exports can omit the Assigned Time column even when the
+  // request includes pick_up_time for today's Assigned Time range. Verify the
+  // CSV column when present; otherwise rely on the server-side SPX export filter.
   const assignedTimeFilterSource = assignedTimeIndex >= 0 ? "CSV column" : "SPX export request";
   const missing = [];
   if (stationIndex < 0) missing.push("Current Station");
@@ -891,9 +890,8 @@ async function exportAssignedParcelsTodayFromSpx() {
     duplicateCount: forward.oids.length + returned.oids.length - oids.length,
     oids,
     downloadedData: [
-      { source: "Forward Order", headers: forward.headers, rows: forward.rows, rawRowCount: forward.rawRowCount, excluded: forward.excluded },
-      { source: "Return Order", headers: returned.headers, rows: returned.rows, rawRowCount: returned.rawRowCount, excluded: returned.excluded }
-    ],
+      { source: "Forward Order", headers: forward.headers, rows: forward.rows, rawRowCount: forward.rawRowCount, excluded: forward.excluded, assignedTimeFilterSource: forward.assignedTimeFilterSource },
+      { source: "Return Order", headers: returned.headers, rows: returned.rows, rawRowCount: returned.rawRowCount, excluded: returned.excluded, assignedTimeFilterSource: returned.assignedTimeFilterSource }],
     fileName: "Forward_and_Return_Assigned_Today.csv"
   };
 }
