@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badoc Hub Extension",
-  "version": "1.2.5",
-  "description": "Badoc Hub extension with all-status First Mile exports and on-demand live Pickup Info attempt history.",
+  "version": "1.2.6",
+  "description": "Badoc Hub extension with all-status First Mile exports and on-demand live Pickup Info and Onhold Parcel Today export.",
   "permissions": [
     "cookies",
     "scripting",
