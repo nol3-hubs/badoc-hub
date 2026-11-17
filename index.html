@@ -453,10 +453,35 @@ window.BADOC_SHARED_CONFIG = { url: window.BADOC_FIREBASE_CONFIG.databaseURL, ke
     return Promise.resolve("ok");
   };
 
+  // Coalesce identical simultaneous reads across dashboard sections. This is
+  // in-flight deduplication only (not a TTL cache), so later reads always reach
+  // the current Firebase-backed data and realtime notifications remain authoritative.
+  var inFlightCloudReads = Object.create(null);
+  function copyCloudReadResult(result) {
+    if (!result) return result;
+    var data = result.data;
+    if (data && typeof data === "object") {
+      try { data = JSON.parse(JSON.stringify(data)); } catch (_) {}
+    }
+    return { data: data, error: result.error || null };
+  }
   function track(proto, name) {
     var o = proto[name];
     proto[name] = async function () {
-      var r = await o.apply(this, arguments);
+      var r, joinable = name === "exec" && this.op === "select";
+      var key = joinable ? JSON.stringify({
+        table: this.t, filters: this.filters || {}, mode: this.mode || "many"
+      }) : "";
+      if (joinable && inFlightCloudReads[key]) {
+        r = copyCloudReadResult(await inFlightCloudReads[key]);
+      } else {
+        var request = o.apply(this, arguments);
+        if (joinable) inFlightCloudReads[key] = request;
+        try { r = await request; }
+        finally {
+          if (joinable && inFlightCloudReads[key] === request) delete inFlightCloudReads[key];
+        }
+      }
       if (r && r.error) { if (r.error.code !== "404" && r.error.code !== "PGRST116") { health.errors++; health.lastError = String(r.error.message || "Cloud error"); health.lastErrorAt = Date.now(); } }
       else if (r) health.lastOkAt = Date.now();
       return r;
