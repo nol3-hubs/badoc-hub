@@ -382,16 +382,22 @@ $('onholdToday')?.addEventListener("click", async () => {
     const forwardCount = Number(reply.forwardOidCount || 0);
     const returnCount = Number(reply.returnOidCount || 0);
     const duplicateCount = Number(reply.duplicateCount || 0);
+    const assignedTimeUsesSpXRequest = downloadedExports.some(source =>
+      source.assignedTimeFilterSource === "SPX export request"
+    );
+    const assignedTimeDisplay = assignedTimeUsesSpXRequest
+      ? "Assigned Time today (applied by SPX where the CSV omits the field)"
+      : "Assigned Time today (verified in CSV)";
     if (!oids.length) {
       setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
     } else if (!hasDownloadedCsvRows) {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Chrome Extension v1.3.7 or Firefox SPX Bridge v69.4.9, refresh this page, and try again.`,
+        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Chrome Extension v1.3.9 or Firefox SPX Bridge v69.5.0, refresh this page, and try again.`,
         "error"
       );
     } else {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} filtered CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Created Date within the last 14 days, Current Station Badoc Hub, Assigned Time today (CSV verified when available; otherwise applied by SPX), excluding Delivering and Delivered. Click Check OIDs to validate them.`,
+        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} filtered CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Created Date within the last 14 days, Current Station Badoc Hub, ${assignedTimeDisplay}, excluding Delivering and Delivered. Click Check OIDs to validate them.`,
         "good"
       );
     }
