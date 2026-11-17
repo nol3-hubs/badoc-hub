@@ -1,4 +1,4 @@
-BADOC HUB CHROME EXTENSION — Chrome v1.2.4 / Firefox v69.3.6
+BADOC HUB CHROME EXTENSION — Chrome v1.2.5 / Firefox v69.3.7
 First Mile Orders + Tasks integration
 
 SOURCE
@@ -82,3 +82,11 @@ Firefox follow-up — 2026-11-17
 - The Firefox content bridge relays the validated Order ID request to its WebExtensions background worker and returns the Pickup Info attempt metadata to the dashboard.
 
 - Baseline refinement: later same-day exports append newly encountered Order IDs / Pickup Task Numbers while preserving the first-seen status already saved for every existing ID.
+
+
+UPDATE — 2026-11-17 · Pickup Info bridge completion
+- Completed the message route already expected by the v77 Pickup Info dialog: BADOC_LOOKUP_PICKUP_INFO now passes from the dashboard content bridge to the extension background worker, and BADOC_PICKUP_INFO_RESULT returns the live result to the dialog.
+- Both Chrome and Firefox workers query the signed-in SPX tab and call /api/fleet_order/order/detail/pickup_info for one requested Order ID. Requests are read-only, on demand, time-limited, and are not cached.
+- The response includes pickup status, ETA and pickup times, pickup point, assigned rider, and newest-first attempt history with task ID, rider/driver ID, geofence, remark, seller signature, and up to six photo references per attempt.
+- Chrome package bumped to v1.2.5; Firefox package bumped to v69.3.7. Dashboard minimum-version checks and the embedded Chrome installer bundle were updated to match.
+- JavaScript syntax checks and manifest JSON validation passed for both browser packages. Authenticated live SPX lookup still requires a browser test with a signed-in SPX tab.
