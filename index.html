@@ -15258,7 +15258,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   window.podChrome={
     tabs:{query:query=>rpc("tabs.query",[query||{}],15000),sendMessage:(tabId,message)=>rpc("tabs.sendMessage",[tabId,message||{}],65000)},
     storage:{local:{get:keys=>rpc("storage.local.get",[keys],15000),set:items=>rpc("storage.local.set",[items||{}],15000),remove:keys=>rpc("storage.local.remove",[keys],15000)}},
-    runtime:{sendMessage:message=>rpc("runtime.sendMessage",[message||{}],message?.action==="OPEN_SPX_PORTAL"?120000:30000)},
+    runtime:{sendMessage:message=>rpc("runtime.sendMessage",[message||{}],message?.action==="OPEN_SPX_PORTAL"?120000:message?.action==="EXPORT_ASSIGNED_PARCELS_TODAY"?55*60*1000:30000)},
     scripting:{executeScript:options=>rpc("scripting.discoverWorksheetGids",[options?.target?.tabId],30000).then(result=>[{result}])}
   };
 })();
