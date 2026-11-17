@@ -520,7 +520,8 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
     "current station", "current station name", "current hub", "current hub name"
   ]);
   const assignedTimeIndex = findAssignedExportColumn(headers, [
-    "assigned time", "assigned datetime", "assign time", "assignment time", "assigned at"
+    "assigned time", "assigned datetime", "assign time", "assignment time", "assigned at",
+    "assigned date", "assign date", "assignment date", "assignment datetime"
   ]);
   const statusAliases = [
     "status", "current status", "current status name", "order status",
@@ -531,9 +532,13 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
     .map((header, index) => ({ key: normalizeAssignedExportHeader(header), index }))
     .filter(item => normalizedStatusAliases.has(item.key))
     .map(item => item.index);
+
+  // SPX Forward/Return exports can omit the Assigned Time column even when the
+  // request includes pick_up_time for today's Assigned Time range. Verify the
+  // CSV column when present; otherwise rely on the server-side SPX export filter.
+  const assignedTimeFilterSource = assignedTimeIndex >= 0 ? "CSV column" : "SPX export request";
   const missing = [];
   if (stationIndex < 0) missing.push("Current Station");
-  if (assignedTimeIndex < 0) missing.push("Assigned Time");
   if (!statusIndexes.length) missing.push("Status");
   if (missing.length) {
     throw new Error(label + " CSV is missing required filter column(s): " + missing.join(", ") +
@@ -545,7 +550,10 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
   for (const row of rows) {
     const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/\s+/g, " ");
     if (!station.includes("badoc hub")) { excluded.otherStation++; continue; }
-    if (philippineDateKey(row[assignedTimeIndex]) !== todayDate) { excluded.otherAssignedDate++; continue; }
+    if (assignedTimeIndex >= 0 && philippineDateKey(row[assignedTimeIndex]) !== todayDate) {
+      excluded.otherAssignedDate++;
+      continue;
+    }
     const statusValues = statusIndexes.map(index =>
       String(row[index] ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
     );
@@ -562,9 +570,11 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
     rowCount: kept.length,
     rawRowCount: rows.length,
     oids: extractAssignedParcelOidsFromRows(headers, kept),
-    excluded
+    excluded,
+    assignedTimeFilterSource
   };
 }
+
 
 function extractAssignedParcelOids(csvText) {
   const rows = parseAssignedExportCsvRows(csvText);
@@ -754,9 +764,8 @@ async function exportAssignedParcelsTodayFromSpx() {
     duplicateCount: forward.oids.length + returned.oids.length - oids.length,
     oids,
     downloadedData: [
-      { source: "Forward Order", headers: forward.headers, rows: forward.rows, rawRowCount: forward.rawRowCount, excluded: forward.excluded },
-      { source: "Return Order", headers: returned.headers, rows: returned.rows, rawRowCount: returned.rawRowCount, excluded: returned.excluded }
-    ],
+      { source: "Forward Order", headers: forward.headers, rows: forward.rows, rawRowCount: forward.rawRowCount, excluded: forward.excluded, assignedTimeFilterSource: forward.assignedTimeFilterSource },
+      { source: "Return Order", headers: returned.headers, rows: returned.rows, rawRowCount: returned.rawRowCount, excluded: returned.excluded, assignedTimeFilterSource: returned.assignedTimeFilterSource }],
     fileName: "Forward_and_Return_Assigned_Today.csv"
   };
 }
