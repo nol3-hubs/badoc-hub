@@ -161,7 +161,7 @@
       // extApi.tabs, extApi.storage, and extApi.scripting inside the iframe.
       emit("BADOC_POD_CHECKER_URL", {
         url: extApi.runtime.getURL("pod-checker/app.html"),
-        checkerVersion: "1.5.53"
+        checkerVersion: "1.5.54"
       });
       return;
     }
