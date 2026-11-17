@@ -111,6 +111,24 @@
       return;
     }
 
+
+    if (data.type === "BADOC_LOOKUP_PICKUP_INFO") {
+      const reqId = String(data.reqId || "");
+      const orderId = String(data.orderId || "").trim();
+      const reply = (ok, item, error) => emit("BADOC_PICKUP_INFO_RESULT", { reqId, ok, item: item || null, error: error || "" });
+      if (!/^[A-Za-z0-9_-]{6,48}$/.test(orderId)) {
+        reply(false, null, "Invalid Order ID.");
+        return;
+      }
+      extApi.runtime.sendMessage({ target: "BADOC_PICKUP_LOOKUP", orderId })
+        .then(response => {
+          if (!response || !response.ok) reply(false, null, response?.error || "SPX Pickup Info could not be loaded.");
+          else reply(true, response.item, "");
+        })
+        .catch(error => reply(false, null, error?.message || String(error)));
+      return;
+    }
+
     if (data.type === "BADOC_POD_RPC") {
       const rpcId = String(data.rpcId || "");
       const method = String(data.method || "");
