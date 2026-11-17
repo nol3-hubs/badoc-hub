@@ -16,9 +16,23 @@ function parseOids() {
   return [...new Set($('oids').value.split(/[\s,;]+/).map(s=>s.trim()).filter(Boolean))];
 }
 function setStatus(text,type="") {$('status').textContent=text;$('status').className="status "+type;}
-chrome.runtime.onMessage.addListener(message => {
-  if (message?.target === "POD_CHECKER_ASSIGNED_PROGRESS" && assignedParcelsLoading && message.message) {
-    setStatus(String(message.message));
+// The hosted dashboard uses a podChrome shim that intentionally exposes
+// runtime.sendMessage but not runtime.onMessage. Listen for relayed progress
+// through the host-page bridge, and retain the extension-page listener when available.
+if (typeof chrome.runtime?.onMessage?.addListener === "function") {
+  chrome.runtime.onMessage.addListener(message => {
+    if (message?.target === "POD_CHECKER_ASSIGNED_PROGRESS" && assignedParcelsLoading && message.message) {
+      setStatus(String(message.message));
+    }
+  });
+}
+window.addEventListener("message", event => {
+  const data = event?.data;
+  if (event.source === window &&
+      data?.source === "BADOC_SPX_BRIDGE" &&
+      data?.type === "BADOC_POD_CHECKER_ASSIGNED_PROGRESS" &&
+      assignedParcelsLoading && data.message) {
+    setStatus(String(data.message));
   }
 });
 async function getSpxTab() {
