@@ -169,3 +169,12 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Recover SPX export tasks reliably
 - Kept the existing Forward + Return export endpoints, export request fields, Badoc Hub / today's Onhold Time row filtering, and Delivering / Delivered exclusions unchanged.
 - Chrome extension bumped to v1.3.6; Firefox extension bumped to v69.4.8. The POD Checker iframe app cache marker and embedded Chrome installer bundle are refreshed.
 - Static JavaScript and manifest validation passed before commit. A live export still requires verification in the user's authenticated SPX session.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Use Assigned Time rather than On Hold Time
+- Matched the FMS Order Export dialog: Assigned Time is today (00:00:00–23:59:59), using SPX pick_up_time. On Hold Time is left unrestricted and omitted from the export request.
+- Kept the Created Date range broad, requests both Forward Order and Return Order, and does not restrict statuses in the SPX export request.
+- After download, the CSV rows are checked for Current Station = Badoc Hub, Assigned Time = today (Philippine date), and statuses other than Delivering / Delivered.
+- The previous checker incorrectly sent onhold_time=today and filtered rows by Onhold Time. That field and row filter are now replaced by Assigned Time.
+- Chrome extension bumped to v1.3.7; Firefox extension bumped to v69.4.9. The dashboard embedded installer/cache will be refreshed to match.
+- Static JavaScript and manifest validation passed; live export still requires testing with the signed-in SPX account.
