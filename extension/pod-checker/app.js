@@ -278,12 +278,12 @@ $('onholdToday')?.addEventListener("click", async () => {
       setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
     } else if (!hasDownloadedCsvRows) {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Badoc Hub Extension v1.3.0, refresh this page, and try again.`,
+        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Badoc Hub Extension v1.3.1, refresh this page, and try again.`,
         "error"
       );
     } else {
       setStatus(
-        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Click Check OIDs to validate them.`,
+        `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; displayed ${receivedCsvRows.toLocaleString()} filtered CSV row(s); ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Current Station Badoc Hub, Onhold Time today, excluding Delivering and Delivered. Click Check OIDs to validate them.`,
         "good"
       );
     }
