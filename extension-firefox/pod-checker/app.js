@@ -247,21 +247,24 @@ $('onholdToday')?.addEventListener("click", async () => {
   button.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = "Loading Assigned Parcels…";
-  setStatus("Getting parcels assigned today from the SPX Forward Order export…");
+  setStatus("Getting Forward and Return Orders assigned today from SPX…");
   try {
     const reply = await chrome.runtime.sendMessage({
       target: "POD_CHECKER_BACKGROUND",
       action: "EXPORT_ASSIGNED_PARCELS_TODAY"
     });
-    if (!reply?.ok) throw new Error(reply?.error || "SPX OnHold parcels could not be loaded.");
+    if (!reply?.ok) throw new Error(reply?.error || "SPX assigned parcels could not be loaded.");
     const oids = [...new Set((Array.isArray(reply.oids) ? reply.oids : [])
       .map(value => String(value || "").trim().toUpperCase()).filter(Boolean))];
     $("oids").value = oids.join("\n");
-    saveOids().catch(error => console.warn("POD Checker could not save the OnHold OID list:", error));
+    saveOids().catch(error => console.warn("POD Checker could not save the assigned OID list:", error));
+    const forwardCount = Number(reply.forwardOidCount || 0);
+    const returnCount = Number(reply.returnOidCount || 0);
+    const duplicateCount = Number(reply.duplicateCount || 0);
     if (!oids.length) {
-      setStatus(`No parcels were assigned on ${reply.todayDate || "today"}.`, "good");
+      setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
     } else {
-      setStatus(`Loaded ${oids.length.toLocaleString()} unique parcel OID(s) assigned on ${reply.todayDate}. Click Check OIDs to validate them.`, "good");
+      setStatus(`Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; ${duplicateCount.toLocaleString()} duplicate(s) removed. Click Check OIDs to validate them.`, "good");
     }
   } catch (error) {
     setStatus(error?.message || String(error), "error");
