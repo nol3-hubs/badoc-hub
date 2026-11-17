@@ -5225,7 +5225,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       ["Seller Name",g=>fmSellerName(g.eligibleOrders?.[0]||{})||"—"],
       ["ETA",g=>fmValue(g.eligibleOrders?.[0]||{},["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","eta_date","eta_time"])||"—"],
       ["Status",g=>fmCombinedPickupStatus(g)||"Unknown"],
-      ["Assigned Rider",g=>fmAssignedRiderDisplay(g)]
+      ["Assigned Rider",g=>fmAssignedRiderDisplay(g)],
+      ["Pickup Info",g=>fmPickupInfoButtonsHtml(g)]
     ];
     if(table && $("firstMile")?.classList.contains("active")){
       if(!filtered.length)table.innerHTML='<div class="first-mile-combined-empty">No pickup orders or task-only Inbounded / Onhold records match this search.</div>';
@@ -5240,8 +5241,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           if(c[0]==="Order Number")return `<td>${fmOrderLinksHtml(g)}</td>`;
           if(c[0]==="Assigned Rider"){
             const rider=value==="Unassigned"?'<span class="fm-task-pill fm-task-unassigned">Unassigned</span>':fmEsc(value);
-            return '<td class="fm-assigned-rider-cell" title="'+fmEsc(value)+'">'+rider+fmPickupInfoButtonsHtml(g)+'</td>';
+            return '<td class="fm-assigned-rider-cell" title="'+fmEsc(value)+'">'+rider+'</td>';
           }
+          if(c[0]==="Pickup Info")return '<td class="fm-pickup-info-cell">'+(value||"—")+'</td>';
           return `<td title="${fmEsc(value)}">${fmEsc(value)}</td>`;
         }).join("")}</tr>`
       ).join("")}</tbody></table>${filtered.length>2000?`<div class="first-mile-combined-empty">Showing first 2,000 of ${filtered.length.toLocaleString()} rows.</div>`:""}`;
@@ -10415,7 +10417,8 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
 <style id="badoc-pickup-info-baseline-styles">
 #firstMile .fm-order-id-item{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin:2px 0}
 #firstMile .fm-assigned-rider-cell{white-space:normal;vertical-align:top}
-#firstMile .fm-pickup-info-actions{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:max-content;margin:5px 0 0;vertical-align:top}
+#firstMile .fm-pickup-info-cell{vertical-align:top;min-width:110px}
+#firstMile .fm-pickup-info-actions{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:max-content;margin:0;vertical-align:top}
 #firstMile .fm-pickup-info-btn{appearance:none;border:1px solid #0b6fb3;background:#075985;color:#fff;border-radius:6px;padding:4px 8px;font-size:10px;line-height:1.2;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 1px 2px #0002;transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 #firstMile .fm-pickup-info-btn:hover{background:#0369a1;border-color:#38bdf8;color:#fff;box-shadow:0 0 0 2px #38bdf833}
 #firstMile .fm-pickup-info-btn:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
