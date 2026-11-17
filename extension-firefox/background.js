@@ -1734,6 +1734,53 @@ function isBadocPageUrl(url) {
   } catch (_) { return false; }
 }
 
+async function runBadocPickupInfoLookup(port,message){
+  const reqId=String(message?.reqId||"");
+  const orderId=String(message?.orderId||"").trim();
+  const reply=(ok,item,error)=>sendToPort(port,"BADOC_PICKUP_INFO_RESULT",{reqId,ok,item:item||null,error:error||""});
+  if(!reqId||!/^[A-Za-z0-9_-]{6,48}$/.test(orderId)){reply(false,null,"A valid Order ID is required.");return;}
+  try{
+    const tabs=await extApi.tabs.query({url:SPX_ORIGIN+"/*"});
+    const tab=tabs.filter(item=>Number.isInteger(item?.id)&&!item.discarded)
+      .sort((a,b)=>Number(b.lastAccessed||0)-Number(a.lastAccessed||0))[0];
+    if(!tab?.id)throw new Error("No SPX tab is open in Firefox. Open SPX, sign in, and retry Pickup Info.");
+    const injected=await extApi.scripting.executeScript({
+      target:{tabId:tab.id},world:"MAIN",args:[orderId],
+      func:async id=>{
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+        try{
+          const response=await window.fetch("/api/fleet_order/order/detail/pickup_info?shipment_id="+encodeURIComponent(id),{
+            credentials:"include",cache:"no-store",signal:controller.signal,
+            headers:{"Accept":"application/json","Cache-Control":"no-cache"}
+          });
+          if(!response.ok)throw new Error("SPX returned HTTP "+response.status+".");
+          const json=await response.json();
+          if(json?.retcode!==undefined&&Number(json.retcode)!==0)throw new Error(String(json.message||json.msg||"SPX rejected this Pickup Info request."));
+          const list=Array.isArray(json?.data?.pickup_info_list)?json.data.pickup_info_list:[];
+          const first=list[0]||{},attempts=[];
+          list.forEach(entry=>(Array.isArray(entry?.pickup_order_tracking)?entry.pickup_order_tracking:[]).forEach(attempt=>{
+            attempts.push({res:attempt?.pickup_result||"",t:attempt?.ctime||0,task:attempt?.pickup_task_id||"",
+              drv:attempt?.pickup_driver_name||"",drvId:attempt?.pickup_driver||"",
+              gf:attempt?.with_geofence==null?"":String(attempt.with_geofence),
+              rm:String(attempt?.remark||"").slice(0,90),
+              pl:(Array.isArray(attempt?.photo_list)?attempt.photo_list:[]).slice(0,6),sig:attempt?.seller_signature?1:0});
+          }));
+          attempts.sort((a,b)=>(Number(b.t)||0)-(Number(a.t)||0));
+          return {id,pk:{st:first?.pickup_status||"",eta:first?.eta||0,s0:first?.pickup_start_time||0,
+            s1:first?.pickup_end_time||0,as:first?.assigned_time||0,picked:first?.pickedup_time||0,
+            tag:first?.tag_list?.[0]?.tag_name||"",pp:first?.pickup_point_id||"",
+            drv:Array.isArray(first?.driver_name)?(first.driver_name[0]||""):first?.driver_name||"",att:attempts}};
+        }finally{clearTimeout(timer);}
+      }
+    });
+    const item=injected?.[0]?.result;
+    if(!item)throw new Error("SPX returned no Pickup Info data for this Order ID.");
+    reply(true,item,"");
+  }catch(error){
+    reply(false,null,error?.name==="AbortError"?"SPX Pickup Info request timed out.":(error?.message||String(error)));
+  }
+}
+
 function isBadocPageSender(sender) {
   // Firefox/Android and Chrome can populate different sender fields for
   // extension content-script ports. Validate all available page identifiers.
@@ -1767,6 +1814,7 @@ extApi.runtime.onConnect.addListener(port => {
 
   port.onMessage.addListener(message => {
     const type = message?.type;
+    if(type==="BADOC_LOOKUP_PICKUP_INFO"){void runBadocPickupInfoLookup(port,message);return;}
     const failBusy = (kind, text = "A BADOC SPX sync is already running.") =>
       sendToPort(port, "BADOC_SPX_ERROR", { message: text, ...(kind ? { kind } : {}) });
 
