@@ -119,3 +119,11 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Forward + Return Assigned Today
 - Visible button label changed to Assigned Parcels Today. Chrome package bumped to v1.2.8, Firefox to v69.4.0, and checker iframe marker to 1.5.50.
 - Static JavaScript syntax and manifest validation are required. Live Return Order Assigned Time filtering still requires confirmation with an authenticated SPX export session.
 - The embedded Chrome installer bundle has not yet been refreshed; use the updated extension source package until that bundle is rebuilt.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Show Downloaded Export Data
+- The Assigned Parcels Today response now includes CSV headers and all rows for both Forward Order and Return Order downloads, in addition to the combined unique OID list.
+- Added a Downloaded Data table in the checker showing all downloaded fields, with source labels, row counts, unique OID count, source filtering, full-field search, and pagination (50 rows per page).
+- Downloaded rows are shown immediately after both SPX exports complete. The checker input continues to receive the deduplicated OID list for validation.
+- Chrome package bumped to v1.2.9, Firefox package bumped to v69.4.1, and the checker iframe marker bumped to 1.5.51.
+- Static JavaScript syntax and manifest checks are required. Live rendering still needs a test against actual Forward and Return CSVs from an authenticated SPX session.
