@@ -147,7 +147,7 @@
       // chrome.tabs, chrome.storage, and chrome.scripting inside the iframe.
       emit("BADOC_POD_CHECKER_URL", {
         url: chrome.runtime.getURL("pod-checker/app.html"),
-        checkerVersion: "1.5.47"
+        checkerVersion: "1.5.48"
       });
       return;
     }
