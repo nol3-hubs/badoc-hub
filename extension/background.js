@@ -656,7 +656,7 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
     const statusValues = statusIndexes.map(index =>
       String(row[index] ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
     );
-    if (statusValues.some(status => /\b(delivering|delivered)\b/i.test(status))) {
+    if (statusValues.some(status => status.trim() === "delivering" || status.trim() === "delivered")) {
       excluded.deliveringOrDelivered++;
       continue;
     }
