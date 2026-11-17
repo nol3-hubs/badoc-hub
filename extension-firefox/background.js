@@ -547,7 +547,11 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   // Request the Badoc Hub parcels placed Onhold today across all statuses.
   // Delivering and Delivered are removed by strict CSV row filtering below.
   const body = {
+    // Keep SPX's required export fields explicit while requesting All statuses
+    // and no Created Date restriction. Apply the status exclusions after CSV download.
+    tracking_status: "",
     bulky_type: "1,0,2",
+    ctime: "",
     onhold_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
     format_condition:
       "Current Station= Badoc Hub; " +
@@ -571,7 +575,8 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   });
   const json = parseJsonResponse("SPX " + label + " export", response);
   if (!response.ok || Number(json?.retcode) !== 0) {
-    throw new Error(json?.message || "SPX " + label + " export failed (HTTP " + response.status + ").");
+    throw new Error(label + " export request failed: " +
+      (json?.message || "SPX export failed (HTTP " + response.status + ")."));
   }
 
   const taskId = Number(json?.data?.task_id || json?.task_id || 0);
