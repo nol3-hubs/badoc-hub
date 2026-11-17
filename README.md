@@ -5,7 +5,7 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 ## Included
 - BADOC Hub dashboard v77
 - Chrome extension v1.2.4, including all-status First Mile Orders and Tasks exports
-- Firefox extension v69.3.5
+- Firefox extension v69.3.6
 - First Mile XLSX-to-CSV support
 - Integrated POD/POOH checker
 - Built-in Chrome extension installer and generated ZIP package
