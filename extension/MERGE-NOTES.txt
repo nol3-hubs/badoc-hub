@@ -66,3 +66,12 @@ UPDATE — 2026-11-16 · Chrome extension v1.2.3
 - Updated installer success text and operation modal version labels.
 - Bumped the PWA cache key so deployed clients request the refreshed dashboard shell.
 - Live authenticated SPX export behavior still requires a browser test.
+
+
+UPDATE — 2026-11-17 · Pickup Info lookup and daily first-sync baseline
+- Bumped the dashboard to v77 and the Chrome package to v1.2.4. The embedded ZIP/direct installer bundle is updated with the same manifest, background worker, and content bridge.
+- Added an on-demand read-only Pickup Info lookup through the authenticated SPX pickup_info endpoint. It shows the pickup metadata and newest-first attempts, including task ID, rider, geofence, remark, seller signature, and up to six photo links per attempt. It does not bulk-fetch or persist order details.
+- Added immutable first-successful-export status snapshots for Pickup Orders and Pickup Tasks per Asia/Manila date, stored locally and copied to shared cloud storage using first-write-wins behavior.
+- Pickup Task Number is used for an exact Order/Task association when it is present in both exports; the existing Pickup Point ID grouping remains as a fallback.
+- Explicit Pickup Task statuses Accepted, Disabled, Pickup no order, and Inbounded drive the mapped status. Disabled appears as Cancelled after Assigned only if its same-day first-sync baseline was Assigned; otherwise it is hidden.
+- The next Manila date uses a new baseline path. The all-status SPX export filters and unrelated dashboard workflows are retained.
