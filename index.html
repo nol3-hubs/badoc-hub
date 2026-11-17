@@ -10718,6 +10718,50 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
 #badocPickupInfoModal .pickup-info-no-photos{margin:8px 0;color:var(--muted,#9badbf);font-size:11px}
 #badocPickupInfoModal .pickup-info-error{color:#ff9898}
 @media(max-width:620px){#badocPickupInfoModal .pickup-info-summary{grid-template-columns:repeat(2,minmax(0,1fr))}#badocPickupInfoModal .pickup-info-attempt-grid{grid-template-columns:1fr}}
+
+/* Proof modal: restore readable light-theme surfaces without changing dark mode. */
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
+  --panel:#ffffff;--text:#172033;--muted:#475569;--border:#dbe2ea;
+  background:#ffffff!important;color:#172033!important;border-color:#dbe2ea!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-head{
+  background:#ffffff!important;color:#172033!important;border-bottom-color:#e2e8f0!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-message,
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-no-photos{color:#475569!important}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-summary>div{
+  background:#f1f5f9!important;border-color:#dbe2ea!important;color:#172033!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-summary small{
+  color:#64748b!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-summary strong{
+  color:#172033!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-attempt{
+  border-top-color:#e2e8f0!important;color:#172033!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-attempt-head{
+  color:#172033!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-attempt-grid{
+  color:#334155!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-photo{
+  background:#f8fafc!important;border-color:#dbe2ea!important;color:#075985!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-photos img{
+  background:#e2e8f0!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-photo:hover{
+  border-color:#0284c7!important;color:#0369a1!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-error{
+  color:#b91c1c!important;
+}
+html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
+  scrollbar-color:#cbd5e1 #f1f5f9;
+}
 </style>
 
 <script id="consolidated-runtime">
