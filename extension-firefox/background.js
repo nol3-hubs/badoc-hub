@@ -519,8 +519,8 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
   const stationIndex = findAssignedExportColumn(headers, [
     "current station", "current station name", "current hub", "current hub name"
   ]);
-  const onholdTimeIndex = findAssignedExportColumn(headers, [
-    "onhold time", "on hold time", "on-hold time", "onhold datetime", "on hold datetime"
+  const assignedTimeIndex = findAssignedExportColumn(headers, [
+    "assigned time", "assigned datetime", "assign time", "assignment time", "assigned at"
   ]);
   const statusAliases = [
     "status", "current status", "current status name", "order status",
@@ -533,7 +533,7 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
     .map(item => item.index);
   const missing = [];
   if (stationIndex < 0) missing.push("Current Station");
-  if (onholdTimeIndex < 0) missing.push("Onhold Time");
+  if (assignedTimeIndex < 0) missing.push("Assigned Time");
   if (!statusIndexes.length) missing.push("Status");
   if (missing.length) {
     throw new Error(label + " CSV is missing required filter column(s): " + missing.join(", ") +
@@ -541,11 +541,11 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
   }
 
   const kept = [];
-  const excluded = { otherStation: 0, otherOnholdDate: 0, deliveringOrDelivered: 0 };
+  const excluded = { otherStation: 0, otherAssignedDate: 0, deliveringOrDelivered: 0 };
   for (const row of rows) {
     const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/\s+/g, " ");
     if (!station.includes("badoc hub")) { excluded.otherStation++; continue; }
-    if (philippineDateKey(row[onholdTimeIndex]) !== todayDate) { excluded.otherOnholdDate++; continue; }
+    if (philippineDateKey(row[assignedTimeIndex]) !== todayDate) { excluded.otherAssignedDate++; continue; }
     const statusValues = statusIndexes.map(index =>
       String(row[index] ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
     );
@@ -644,28 +644,25 @@ async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
 }
 
 async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false }) {
-  // Request the Badoc Hub parcels placed Onhold today across all statuses.
-  // Delivering and Delivered are removed by strict CSV row filtering below.
+  // Match the FMS Order Export dialog: Assigned Time is today's only date filter.
+  // SPX maps its visible Assigned Time control to pick_up_time; leave On Hold Time unrestricted.
+  // Request all statuses, then remove Delivering / Delivered after the CSV is downloaded.
   const body = {
-    // SPX's Forward/Return export requires ctime and pick_up_time.
-    // Keep both broad so Onhold Time remains the only date filter.
-    // Omit tracking_status to request All statuses; exclude two statuses after download.
     bulky_type: "1,0,2",
-    ctime: "0," + String(range.assignedEndSec),
-    pick_up_time: "0," + String(range.assignedEndSec),
-    onhold_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
+    ctime: String(range.createdStartSec) + "," + String(range.assignedEndSec),
+    pick_up_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
     format_condition:
       "Current Station= Badoc Hub; " +
-      "Onhold Time= " + range.todayDate + " 00:00:00," + range.todayDate + " 23:59:59; " +
+      "Assigned Time= " + range.todayDate + " 00:00:00," + range.todayDate + " 23:59:59; " +
       "Bulky Type= Bulky,N/A,Non-Bulky; " +
       "Driver= All"
   };
 
   progress("Submitting SPX " + label + " export for " + range.todayDate +
-    " (Current Station: Badoc Hub; Onhold Time: today; excluding Delivering and Delivered)…", {
+    " (Current Station: Badoc Hub; Assigned Time: today; excluding Delivering and Delivered)…", {
     phase: "pod-assigned-today-export", kind: job.kind, source: label,
     dateStart: range.todayDate, dateEnd: range.todayDate,
-    currentStation: "Badoc Hub", onholdDate: range.todayDate,
+    currentStation: "Badoc Hub", assignedDate: range.todayDate,
     excludedStatuses: ["Delivering", "Delivered"]
   });
 
@@ -749,7 +746,7 @@ async function exportAssignedParcelsTodayFromSpx() {
     returnRawRowCount: returned.rawRowCount,
     filterCriteria: {
       currentStation: "Badoc Hub",
-      onholdDate: range.todayDate,
+      assignedDate: range.todayDate,
       excludedStatuses: ["Delivering", "Delivered"]
     },
     forwardOidCount: forward.oids.length,
