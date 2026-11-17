@@ -186,3 +186,12 @@ UPDATE — 2026-11-17 · Assigned Parcels Today — Created Date lookback
 - This lookback constant is only used by parcelDeliveryDateRange(), which is called by the Assigned Parcels Today Forward and Return export flow.
 - Corrected the POD Checker helper text to show Created Date within the last 14 days, Assigned Time today, Current Station Badoc Hub, and exclusion of Delivering / Delivered.
 - Chrome extension bumped to v1.3.8. Firefox package remains v69.4.9.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Handle SPX CSV without Assigned Time column
+- SPX Forward/Return CSV files may omit the Assigned Time column even though the export request includes the pick_up_time range for today's Assigned Time.
+- The checker now verifies the CSV Assigned Time field when one of the recognized Assigned Time/Assigned Date headers is present.
+- If SPX omits the field, the checker relies on the Assigned Time range sent in the SPX export request. It still verifies Current Station = Badoc Hub from the CSV and removes Delivering / Delivered rows.
+- The downloaded data payload identifies whether Assigned Time was checked in the CSV or applied by the SPX export request; the checker displays that distinction.
+- Chrome bumped to v1.3.9; Firefox bumped to v69.5.0. Dashboard embedded installer and cache marker are refreshed.
+- Static JavaScript and manifest validation passed. Live export requires confirmation with the authenticated SPX account.
