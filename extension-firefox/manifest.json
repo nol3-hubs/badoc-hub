@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "SPX BRIDGE for BADOC HUB",
   "short_name": "SPX BRIDGE",
-  "version": "69.4.0",
+  "version": "69.4.1",
   "description": "Firefox Android-compatible BADOC HUB SPX bridge with live Pickup Info, Onhold Parcel Today export, and verified connection recovery.",
   "permissions": [
     "cookies",
