@@ -4,11 +4,11 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 
 ## Included
 - BADOC Hub dashboard v94
-- Chrome extension v1.3.9, including Downloaded Data display in the POD/POOH Checker
-- Firefox extension v69.5.0
+- Chrome extension v1.4.0, including Downloaded Data display in the POD/POOH Checker
+- Firefox extension v69.5.1
 - First Mile XLSX-to-CSV support
 - On-demand Pickup Info lookup from the signed-in SPX tab, including pickup attempts, geofence, remarks, photos, and seller signature
-- Integrated POD/POOH checker with an Assigned Parcels Today button that exports Forward and Return Orders across all statuses and filters only Assigned Time to the current Philippine calendar day
+- Integrated POD/POOH checker with an Assigned Parcels Today button that exports Forward and Return Orders across all statuses and filters the CSV Pick Up Time (SPX Assigned Time field) to the current Philippine calendar day
 - Built-in Chrome extension installer and generated ZIP package
 - One-request combined SPX export for Delivering, Delivered, and OnHold
 - CFR1 frozen-membership recovery and late cloud-load handling
@@ -18,8 +18,8 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 The dashboard checks the installed extension package version separately from the bridge protocol version.
 
 Minimum versions:
-- Chrome: `1.3.9`
-- Firefox: `69.5.0`
+- Chrome: `1.4.0`
+- Firefox: `69.5.1`
 
 Both extension bridge scripts report their package version during the handshake. Missing or older package versions are rejected by the dashboard. The built-in Chrome installer bundle is synchronized with the current Chrome source package.
 
