@@ -100,3 +100,12 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Onhold Parcel Today
 - The extension waits for the export task, validates that the returned task is the Forward Order OnHold export, downloads the CSV, extracts unique Order IDs, and fills the checker OID box. The user can then click Check OIDs to run the existing POD/POOH validation.
 - Chrome package bumped to v1.2.6 and Firefox package bumped to v69.3.8. The POD Checker iframe build marker is 1.5.48.
 - Live export still requires a signed-in SPX session and has not been tested against a live account in this update.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Assigned Today (all statuses)
+- Changed the Onhold Parcel Today export request to include all Forward Order tracking statuses. Removed tracking_status=5 and the Status Log=OnHold condition.
+- Assigned Time remains the only date restriction: 00:00:00 through 23:59:59 for the current Asia/Manila date. Created Date is unrestricted; Bulky Type and Driver remain All.
+- Removed the OnHold-only export-task validation and changed the checker loading/result messages to describe all parcels assigned today.
+- The button still uses the SPX Forward Order export endpoint. It does not include Return Order export rows; that is a separate endpoint used by the secondary parcel sync.
+- Chrome extension bumped to v1.2.7, Firefox extension bumped to v69.3.9, and the POD Checker iframe marker bumped to 1.5.49.
+- Live all-status export behavior still requires verification with an authenticated SPX session.
