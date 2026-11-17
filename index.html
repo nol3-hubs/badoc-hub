@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v78">
+<meta name="badoc-app-version" content="v79">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -4989,8 +4989,11 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       if(typeof value==="object")return JSON.stringify(value);
       return String(value);
     };
-    const lines=[headers.map(clean).join("\t"),...rows.map(row=>headers.map(header=>clean(row?.[header]).replace(/[\t\r\n]+/g," ")).join("\t"))];
-    const payload=lines.join("\r\n");
+    const TAB=String.fromCharCode(9);
+    const ROW_BREAK=String.fromCharCode(13,10);
+    const cleanCell=value=>clean(value).replaceAll(TAB," ").replaceAll(String.fromCharCode(13)," ").replaceAll(String.fromCharCode(10)," ");
+    const lines=[headers.map(header=>cleanCell(header)).join(TAB),...rows.map(row=>headers.map(header=>cleanCell(row?.[header])).join(TAB))];
+    const payload=lines.join(ROW_BREAK);
     let copied=false;
     try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(payload);copied=true;}}catch(_){}
     if(!copied){
