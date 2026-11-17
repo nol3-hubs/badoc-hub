@@ -151,3 +151,11 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Assigned Today task polling and vi
 - Forward and Return exports remain sequential. Existing Badoc Hub, today's Onhold Time, and Delivering/Delivered exclusion rules are unchanged.
 - Chrome extension bumped to v1.3.4; Firefox extension bumped to v69.4.6; checker bridge marker bumped to 1.5.54.
 - Dashboard root index.html embedded installer and required-version checks are refreshed to match. Live task visibility and CSV download still need confirmation in a signed-in SPX session.
+
+
+UPDATE — 2026-11-17 · POD/POOH Checker — Repair dashboard click handler startup
+- Fixed a startup exception in POD Checker app.js: the dashboard's podChrome shim supports runtime.sendMessage but has no runtime.onMessage API. The unconditional progress listener previously threw before the Assigned Parcels Today click handler was registered.
+- Made the extension-page listener optional and added progress reception over the existing BADOC_PAGE content-script port.
+- Changed Chrome and Firefox background progress notifications to publish to the connected dashboard port.
+- Chrome extension bumped to v1.3.5; Firefox extension bumped to v69.4.7; checker bridge marker bumped to 1.5.55.
+- The root dashboard index.html embedded installer is refreshed with the matching Chrome files.
