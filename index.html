@@ -11254,7 +11254,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   - CFR1 cloud ledger: reset at 12:00 AM local time after Daily History is captured.
     CFR1 then rebuilds from newly available parcel data using the existing rules.
 
-  The reset marker is stored in the shared Storage bucket so the 112:00 AM reset
+  The reset marker is stored in the shared Storage bucket so the 12:00 AM reset
   can still happen when the app was closed at the exact time. Local data is
   cleared only after the shared cloud reset succeeds.
 */
@@ -11430,7 +11430,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       if(!force && window.BadocCloud && typeof window.BadocCloud.claim==="function"){
         let won=true;
         try{won=await window.BadocCloud.claim("daily-reset-"+today,resetOwner(),10*60*1000)}catch(e){won=true}
-        if(!won){ console.warn("112:00 AM reset: another device is already running it."); setResetStatus("other-device"); return; }
+        if(!won){ console.warn("12:00 AM reset: another device is already running it."); setResetStatus("other-device"); return; }
       }
       setResetStatus("running");
       // v206: capture the exact live projected dashboard state BEFORE any reset.
@@ -11503,7 +11503,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     if(window.__BADOC_GITHUB_AUTOMATION_HOLD_RESET===true)return;
     resetAtMidnight(false);
   }
-  // Check immediately and then frequently enough to catch 112:00 AM / 12:00 AM
+  // Check immediately and then frequently enough to catch 12:00 AM / 12:00 AM
   // even when the app is left running.
   setTimeout(tick,1500);
   __badocEvery(tick,30000);
@@ -12417,7 +12417,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     if(!host)return;
     if(!s){
       window.__badocDailyHistoryCurrentSnapshot=null;
-      host.innerHTML='<div class="dh2-empty dh2-empty-big"><strong>No snapshot for this date</strong><span>Days are saved when you tap Capture Now (or automatically at the 112 AM reset).</span></div>';
+      host.innerHTML='<div class="dh2-empty dh2-empty-big"><strong>No snapshot for this date</strong><span>Days are saved when you tap Capture Now (or automatically at the 12 AM reset).</span></div>';
       lastHtml="";return;
     }
     window.__badocDailyHistoryCurrentSnapshot=s;
@@ -12897,7 +12897,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     e.target.click();
   });
 
-  // Patch the existing 112:00 AM reset so the snapshot is saved FIRST.
+  // Patch the existing 12:00 AM reset so the snapshot is saved FIRST.
   // If the app was closed at 12:00 AM, this still captures the shared/local
   // state when the reset routine runs after the app is opened.
   const patchReset=()=>{
@@ -14070,7 +14070,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     }catch(e){rows.push(["Daily records",row("idle","Daily History","Could not read saved days","")])}    try{
       var rs=JSON.parse(localStorage.getItem("badoc_reset_status")||"null");
       if(rs){var rst=rs.state==="done"||rs.state==="already-done"?"ok":(rs.state==="failed"?"fail":"idle");
-        rows.push(["Daily records",row(rst,"112 AM reset (this device)",rs.date+" · "+rs.state+(rs.reason?" — "+rs.reason:""),ago(rs.at))])}
+        rows.push(["Daily records",row(rst,"12 AM reset (this device)",rs.date+" · "+rs.state+(rs.reason?" — "+rs.reason:""),ago(rs.at))])}
     }catch(e){}
     // issues
     var issues=(H.issues||[]).slice(0,12).map(function(i){return '<li class="sh-'+(i.kind==="error"?"fail":"warn")+'"><i></i><div><strong>'+esc(i.msg)+'</strong>'+(i.n>1?'<small>×'+i.n+'</small>':'')+'</div><span>'+esc(ago(i.at))+'</span></li>'}).join("");
