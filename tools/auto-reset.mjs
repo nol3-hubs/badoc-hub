@@ -7,7 +7,7 @@ const APP_URL = process.env.APP_URL || 'https://nol3-hubs.github.io/badoc-hub/';
 const EVENT = process.env.GITHUB_EVENT_NAME || 'workflow_dispatch';
 const IS_SCHEDULED = EVENT === 'schedule';
 const POLL_MS = Number(process.env.POLL_MS || 5000);
-const WAIT_TIMEOUT_MS = Number(process.env.WAIT_TIMEOUT_MS || 45 * 60 * 1000);
+const WAIT_TIMEOUT_MS = Number(process.env.WAIT_TIMEOUT_MS || 60 * 60 * 1000);
 
 if (!APP_URL) throw new Error('APP_URL is missing. Set it under Settings → Secrets and variables → Actions → Variables.');
 
