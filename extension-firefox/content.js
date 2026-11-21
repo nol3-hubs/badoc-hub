@@ -161,17 +161,17 @@
       // extApi.tabs, extApi.storage, and extApi.scripting inside the iframe.
       emit("BADOC_POD_CHECKER_URL", {
         url: extApi.runtime.getURL("pod-checker/app.html"),
-        checkerVersion: "1.5.55"
+        checkerVersion: "1.5.57"
       });
       return;
     }
 
     const supported = new Set([
       "BADOC_START_LINEHAUL_SYNC",
-      "BADOC_START_DELIVERING_RECONCILE",
       "BADOC_START_PARCEL_DELIVERY_SYNC",
       "BADOC_START_RIDER_SYNC",
       "BADOC_START_PARCEL_INBOUND_SYNC",
+      "BADOC_START_ASSIGNED_ONHOLD_TODAY",
       "BADOC_START_RECEIVED_CHECKING_INBOUND_SYNC",
       "BADOC_START_PARCEL_SECONDARY_SYNC",
       "BADOC_LOOKUP_PICKUP_INFO",
@@ -179,7 +179,7 @@
     ]);
     if (!supported.has(data.type)) return;
     if (!port) {
-      const errorKind = data.type === "BADOC_START_DELIVERING_RECONCILE" ? "delivering-reconcile" :
+      const errorKind =
         data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" :
         data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
         data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
@@ -193,7 +193,6 @@
     try {
       const payload = { type: data.type };
       if (data.type === "BADOC_LOOKUP_PICKUP_INFO") { payload.reqId=String(data.reqId||""); payload.orderId=String(data.orderId||"").trim(); }
-      if (data.type === "BADOC_START_DELIVERING_RECONCILE") payload.trackingNumbers = Array.isArray(data.trackingNumbers) ? data.trackingNumbers.map(v => String(v || "").trim()).filter(Boolean) : [];
       if (data.type === "BADOC_START_RIDER_SYNC") {
         payload.hubId = Number(data.hubId || 0) || 0;
         payload.hubName = String(data.hubName || "").trim();
@@ -205,6 +204,12 @@
         }
       }
       port.postMessage(payload);
+      if (data.type === "BADOC_START_ASSIGNED_ONHOLD_TODAY") {
+        emit("BADOC_SPX_COMMAND_FORWARDED", {
+          kind: "assigned-onhold-today",
+          message: "Assigned Today command forwarded to the extension background."
+        });
+      }
       if (data.type === "BADOC_START_PARCEL_INBOUND_SYNC") {
         emit("BADOC_SPX_COMMAND_FORWARDED", {
           kind: "parcel-inbound",

@@ -1,50 +1,36 @@
-# SPX BRIDGE for BADOC HUB — Firefox Android
+# SPX BRIDGE for BADOC HUB — Firefox
 
-**Package version:** 69.5.1  
+**Package version:** 69.5.7  
 **Existing Mozilla add-on ID:** `spx-bridge-badoc-hub@nol3-hubs.github.io`  
 **Minimum Firefox version:** 128.0
 
-This separate Firefox-targeted build is based on the current source in the repository's `extension/` folder. It does not replace or modify the Chrome package.
+This is the Firefox-targeted Test2 build. It is maintained separately from the Chrome extension in `extension/` and does not modify the production `nol3-hubs/badoc-hub` repository.
 
 ## Included
-- BADOC Hub SPX bridge and parcel-export workflows
+- BADOC HUB SPX bridge and parcel-export workflows
 - Received Checking integration
 - POD/POOH checker app and SPX page bridge
 - Firefox Manifest V2 event-page configuration
 - Firefox Add-ons settings route (`about:addons`)
 
 ## Download
-After the GitHub Actions package job completes, the unsigned update package is published at:
+The GitHub Actions package workflow builds and publishes the unsigned XPI and SHA-256 checksum:
 
-`downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.5.1.xpi`
-
-[Download the Firefox XPI](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.5.1.xpi)
+- [Download Firefox XPI 69.5.7](https://github.com/nol3-hubs/Test2/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.5.7.xpi)
+- [View SHA-256 checksum](https://github.com/nol3-hubs/Test2/blob/main/downloads/SPX-BRIDGE-BADOC-HUB-FIREFOX-69.5.7.sha256)
 
 ## Submit as an update to the existing Mozilla listing
 1. Download the `.xpi` package above.
 2. Sign in to the Mozilla Add-on Developer Hub.
 3. Open the existing listing **SPX BRIDGE for BADOC HUB** (Add-on ID 3093259).
 4. Choose **Upload a New Version** and upload the generated `.xpi`.
-5. Check AMO validation results and submit for signing/review.
+5. Review Mozilla's validation results and submit it for signing/review.
 
-Do not create a new add-on listing. Upload through the existing listing so Mozilla treats it as an update to version 69.2.1 and retains the existing add-on identity.
+Do not create a new add-on listing. Keep the existing Gecko ID so Mozilla treats this as an update to the current add-on.
 
-## Compatibility notes
-- Reuses the Gecko ID from the installed 69.2.1 package.
-- Keeps Manifest V2 event-page behavior from the installed Firefox build.
+## Compatibility and validation
+- Uses the existing Gecko ID and Firefox Manifest V2 event-page behavior.
 - Uses Firefox's Add-ons manager instead of Chrome's extension-management page.
 - Uses Firefox's `scripting.executeScript()` MAIN world support (Firefox 128+).
-
-**Firefox bridge change in 69.2.6:** Requests to the SPX origin are now executed from the already logged-in SPX tab in Firefox, rather than from the extension background origin. Signed CSV downloads from their download host still use the extension fetch path.
-
-The content script uses Firefox's `browser.*` namespace first and reports bridge protocol version `1`, which is the version the dashboard requires. The package version remains `69.2.6`. The content script also uses the exact GitHub Pages host granted by the manifest, and the background validates Firefox sender URL/origin fields.
-
-**Bridge handshake correction in 69.2.6:** The previous Firefox build reported its add-on package version as the bridge protocol version. The dashboard requires protocol version `1`; this build separates the two values and fixes the content-script duplicate-injection guard.
-
-**Testing status:** The source package must pass Mozilla WebExtension lint and still needs a live SPX login test before production use. Mozilla must approve/sign it before Firefox distributes it.
-
-
-**Assigned Parcels Today update in 69.4.0:** The POD/POOH Checker now requests both Forward and Return exports with all statuses and today's Assigned Time window, then merges and deduplicates the OIDs. Live Return export behavior still requires testing with a signed-in SPX account.
-
-
-**Downloaded Data display in 69.4.1:** The POD/POOH Checker displays the actual Forward and Return CSV rows with source filtering, field search, and pagination. Live rendering still needs verification against real SPX exports.
+- The 69.5.7 package passed the repository's Mozilla WebExtension lint step with zero errors. The lint output reports two compatibility warnings related to the declared `data_collection_permissions` key and minimum Firefox version.
+- A live SPX login/sync test and Mozilla signing/review are still required before distributing it as a production update.

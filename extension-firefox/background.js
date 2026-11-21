@@ -19,7 +19,6 @@ const POLL_MS = 3000;
 const LINEHAUL_POLL_MS = 2000;
 const MAX_WAIT_MS = 25 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 30000;
-const PARCEL_ORDER_TRACKING_ROUTE = "#/orderTracking";
 const PARCEL_EXPORT_NAME = "export_forward_order";
 const PARCEL_EXPORT_BIZ_NAME = "fleet_order";
 // Received Checking-only exports (kept separate from the host app's existing Parcel Count sync).
@@ -88,17 +87,18 @@ const LINEHAUL_CAPTURED_HEADERS = {
 
 
 const badocPorts = new Set();
-// Keep export jobs independent so Sync All can run the two parcel exports in
-// parallel, then start Linehaul while the delivery export is still processing.
+// Allow only the compatible Sync All exports to overlap: Received, Assigned Today,
+// and First Mile start together; Linehaul may join after Received finishes.
 // Other SPX jobs remain mutually exclusive to avoid tab/API collisions.
 const activeJobs = new Map();
 const PARALLEL_JOB_ALLOWLIST = {
-  "parcel-inbound": new Set(["parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "parcel-inbound": new Set(["parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "linehaul", "assigned-onhold-today"]),
   "parcel-delivery": new Set(["parcel-inbound", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "linehaul"]),
   "parcel-secondary": new Set(["parcel-inbound", "parcel-delivery", "first-mile-orders", "first-mile-tasks", "linehaul"]),
-  "first-mile-orders": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-tasks", "linehaul"]),
-  "first-mile-tasks": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "linehaul"]),
-  "linehaul": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks"])
+  "first-mile-orders": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-tasks", "linehaul", "assigned-onhold-today"]),
+  "first-mile-tasks": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "linehaul", "assigned-onhold-today"]),
+  "linehaul": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "assigned-onhold-today"]),
+  "assigned-onhold-today": new Set(["parcel-inbound", "first-mile-orders", "first-mile-tasks", "linehaul"])
 };
 
 function sendToPort(port, type, data = {}) {
@@ -157,65 +157,6 @@ function riderProgress(message, extra = {}) {
   sendToBadoc("BADOC_SPX_RIDER_PROGRESS", { message, ...extra, kind: "riders" });
 }
 
-
-async function createDedicatedSpxTab() {
-  // Batch Search is part of Order Management → Order Tracking.
-  // Open that route directly so the SPA does not remain on TO List when a
-  // hash-only route change fails to trigger tabs.onUpdated(status=complete).
-  const tab = await extApi.tabs.create({
-    url: `${SPX_ORIGIN}${PARCEL_ORDER_TRACKING_ROUTE}`,
-    active: false
-  });
-
-  if (!tab?.id) {
-    throw new Error("Could not create the temporary SPX tab.");
-  }
-
-  progress("Created a dedicated temporary SPX tab…", { phase: "tab", tabId: tab.id });
-
-  await new Promise((resolve, reject) => {
-    let settled = false;
-    let timer = null;
-
-    const cleanup = () => {
-      extApi.tabs.onUpdated.removeListener(onUpdated);
-      if (timer) clearTimeout(timer);
-    };
-
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-
-    const fail = (error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    };
-
-    const onUpdated = (updatedTabId, changeInfo, updatedTab) => {
-      if (updatedTabId !== tab.id) return;
-      const url = String(updatedTab?.url || "");
-      if (changeInfo.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) {
-        finish();
-      }
-    };
-
-    extApi.tabs.onUpdated.addListener(onUpdated);
-    timer = setTimeout(() => fail(new Error("Timed out opening the temporary SPX TO List tab.")), 30000);
-
-    extApi.tabs.get(tab.id).then(current => {
-      const url = String(current?.url || "");
-      if (current?.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) finish();
-    }).catch(fail);
-  });
-
-  await sleep(2200);
-  return tab.id;
-}
 
 async function withTimeout(promise, ms, label) {
   let timer;
@@ -513,7 +454,7 @@ function philippineDateKey(value) {
   return part("year") + "-" + part("month") + "-" + part("day");
 }
 
-function filterAssignedTodayExportRows(extracted, todayDate, label) {
+function filterAssignedTodayExportRows(extracted, todayDate, label, rangeCreatedStartDate, includeCreatedDate = true) {
   const headers = Array.isArray(extracted?.headers) ? extracted.headers : [];
   const rows = Array.isArray(extracted?.rows) ? extracted.rows : [];
   const stationIndex = findAssignedExportColumn(headers, [
@@ -524,58 +465,41 @@ function filterAssignedTodayExportRows(extracted, todayDate, label) {
     "assigned date", "assign date", "assignment date", "assignment datetime",
     "pick up time", "pickup time", "pick up datetime", "pickup datetime"
   ]);
-  const statusAliases = [
-    "status", "current status", "current status name", "order status",
-    "tracking status", "status log", "status name"
-  ];
-  const normalizedStatusAliases = new Set(statusAliases.map(normalizeAssignedExportHeader));
-  const statusIndexes = headers
-    .map((header, index) => ({ key: normalizeAssignedExportHeader(header), index }))
-    .filter(item => normalizedStatusAliases.has(item.key))
-    .map(item => item.index);
-
-  // SPX Forward/Return exports can omit the Assigned Time column even when the
-  // request includes pick_up_time for today's Assigned Time range. Verify the
-  // CSV column when present; otherwise rely on the server-side SPX export filter.
-  const assignedTimeFilterSource = assignedTimeIndex >= 0 ? "CSV column" : "SPX export request";
+  const createdDateIndex = includeCreatedDate ? findAssignedExportColumn(headers, [
+    "created date", "create date", "order created date", "order create date",
+    "created time", "create time", "order created time", "order create time",
+    "ctime", "order time"
+  ]) : -1;
   const missing = [];
   if (stationIndex < 0) missing.push("Current Station");
-  if (!statusIndexes.length) missing.push("Status");
-  if (missing.length) {
-    throw new Error(label + " CSV is missing required filter column(s): " + missing.join(", ") +
-      ". No OIDs were loaded because the requested filters could not be verified.");
-  }
-
+  if (missing.length) throw new Error(label + " CSV is missing required filter column(s): " + missing.join(", ") + ".");
+  const assignedTimeFilterSource = assignedTimeIndex >= 0 ? "CSV column" : "SPX export request";
+  const createdDateFilterSource = !includeCreatedDate ? "Not applied" : (createdDateIndex >= 0 ? "CSV column" : "SPX export request");
   const kept = [];
-  const excluded = { otherStation: 0, otherAssignedDate: 0, deliveringOrDelivered: 0 };
+  const excluded = { otherStation: 0, otherAssignedDate: 0, otherCreatedDate: 0 };
   for (const row of rows) {
-    const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/\\s+/g, " ");
     if (!station.includes("badoc hub")) { excluded.otherStation++; continue; }
     if (assignedTimeIndex >= 0 && philippineDateKey(row[assignedTimeIndex]) !== todayDate) {
-      excluded.otherAssignedDate++;
-      continue;
+      excluded.otherAssignedDate++; continue;
     }
-    const statusValues = statusIndexes.map(index =>
-      String(row[index] ?? "").trim().toLowerCase().replace(/[_-]+/g, " ")
-    );
-    if (statusValues.some(status => status.trim() === "delivering" || status.trim() === "delivered")) {
-      excluded.deliveringOrDelivered++;
-      continue;
+    if (includeCreatedDate && createdDateIndex >= 0) {
+      const createdDate = philippineDateKey(row[createdDateIndex]);
+      if (!createdDate || createdDate < rangeCreatedStartDate || createdDate > todayDate) {
+        excluded.otherCreatedDate++; continue;
+      }
     }
+    // These Forward/Return files are On-Hold snapshots. Preserve their status
+    // as exported: it may have changed since the parcel was put On-Hold, and
+    // the export record must supersede the older uploaded Parcel Count row.
     kept.push(row);
   }
-
   return {
-    headers,
-    rows: kept,
-    rowCount: kept.length,
-    rawRowCount: rows.length,
-    oids: extractAssignedParcelOidsFromRows(headers, kept),
-    excluded,
-    assignedTimeFilterSource
+    headers, rows: kept, rowCount: kept.length, rawRowCount: rows.length,
+    oids: extractAssignedParcelOidsFromRows(headers, kept), excluded,
+    assignedTimeFilterSource, createdDateFilterSource
   };
 }
-
 
 function extractAssignedParcelOids(csvText) {
   const rows = parseAssignedExportCsvRows(csvText);
@@ -654,27 +578,36 @@ async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
   throw new Error(label+" task "+taskId+" was accepted by SPX but did not become downloadable within 4 minutes."+diagnostic+errors+" Open the SPX export task monitor to confirm its state.");
 }
 
-async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false }) {
-  // Match the FMS Order Export dialog: Assigned Time is today's only date filter.
+async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false, includeCreatedDate = true }) {
+  // Match the FMS Order Export dialog: Assigned Time is today's date filter.
   // SPX maps its visible Assigned Time control to pick_up_time; leave On Hold Time unrestricted.
-  // Request all statuses, then remove Delivering / Delivered after the CSV is downloaded.
+  // Created Date is optional: Planning Board Assigned Today omits it; POD/POOH Checker keeps it.
+  // Request all statuses so the Planning Board can classify the latest exported status.
   const body = {
     bulky_type: "1,0,2",
-    ctime: String(range.createdStartSec) + "," + String(range.assignedEndSec),
+    ...(includeCreatedDate ? {
+      ctime: String(range.createdStartSec) + "," + String(range.assignedEndSec)
+    } : {}),
     pick_up_time: String(range.assignedStartSec) + "," + String(range.assignedEndSec),
     format_condition:
       "Current Station= Badoc Hub; " +
       "Assigned Time= " + range.todayDate + " 00:00:00," + range.todayDate + " 23:59:59; " +
+      (includeCreatedDate ? "Created Date= " + range.createdStartDate + " 00:00:00," + range.todayDate + " 23:59:59; " : "") +
       "Bulky Type= Bulky,N/A,Non-Bulky; " +
       "Driver= All"
   };
 
   progress("Submitting SPX " + label + " export for " + range.todayDate +
-    " (Current Station: Badoc Hub; Assigned Time: today; excluding Delivering and Delivered)…", {
+    " (Current Station: Badoc Hub; Assigned Time: today; " +
+    (includeCreatedDate ? "Created Date: last 14 days; " : "no Created Date restriction; ") +
+    "preserving exported statuses)…", {
     phase: "pod-assigned-today-export", kind: job.kind, source: label,
     dateStart: range.todayDate, dateEnd: range.todayDate,
     currentStation: "Badoc Hub", assignedDate: range.todayDate,
-    excludedStatuses: ["Delivering", "Delivered"]
+    includeCreatedDate,
+    createdDateStart: includeCreatedDate ? range.createdStartDate : null,
+    createdDateEnd: includeCreatedDate ? range.todayDate : null,
+    preservedExportStatuses: true
   });
 
   const response = await extensionFetchText(SPX_ORIGIN + endpoint, {
@@ -710,7 +643,7 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
   const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source);
   const csv = await downloadCsv(signedUrl);
   const raw = extractAssignedParcelOids(csv.text);
-  const filtered = filterAssignedTodayExportRows(raw, range.todayDate, label);
+  const filtered = filterAssignedTodayExportRows(raw, range.todayDate, label, range.createdStartDate, includeCreatedDate);
   return {
     taskId,
     rowCount: filtered.rowCount,
@@ -719,13 +652,16 @@ async function runAssignedTodayExportSource({ endpoint, label, range, job, isFor
     headers: filtered.headers,
     rows: filtered.rows,
     excluded: filtered.excluded,
+    assignedTimeFilterSource: filtered.assignedTimeFilterSource,
+    createdDateFilterSource: filtered.createdDateFilterSource,
     fileName: csv.fileName
   };
 }
 
-async function exportAssignedParcelsTodayFromSpx() {
+async function exportAssignedParcelsTodayFromSpx(jobOverride = null, options = {}) {
   const range = parcelDeliveryDateRange();
-  const job = { kind: "pod-assigned-today", startedAt: Date.now(), cancelled: false };
+  const job = jobOverride || { kind: "pod-assigned-today", startedAt: Date.now(), cancelled: false };
+  const includeCreatedDate = options?.includeCreatedDate !== false;
 
   // Keep the two SPX export types separate, then merge their OIDs below.
   // Run sequentially to follow the established SPX export-task handling flow.
@@ -734,16 +670,34 @@ async function exportAssignedParcelsTodayFromSpx() {
     label: "Forward Order",
     range,
     job,
-    isForward: true
+    isForward: true,
+    includeCreatedDate
   });
   const returned = await runAssignedTodayExportSource({
     endpoint: PARCEL_RETURN_EXPORT_PATH,
     label: "Return Order",
     range,
     job,
-    isForward: false
+    isForward: false,
+    includeCreatedDate
   });
 
+  const onholdByTn = new Map();
+  const collectOnholdRows = source => {
+    const tnIndex = findAssignedExportColumn(source?.headers || [], [
+      "SPX TN", "SLS Tracking Number", "SPX Tracking Number", "Tracking Number",
+      "SPX TN/Tracking Number", "SPX Tracking No", "SLS Tracking No"
+    ]);
+    if (tnIndex < 0) throw new Error(source?.source + " export is missing the SPX Tracking Number column; cannot safely deduplicate On-Hold records.");
+    (source?.rows || []).forEach(row => {
+      const tn = String(row[tnIndex] ?? "").trim().toUpperCase();
+      const key = tn.replace(/[\\s\\-_.]/g, "");
+      if (key) onholdByTn.set(key, { ...Object.fromEntries((source.headers || []).map((h,i)=>[h,row[i] ?? ""])), _onholdExportSource: source === returned ? "Return Order" : "Forward Order" });
+    });
+  };
+  collectOnholdRows(forward);
+  collectOnholdRows(returned);
+  const onholdRows = [...onholdByTn.values()];
   const oids = [...new Set([...forward.oids, ...returned.oids])];
   return {
     ok: true,
@@ -758,16 +712,122 @@ async function exportAssignedParcelsTodayFromSpx() {
     filterCriteria: {
       currentStation: "Badoc Hub",
       assignedDate: range.todayDate,
-      excludedStatuses: ["Delivering", "Delivered"]
+      includeCreatedDate,
+      ...(includeCreatedDate ? {
+        createdDateStart: range.createdStartDate,
+        createdDateEnd: range.todayDate
+      } : {}),
+      excludedStatuses: ["all exported statuses"]
     },
     forwardOidCount: forward.oids.length,
     returnOidCount: returned.oids.length,
     duplicateCount: forward.oids.length + returned.oids.length - oids.length,
     oids,
+    onholdRows,
     downloadedData: [
       { source: "Forward Order", headers: forward.headers, rows: forward.rows, rawRowCount: forward.rawRowCount, excluded: forward.excluded, assignedTimeFilterSource: forward.assignedTimeFilterSource },
       { source: "Return Order", headers: returned.headers, rows: returned.rows, rawRowCount: returned.rawRowCount, excluded: returned.excluded, assignedTimeFilterSource: returned.assignedTimeFilterSource }],
     fileName: "Forward_and_Return_Assigned_Today.csv"
+  };
+}
+
+async function exportOnHoldOidsFromSpx(jobOverride = null) {
+  const job = jobOverride || {
+    kind: "pod-checker-onhold",
+    startedAt: Date.now(),
+    cancelled: false,
+    trackingStatus: "5"
+  };
+  job.trackingStatus = "5";
+
+  // SPX requires both time-range parameters for a Forward Order export.
+  // Use epoch → now so the request does not restrict current OnHold parcels
+  // by Created Date or Assigned/OnHold Time.
+  const rangeEndSec = Math.floor(Date.now() / 1000);
+  const body = {
+    tracking_status: "5",
+    bulky_type: "1,0,2",
+    ctime: "1," + rangeEndSec,
+    pick_up_time: "1," + rangeEndSec,
+    format_condition:
+      "Status Log= OnHold; " +
+      "Current Station= Badoc Hub; " +
+      "Bulky Type= Bulky,N/A,Non-Bulky; " +
+      "Driver= All"
+  };
+
+  notifyPodCheckerAssignedProgress("Submitting current OnHold export for Badoc Hub…");
+  const response = await extensionFetchText(SPX_ORIGIN + PARCEL_FORWARD_EXPORT_PATH, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/plain, */*"
+    },
+    body: JSON.stringify(body)
+  });
+  const json = parseJsonResponse("SPX OnHold export", response);
+  if (!response.ok || Number(json?.retcode) !== 0) {
+    throw new Error("OnHold export request failed: " +
+      (json?.message || "SPX export failed (HTTP " + response.status + ")."));
+  }
+
+  const taskId = Number(json?.data?.task_id || json?.task_id || 0);
+  if (!taskId) throw new Error("SPX accepted the OnHold export request but returned no task ID.");
+
+  notifyPodCheckerAssignedProgress("OnHold export task " + taskId + " created. Waiting for completion…");
+  const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
+  const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "OnHold");
+  const completed = completedInfo.task;
+  if (!isParcelDeliveryTask(completed, job)) {
+    throw new Error("The completed SPX task does not match the requested OnHold-only export.");
+  }
+
+  notifyPodCheckerAssignedProgress("OnHold export completed. Downloading its CSV…");
+  const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source);
+  const csv = await downloadCsv(signedUrl);
+  const extracted = extractAssignedParcelOids(csv.text);
+
+  const stationIndex = findAssignedExportColumn(extracted.headers, [
+    "current station", "current station name", "current hub", "current hub name"
+  ]);
+  if (stationIndex < 0) {
+    throw new Error("SPX OnHold CSV is missing the Current Station column, so the hub filter cannot be verified.");
+  }
+
+  const statusIndex = findAssignedExportColumn(extracted.headers, [
+    "status", "current status", "tracking status", "shipment status"
+  ]);
+  const keptRows = extracted.rows.filter(row => {
+    const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/[\\s_-]+/g, " ");
+    if (!station.includes("badoc hub")) return false;
+    if (statusIndex >= 0) {
+      const status = String(row[statusIndex] ?? "").trim();
+      if (status && !/on[\\s_-]*hold/i.test(status)) return false;
+    }
+    return true;
+  });
+
+  const oids = [...new Set(
+    extractAssignedParcelOidsFromRows(extracted.headers, keptRows)
+      .map(value => String(value || "").trim().toUpperCase())
+      .filter(Boolean)
+  )];
+  const oidRows = keptRows.reduce((count, row) =>
+    count + (extractAssignedParcelOidsFromRows(extracted.headers, [row]).length ? 1 : 0), 0
+  );
+
+  return {
+    ok: true,
+    source: "SPX OnHold export",
+    status: "OnHold",
+    station: "Badoc Hub",
+    taskId,
+    rowCount: keptRows.length,
+    rawRowCount: extracted.rows.length,
+    excludedOtherStation: extracted.rows.length - keptRows.length,
+    duplicateCount: Math.max(0, oidRows - oids.length),
+    oids,
+    fileName: csv.fileName
   };
 }
 
@@ -966,48 +1026,6 @@ async function invokeSpxNativeExport(tabId) {
   return result;
 }
 
-
-async function ensureParcelOrderTrackingRoute(tabId) {
-  const tab = await extApi.tabs.get(tabId);
-  const currentUrl = String(tab?.url || "");
-  if (/^https:\/\/spx\.shopee\.ph\/#\/orderTracking(?:[/?#]|$)/i.test(currentUrl)) {
-    progress("SPX is on Order Management → Order Tracking.", { phase: "route" });
-    return;
-  }
-
-  progress("Opening SPX Order Management → Order Tracking automatically…", { phase: "route" });
-
-  await new Promise((resolve, reject) => {
-    let settled = false;
-    let timer = null;
-    const cleanup = () => {
-      extApi.tabs.onUpdated.removeListener(onUpdated);
-      if (timer) clearTimeout(timer);
-    };
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-    const fail = (error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    };
-    const onUpdated = (updatedTabId, changeInfo, updatedTab) => {
-      if (updatedTabId !== tabId) return;
-      const url = String(updatedTab?.url || "");
-      if (changeInfo.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) finish();
-    };
-    extApi.tabs.onUpdated.addListener(onUpdated);
-    timer = setTimeout(() => fail(new Error("Timed out opening SPX Order Tracking.")), 20000);
-    extApi.tabs.update(tabId, { url: `${SPX_ORIGIN}/${PARCEL_ORDER_TRACKING_ROUTE}` }).catch(fail);
-  });
-
-  await sleep(2200);
-}
 
 function setsEqual(a, b) {
   const aa = new Set((a || []).map(String));
@@ -1395,332 +1413,6 @@ async function runRiderJob(job) {
     console.error("BADOC SPX rider auto-import failed:", error);
     sendToBadoc("BADOC_SPX_ERROR", { message: error?.message || String(error), kind: "riders" });
   } finally {
-    releaseActiveJob(job);
-  }
-}
-
-async function executeSpxBatchSearch(tabId, trackingNumbers) {
-  let injectionResults;
-  try {
-    injectionResults = await extApi.scripting.executeScript({
-      target: { tabId },
-      args: [trackingNumbers],
-      func: async (tns) => {
-        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-        const visible = el => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
-        const clean = value => String(value || "").trim().toUpperCase().replace(/\s+/g, "");
-        let stage = "initialize";
-        const normalizeTextForDiagnostics = value => String(value || "").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-        const diagnostics = () => ({
-          url: String(location.href || ""),
-          title: String(document.title || ""),
-          readyState: document.readyState,
-          textareaCount: document.querySelectorAll("textarea").length,
-          visibleTextareas: [...document.querySelectorAll("textarea")].filter(visible).map(el => String(el.placeholder || "").slice(0, 160)),
-          visibleButtons: [...document.querySelectorAll("button,[role='button'],.ssc-button,[class*=\'ssc-button\']")].filter(visible).map(el => String(el.innerText || el.textContent || "").trim()).filter(Boolean).slice(0, 60),
-          batchSearchCandidates: [...document.querySelectorAll("button,[role='button'],a,[tabindex],.ssc-button,[class*=\'ssc-button\'],span,div")].filter(el => visible(el) && normalizeTextForDiagnostics(el.innerText || el.textContent).includes("batchsearch")).slice(0, 10).map(el => ({tag:el.tagName, text:String(el.innerText || el.textContent || "").trim().slice(0,100), className:String(el.className || "").slice(0,120), outerHTML:String(el.outerHTML || "").slice(0,250)})),
-          tables: [...document.querySelectorAll("table")].map((table, i) => ({
-            index: i,
-            headers: [...table.querySelectorAll("thead th")].map(th => String(th.innerText || "").trim()).filter(Boolean).slice(0, 70),
-            rows: table.querySelectorAll("tbody tr").length
-          })).slice(0, 10)
-        });
-
-        try {
-          stage = "validate tracking numbers";
-          const wanted = new Set((tns || []).map(clean).filter(Boolean));
-          if (!wanted.size) return { results: [], message: "No TNs in batch.", diagnostics: diagnostics() };
-
-          const normalizeActionLabel = value => String(value || "")
-          .normalize("NFKC")
-          .replace(/[\u200B-\u200D\uFEFF]/g, "")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "");
-        const labelVariants = el => [
-          el?.innerText,
-          el?.textContent,
-          el?.getAttribute?.("aria-label"),
-          el?.getAttribute?.("title")
-        ].map(normalizeActionLabel).filter(Boolean);
-        const exactAction = (el, action) => visible(el) && labelVariants(el).includes(action);
-        // Prefer exact labels, then use a substring fallback for SPX variants that
-        // append icons, hidden labels, or a count to the Batch Search button.
-        const containsAction = (el, action) => visible(el) && labelVariants(el).some(label => label.includes(action));
-        const isClickableCandidate = el => /^(BUTTON|A)$/.test(el.tagName) ||
-          el.getAttribute?.("role") === "button" || /(^|\s)(ssc-button|ssc-btn|el-button|ant-btn)(\s|$)/i.test(String(el.className || "")) ||
-          el.hasAttribute?.("tabindex");
-        const findActionControl = (action) => {
-          const selector = "button,[role='button'],a.el-button,.el-button,.ant-btn,[tabindex],.ssc-button,[class*=\'ssc-button\']";
-          const candidates = [...document.querySelectorAll(selector)].filter(visible);
-          const exact = candidates.filter(el => exactAction(el, action));
-          if (exact.length) {
-            exact.sort((a,b) => (isClickableCandidate(b) ? 1 : 0) - (isClickableCandidate(a) ? 1 : 0));
-            return exact[0];
-          }
-          const partial = candidates.filter(el => isClickableCandidate(el) && containsAction(el, action));
-          partial.sort((a,b) => {
-            const la = labelVariants(a).filter(v => v.includes(action)).map(v => v.length);
-            const lb = labelVariants(b).filter(v => v.includes(action)).map(v => v.length);
-            return (Math.min(...la, 9999)) - (Math.min(...lb, 9999));
-          });
-          if (partial.length) return partial[0];
-          const labelNodes = [...document.querySelectorAll("span,div,a")].filter(el =>
-            visible(el) && normalizeActionLabel(el.innerText || el.textContent) === action
-          );
-          for (const node of labelNodes) {
-            const target = node.closest("button,[role='button'],a.el-button,.el-button,.ant-btn,[tabindex],.ssc-button,[class*=\'ssc-button\']");
-            if (target && visible(target)) return target;
-            if (typeof node.click === "function") return node;
-          }
-          return null;
-        };
-        const findTextarea = () => [...document.querySelectorAll("textarea")]
-            .find(el => /SPX Tracking Number/i.test(el.placeholder || "") && visible(el));
-          stage = "find or open Batch Search dialog";
-          let textarea = findTextarea();
-          if (!textarea) {
-            const buttonDeadline = Date.now() + 15000;
-            let batchButton = null;
-            const buttonSelectors = "button,[role='button'],a.el-button,.el-button,.ant-btn,[tabindex],.ssc-button,[class*=\'ssc-button\']";
-            // SPX Order Tracking uses this dedicated class on its Batch Search control.
-            // Target it first; generic label matching is only a fallback.
-            const directSelector = "button.batch-search-button, .batch-search-button";
-            const findDirectBatchSearchControl = () => {
-              const direct = [...document.querySelectorAll(directSelector)];
-              // Never click a hidden placeholder. Only accept an actually visible,
-              // enabled control and reject aria-disabled controls.
-              return direct.find(el => visible(el) && !el.disabled && el.getAttribute("aria-disabled") !== "true") || null;
-            };
-            const findBatchByVisibleLabel = () => {
-              const candidates = [...document.querySelectorAll(buttonSelectors)].filter(visible);
-              return candidates.find(el => !el.disabled && el.getAttribute("aria-disabled") !== "true" &&
-                labelVariants(el).some(label => label.includes("batch") && label.includes("search"))) || null;
-            };
-            while (Date.now() < buttonDeadline && !batchButton) {
-              batchButton = findDirectBatchSearchControl() || findBatchByVisibleLabel() || findActionControl("batchsearch");
-              if (!batchButton) await sleep(250);
-            }
-            if (!batchButton) {
-              const observed = [...document.querySelectorAll(buttonSelectors)]
-                .filter(visible)
-                .map(el => ({ text: String(el.innerText || el.textContent || "").trim().slice(0, 100), normalized: labelVariants(el), tag: el.tagName, className: String(el.className || "").slice(0, 100), outerHTML: String(el.outerHTML || "").slice(0, 220) }))
-                .filter(x => x.text).slice(0, 35);
-              const directControls = [...document.querySelectorAll(directSelector)].map(el => ({
-                visible: visible(el), disabled: !!el.disabled, ariaDisabled: el.getAttribute("aria-disabled"),
-                text: String(el.innerText || el.textContent || "").trim().slice(0, 100),
-                className: String(el.className || "").slice(0, 160),
-                outerHTML: String(el.outerHTML || "").slice(0, 320)
-              })).slice(0, 8);
-              throw new Error("Could not find a visible, enabled Batch Search control. Page URL=" + String(location.href || "") +
-                "; title=" + String(document.title || "") + "; direct controls=" + JSON.stringify(directControls) +
-                "; visible controls=" + JSON.stringify(observed));
-            }
-            try { batchButton.scrollIntoView({ block: "center", inline: "nearest" }); } catch {}
-            batchButton.click();
-            const textareaDeadline = Date.now() + 15000;
-            while (Date.now() < textareaDeadline && !textarea) {
-              await sleep(250);
-              textarea = findTextarea();
-            }
-          }
-          if (!textarea) throw new Error("The Batch Search tracking-number textarea did not open in the temporary SPX tab.");
-
-          stage = "populate Batch Search textarea";
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-          if (setter) setter.call(textarea, tns.join("\n")); else textarea.value = tns.join("\n");
-          textarea.dispatchEvent(new Event("input", { bubbles: true }));
-          textarea.dispatchEvent(new Event("change", { bubbles: true }));
-          await sleep(250);
-          if (!String(textarea.value || "").trim()) throw new Error("TN list did not remain in the Batch Search textarea after input events.");
-
-          stage = "locate Submit button";
-          let submitButton = null;
-          for (let ancestor = textarea.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
-            submitButton = [...ancestor.querySelectorAll("button,[role='button'],.ssc-button,[class*=\'ssc-button\']")]
-              .find(el => exactAction(el, "submit")) || null;
-            if (submitButton) break;
-          }
-          if (!submitButton) submitButton = findActionControl("submit");
-          if (!submitButton) throw new Error("Could not locate the visible Submit button for Batch Search.");
-
-          const getPage = () => [...document.querySelectorAll("table tbody tr")].flatMap(tr => {
-            const cells = [...tr.querySelectorAll("td")];
-            const cellText = cells.map(cell => String(cell.innerText || cell.textContent || "").replace(/\s+/g, " ").trim());
-            // Match requested TNs against every cell; SPX can reorder or prepend columns.
-            const table = tr.closest("table");
-            const headerRows = [...(table?.querySelectorAll("thead tr") || [])];
-            const headerCells = headerRows.length ? [...headerRows[headerRows.length - 1].querySelectorAll("th,td")] : [];
-            const headers = headerCells.map(th => String(th.innerText || th.textContent || "")
-              .normalize("NFKC").replace(/\s+/g, " ").trim().toUpperCase());
-            const statusIndex = headers.findIndex(h => /^(ORDER STATUS|PARCEL STATUS|PARCEL ORDER STATUS|ORDER\/PARCEL STATUS|STATUS)$/.test(h));
-            let status = statusIndex >= 0 && statusIndex < cellText.length ? cellText[statusIndex] : "";
-            const isPlausibleStatus = value => {
-              const v = String(value || "").trim();
-              if (!v || v === "-" || /^(VIEW|POUCH)$/i.test(v)) return false;
-              // SPX return-flow statuses are explicit status tokens. Never infer a status from Size Type.
-              return /^(Return_LMHub_[A-Za-z0-9_]+|[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)$/.test(v);
-            };
-            if (!isPlausibleStatus(status)) {
-              // Some SPX table layouts render a header row with an extra selection/settings cell.
-              // Resolve only by finding an actual status-shaped value in this row; never use Pouch.
-              status = cellText.find(isPlausibleStatus) || "";
-            }
-            const matches = [...new Set(cellText.map(clean).filter(v => v && wanted.has(v)))];
-            const identifiers = cellText.filter(v => /^(PH[A-Z0-9]{8,}|[A-Z0-9]{10,})$/i.test(v));
-            const spxTN = identifiers[0] || "";
-            const slsTN = identifiers[1] || "";
-            const thirdTN = identifiers[2] || "";
-            return matches.map(matchedTN => ({ tn: matchedTN, matchedTN, spxTN, slsTN, thirdTN, status }));
-          }).filter(r => r.matchedTN && r.status && r.status !== "-" && r.status.toUpperCase() !== "VIEW" && r.status.toUpperCase() !== "POUCH");
-          const signature = () => [...document.querySelectorAll("table tbody tr")]
-            .map(tr => String(tr.innerText || "").replace(/\s+/g, " ").trim()).join("\n");
-          const before = signature();
-          const started = Date.now();
-          stage = "submit Batch Search and wait for results";
-          submitButton.click();
-          let lastSig = before, stableSince = Date.now(), latestRows = [];
-          const deadline = Date.now() + 45000;
-          while (Date.now() < deadline) {
-            await sleep(350);
-            const sig = signature();
-            if (sig !== lastSig) { lastSig = sig; stableSince = Date.now(); }
-            latestRows = getPage();
-            const hadFreshResults = latestRows.length > 0 || (sig !== before && Date.now() - started > 1800);
-            if (Date.now() - started >= 2200 && hadFreshResults && Date.now() - stableSince >= 1200) break;
-          }
-          if (Date.now() >= deadline) throw new Error("Timed out after 45 seconds waiting for the result table to refresh after Submit.");
-
-          stage = "read current results page";
-          const output = new Map();
-          const addCurrentPage = () => {
-            for (const item of getPage()) output.set(clean(item.matchedTN || item.tn), item);
-          };
-          addCurrentPage();
-          for (let page = 0; page < 400; page++) {
-            const candidates = [
-              document.querySelector(".el-pagination button.btn-next"),
-              document.querySelector(".el-pagination .btn-next"),
-              document.querySelector(".ant-pagination-next"),
-              document.querySelector("button[aria-label='Next page']"),
-              document.querySelector("[aria-label='Next page']")
-            ].filter(Boolean);
-            const next = candidates.find(el => visible(el));
-            if (!next) break;
-            const disabled = next.disabled || next.getAttribute("aria-disabled") === "true" || /disabled/.test(String(next.className || "")) || next.closest("li")?.classList?.contains("disabled");
-            if (disabled) break;
-            stage = `paginate results page ${page + 2}`;
-            const beforePage = signature();
-            next.click();
-            let changed = false;
-            for (let wait = 0; wait < 40; wait++) {
-              await sleep(250);
-              if (signature() !== beforePage) { changed = true; break; }
-            }
-            if (!changed) break;
-            addCurrentPage();
-          }
-          return { results: [...output.values()], requestedCount: tns.length, capturedAt: new Date().toISOString(), diagnostics: diagnostics() };
-        } catch (error) {
-          return {
-            __spxBatchSearchError: true,
-            stage,
-            error: String(error?.message || error),
-            stack: String(error?.stack || "").slice(0, 1200),
-            diagnostics: diagnostics()
-          };
-        }
-      }
-    });
-  } catch (error) {
-    throw new Error(`Chrome could not execute the SPX Batch Search script: ${error?.message || error}`);
-  }
-
-  const result = injectionResults?.[0]?.result;
-  if (!injectionResults?.length) {
-    const tab = await extApi.tabs.get(tabId).catch(() => null);
-    throw new Error(`Chrome injected no result frame. SPX tab URL: ${tab?.url || "unknown"}; status: ${tab?.status || "unknown"}.`);
-  }
-  if (!result) {
-    const tab = await extApi.tabs.get(tabId).catch(() => null);
-    throw new Error(`The SPX script returned no value (frame ${injectionResults[0]?.frameId ?? "unknown"}). Tab URL: ${tab?.url || "unknown"}; status: ${tab?.status || "unknown"}. Check the SPX tab console for a script exception.`);
-  }
-  if (result.__spxBatchSearchError) {
-    const d = result.diagnostics || {};
-    const candidates = d.batchSearchCandidates?.length ? JSON.stringify(d.batchSearchCandidates).slice(0, 800) : "none detected";
-    const details = `Stage: ${result.stage}. ${result.error}. Batch Search text candidates: ${candidates}. URL: ${d.url || "unknown"}; page: ${d.title || "unknown"}; readyState: ${d.readyState || "unknown"}; visible textarea(s): ${(d.visibleTextareas || []).join(" | ") || "none"}; visible buttons: ${(d.visibleButtons || []).join(" | ") || "none"}; tables: ${(d.tables || []).map(t => `#${t.index} ${t.rows} row(s)`).join(", ") || "none"}.`;
-    throw new Error(details.slice(0, 2500));
-  }
-  return result;
-}
-
-async function runDeliveringReconcileJob(job) {
-  let tabId = null;
-  const allResults = new Map();
-  const failedTNSet = new Set();
-  const failedBatchErrors = [];
-  const tns = [...new Set((job.trackingNumbers || []).map(v => String(v || "").trim()).filter(Boolean))];
-  const batchSize = 3000;
-  try {
-    if (!tns.length) throw new Error("NOL3 sent no Delivering TNs to reconcile.");
-    job.startedAt = Date.now();
-    sendToBadoc("BADOC_SPX_DELIVERING_RECONCILE_PROGRESS", { message: `Opening SPX Batch Search for ${tns.length.toLocaleString()} Delivering TNs…` });
-    tabId = await createDedicatedSpxTab();
-    job.spxTabId = tabId;
-    await ensureParcelOrderTrackingRoute(tabId);
-
-    const batches = [];
-    for (let i = 0; i < tns.length; i += batchSize) batches.push(tns.slice(i, i + batchSize));
-    for (let i = 0; i < batches.length; i++) {
-      if (job.cancelled) throw new Error("Reconciliation was cancelled.");
-      const batch = batches[i];
-      sendToBadoc("BADOC_SPX_DELIVERING_RECONCILE_PROGRESS", {
-        message: `SPX Batch Search: batch ${i + 1}/${batches.length} (${batch.length.toLocaleString()} TNs)…`
-      });
-      try {
-        const response = await executeSpxBatchSearch(tabId, batch);
-        for (const item of (response.results || [])) {
-          const key = String(item.matchedTN || item.tn || "").trim().toUpperCase().replace(/\s+/g, "");
-          if (key && batch.some(tn => String(tn).trim().toUpperCase().replace(/\s+/g, "") === key)) {
-            allResults.set(key, {
-              tn: String(item.matchedTN || item.tn).trim(),
-              spxTN: String(item.spxTN || "").trim(),
-              slsTN: String(item.slsTN || "").trim(),
-              thirdTN: String(item.thirdTN || "").trim(),
-              status: String(item.status || "").trim()
-            });
-          }
-        }
-        const missing = batch.filter(tn => !allResults.has(String(tn).trim().toUpperCase().replace(/\s+/g, ""))).length;
-        sendToBadoc("BADOC_SPX_DELIVERING_RECONCILE_PROGRESS", {
-          message: `Batch ${i + 1}/${batches.length} complete · ${response.results?.length || 0} result(s) read${missing ? ` · ${missing} TN(s) not returned` : ""}.`
-        });
-      } catch (error) {
-        batch.forEach(tn => failedTNSet.add(String(tn).trim().toUpperCase().replace(/\s+/g, "")));
-        console.error("SPX Batch Search batch failed:", error);
-        failedBatchErrors.push(String(error?.message || error));
-        sendToBadoc("BADOC_SPX_DELIVERING_RECONCILE_PROGRESS", {
-          message: `Batch ${i + 1}/${batches.length} failed; those TNs will remain unchanged. ${error?.message || error}`
-        });
-      }
-    }
-    sendToBadoc("BADOC_SPX_DELIVERING_RECONCILE_RESULTS", {
-      results: [...allResults.values()],
-      requestedCount: tns.length,
-      returnedCount: allResults.size,
-      failedTNCount: failedTNSet.size,
-      failedTNs: [...failedTNSet],
-      failedBatchErrors
-    });
-  } catch (error) {
-    console.error("SPX Batch Search Delivering reconciliation failed:", error);
-    sendToBadoc("BADOC_SPX_ERROR", {
-      message: error?.message || String(error),
-      kind: "delivering-reconcile"
-    });
-  } finally {
-    if (tabId) {
-      try { await extApi.tabs.remove(tabId); } catch {}
-    }
     releaseActiveJob(job);
   }
 }
@@ -2260,22 +1952,6 @@ extApi.runtime.onConnect.addListener(port => {
       return;
     }
 
-    if (type === "BADOC_START_DELIVERING_RECONCILE") {
-      const trackingNumbers = [...new Set((Array.isArray(message.trackingNumbers) ? message.trackingNumbers : [])
-        .map(v => String(v || "").trim()).filter(Boolean))];
-      if (!trackingNumbers.length) {
-        sendToPort(port, "BADOC_SPX_ERROR", {
-          message: "No Delivering tracking numbers were received from NOL3.",
-          kind: "delivering-reconcile"
-        });
-        return;
-      }
-      const job = reserveActiveJob("delivering-reconcile", port, { trackingNumbers });
-      if (!job) { failBusy("delivering-reconcile", "Another SPX Bridge job is already running."); return; }
-      void runDeliveringReconcileJob(job);
-      return;
-    }
-
     if (type === "BADOC_START_PARCEL_DELIVERY_SYNC") {
       const job = reserveActiveJob("parcel-delivery", port, {
         hubName: String(message?.hubName || "").trim(),
@@ -2306,6 +1982,49 @@ extApi.runtime.onConnect.addListener(port => {
       });
       if (!job) { failBusy("parcel-inbound"); return; }
       void runParcelInboundJob(job);
+      return;
+    }
+
+    if (type === "BADOC_START_ASSIGNED_ONHOLD_TODAY") {
+      const job = reserveActiveJob("assigned-onhold-today", port);
+      if (!job) {
+        sendToPort(port, "BADOC_ASSIGNED_ONHOLD_TODAY_ERROR", {
+          kind: "assigned-onhold-today",
+          message: "Assigned Today cannot start because an incompatible SPX job is already running. Try again after it finishes."
+        });
+        return;
+      }
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", {
+        kind: "assigned-onhold-today",
+        message: "Extension accepted Assigned Today. Preparing Forward and Return exports…"
+      });
+      void (async () => {
+        job.startedAt = Date.now();
+        try {
+          const result = await exportAssignedParcelsTodayFromSpx(job, { includeCreatedDate: false });
+          if (job.cancelled) throw new Error("Assigned Today sync was stopped.");
+          const forward = result.downloadedData?.find(item => item.source === "Forward Order") || {};
+          const returned = result.downloadedData?.find(item => item.source === "Return Order") || {};
+          const excludedTotal = value => Object.values(value || {}).reduce((sum,n) => sum + Number(n || 0), 0);
+          sendToPort(port, "BADOC_ASSIGNED_ONHOLD_TODAY_COMPLETE", {
+            todayDate: result.todayDate,
+            forwardRowCount: result.forwardRowCount,
+            returnRowCount: result.returnRowCount,
+            assignedTodayCount: Array.isArray(result.oids)?result.oids.length:0,
+            duplicateCount: Number(result.duplicateCount||0),
+            onholdRows: Array.isArray(result.onholdRows)?result.onholdRows:[],
+            excludedForward: excludedTotal(forward.excluded),
+            excludedReturn: excludedTotal(returned.excluded)
+          });
+        } catch (error) {
+          sendToPort(port, "BADOC_ASSIGNED_ONHOLD_TODAY_ERROR", {
+            kind: "assigned-onhold-today",
+            message: error?.message || String(error)
+          });
+        } finally {
+          releaseActiveJob(job);
+        }
+      })();
       return;
     }
 
@@ -2340,6 +2059,14 @@ extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ───────── Integrated POD/POOH Checker background actions ─────────
 extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.target !== "POD_CHECKER_BACKGROUND") return false;
+
+  if (message.action === "EXPORT_ONHOLD_OIDS_FROM_SPX") {
+    (async () => {
+      try { sendResponse(await exportOnHoldOidsFromSpx()); }
+      catch (error) { sendResponse({ ok: false, error: error?.message || String(error) }); }
+    })();
+    return true;
+  }
 
   if (message.action === "EXPORT_ASSIGNED_PARCELS_TODAY") {
     (async () => {

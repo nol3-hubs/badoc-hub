@@ -147,17 +147,19 @@
       // chrome.tabs, chrome.storage, and chrome.scripting inside the iframe.
       emit("BADOC_POD_CHECKER_URL", {
         url: chrome.runtime.getURL("pod-checker/app.html"),
-        checkerVersion: "1.5.55"
+        checkerVersion: "1.5.57"
       });
       return;
     }
 
     const supported = new Set([
       "BADOC_START_LINEHAUL_SYNC",
-      "BADOC_START_DELIVERING_RECONCILE",
       "BADOC_START_PARCEL_DELIVERY_SYNC",
       "BADOC_START_RIDER_SYNC",
       "BADOC_START_PARCEL_INBOUND_SYNC",
+      "BADOC_START_ASSIGNED_ONHOLD_TODAY",
+      "BADOC_START_POD_CHECKER_ASSIGNED_TODAY",
+      "BADOC_START_POD_CHECKER_ONHOLD",
       "BADOC_START_RECEIVED_CHECKING_INBOUND_SYNC",
       "BADOC_START_PARCEL_SECONDARY_SYNC",
       "BADOC_START_FIRST_MILE_ORDERS_SYNC",
@@ -166,8 +168,15 @@
       "BADOC_ABORT_SYNC",    ]);
     if (!supported.has(data.type)) return;
     if (!port) {
-      const errorKind =         data.type === "BADOC_START_DELIVERING_RECONCILE" ? "delivering-reconcile" :
-        data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" :
+      if (data.type === "BADOC_START_POD_CHECKER_ASSIGNED_TODAY" || data.type === "BADOC_START_POD_CHECKER_ONHOLD") {
+        const isOnHold = data.type === "BADOC_START_POD_CHECKER_ONHOLD";
+        emit(isOnHold ? "BADOC_POD_CHECKER_ONHOLD_ERROR" : "BADOC_POD_CHECKER_ASSIGNED_ERROR", {
+          requestId: String(data.requestId || ""),
+          message: "Badoc Hub Extension background connection is unavailable. Reload the extension and refresh BADOC HUB."
+        });
+        return;
+      }
+      const errorKind =         data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" :
         data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" ? "first-mile-orders" :
         data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC" ? "first-mile-tasks" :
         data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
@@ -182,7 +191,7 @@
     try {
       const payload = { type: data.type };
       if (data.type === "BADOC_LOOKUP_PICKUP_INFO") { payload.reqId=String(data.reqId||""); payload.orderId=String(data.orderId||"").trim(); }
-      if (data.type === "BADOC_START_DELIVERING_RECONCILE") payload.trackingNumbers = Array.isArray(data.trackingNumbers) ? data.trackingNumbers.map(v => String(v || "").trim()).filter(Boolean) : [];
+      if (data.type === "BADOC_START_POD_CHECKER_ASSIGNED_TODAY" || data.type === "BADOC_START_POD_CHECKER_ONHOLD") payload.requestId=String(data.requestId||"");
       if (data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC") {
         if (data.selectedDate !== undefined) payload.selectedDate = String(data.selectedDate || "");
       }
@@ -197,6 +206,12 @@
         }
       }
       port.postMessage(payload);
+      if (data.type === "BADOC_START_ASSIGNED_ONHOLD_TODAY") {
+        emit("BADOC_SPX_COMMAND_FORWARDED", {
+          kind: "assigned-onhold-today",
+          message: "Assigned Today command forwarded to the extension background."
+        });
+      }
       if (data.type === "BADOC_START_PARCEL_INBOUND_SYNC") {
         emit("BADOC_SPX_COMMAND_FORWARDED", {
           kind: "parcel-inbound",

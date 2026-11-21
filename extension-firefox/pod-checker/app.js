@@ -264,9 +264,11 @@ async function refreshCaptures(){
 }
 $('onholdToday')?.addEventListener("click", async () => {
   const button = $("onholdToday");
-  if (!button || button.disabled) return;
+  if (!button || button.disabled || assignedParcelsLoading) return;
   assignedParcelsLoading = true;
   button.disabled = true;
+  const onHoldButton = $("spxOnhold");
+  if (onHoldButton) onHoldButton.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = "Loading Assigned Parcels…";
   setStatus("Getting Forward and Return Orders assigned today from SPX…");
@@ -315,6 +317,47 @@ $('onholdToday')?.addEventListener("click", async () => {
     assignedParcelsLoading = false;
     button.disabled = false;
     button.textContent = originalLabel;
+    if (onHoldButton) onHoldButton.disabled = false;
+  }
+});
+
+$('spxOnhold')?.addEventListener("click", async () => {
+  const button = $("spxOnhold");
+  if (!button || button.disabled || assignedParcelsLoading) return;
+  assignedParcelsLoading = true;
+  button.disabled = true;
+  const assignedButton = $("onholdToday");
+  if (assignedButton) assignedButton.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "Loading OnHold…";
+  setStatus("Getting current OnHold parcels from the SPX Forward Order export for Badoc Hub…");
+  try {
+    const reply = await chrome.runtime.sendMessage({
+      target: "POD_CHECKER_BACKGROUND",
+      action: "EXPORT_ONHOLD_OIDS_FROM_SPX"
+    });
+    if (!reply?.ok) throw new Error(reply?.error || "OnHold data could not be loaded.");
+    const oids = [...new Set((Array.isArray(reply.oids) ? reply.oids : [])
+      .map(value => String(value || "").trim().toUpperCase()).filter(Boolean))];
+    $("oids").value = oids.join("\n");
+    saveOids().catch(error => console.warn("POD Checker could not save the OnHold OID list:", error));
+    if (!oids.length) {
+      setStatus("SPX returned no current OnHold OIDs for Badoc Hub.", "good");
+    } else {
+      setStatus(
+        "Loaded " + oids.length.toLocaleString() + " unique current OnHold OID(s) from the SPX Forward Order export for Badoc Hub; " +
+        Number(reply.duplicateCount || 0).toLocaleString() +
+        " duplicate(s) removed. No date restriction was applied. Click Check OIDs to validate them.",
+        "good"
+      );
+    }
+  } catch (error) {
+    setStatus(error?.message || String(error), "error");
+  } finally {
+    assignedParcelsLoading = false;
+    button.disabled = false;
+    button.textContent = originalLabel;
+    if (assignedButton) assignedButton.disabled = false;
   }
 });
 

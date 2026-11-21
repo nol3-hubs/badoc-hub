@@ -1,9 +1,6 @@
-Badoc Hub Chrome Extension v1.0.8
+Badoc Hub Chrome Extension v1.4.6
 
-First Mile binary export fix:
-- Reads the SPX export response as bytes before deciding whether it is JSON, CSV, or XLSX.
-- Reads signed-download responses as bytes as well; Excel workbooks are converted to CSV before local storage.
-- Always names converted First Mile downloads with a .csv extension, even when SPX names its source file .xlsx.
-- Keeps the Orders-then-Tasks one-button workflow and local-only storage.
+This folder is the canonical Chrome extension source used by the Test2 dashboard installer.
+The built-in installer package is kept synchronized with these files and the manifest version.
 
-Install using chrome://extensions → Developer mode → Load unpacked, and select this extension-chrome folder.
+Install manually using chrome://extensions → Developer mode → Load unpacked, and select this extension folder.

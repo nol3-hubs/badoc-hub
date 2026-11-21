@@ -170,6 +170,82 @@ function renderResults(){
   </tr>`).join(""):'<tr><td colspan="5" class="muted">No matching results.</td></tr>';
 }
 
+function startAssignedParcelsExportOverPort(requestId) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+    };
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(result);
+    };
+    const timer = setTimeout(() => finish(new Error(
+      "Assigned Parcels Today did not finish within 10 minutes. Check the SPX export task monitor and retry."
+    )), 10 * 60 * 1000);
+    const onMessage = event => {
+      if (event.source !== window || event.data?.source !== "BADOC_SPX_BRIDGE") return;
+      const data = event.data;
+      if (String(data.requestId || "") !== requestId) return;
+      if (data.type === "BADOC_POD_CHECKER_ASSIGNED_ACCEPTED") {
+        setStatus(String(data.message || "SPX export accepted…"));
+      } else if (data.type === "BADOC_POD_CHECKER_ASSIGNED_COMPLETE") {
+        finish(null, data.result || null);
+      } else if (data.type === "BADOC_POD_CHECKER_ASSIGNED_ERROR") {
+        finish(new Error(String(data.message || "SPX could not load Assigned Parcels Today.")));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    window.postMessage({
+      source: "BADOC_PAGE",
+      type: "BADOC_START_POD_CHECKER_ASSIGNED_TODAY",
+      requestId
+    }, "*");
+  });
+}
+
+function startSpxOnHoldExportOverPort(requestId) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+    };
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(result);
+    };
+    const timer = setTimeout(() => finish(new Error(
+      "OnHold export did not finish within 10 minutes. Check the SPX export task monitor and retry."
+    )), 10 * 60 * 1000);
+    const onMessage = event => {
+      if (event.source !== window || event.data?.source !== "BADOC_SPX_BRIDGE") return;
+      const data = event.data;
+      if (String(data.requestId || "") !== requestId) return;
+      if (data.type === "BADOC_POD_CHECKER_ONHOLD_ACCEPTED") {
+        setStatus(String(data.message || "OnHold export accepted…"));
+      } else if (data.type === "BADOC_POD_CHECKER_ONHOLD_COMPLETE") {
+        finish(null, data.result || null);
+      } else if (data.type === "BADOC_POD_CHECKER_ONHOLD_ERROR") {
+        finish(new Error(String(data.message || "OnHold data could not be loaded.")));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    window.postMessage({
+      source: "BADOC_PAGE",
+      type: "BADOC_START_POD_CHECKER_ONHOLD",
+      requestId
+    }, "*");
+  });
+}
+
 async function refreshCaptures(){
  const r=await pageCommand("LIST");
  if(!r?.ok)throw new Error(r?.error||"Could not get captured requests.");
@@ -177,25 +253,27 @@ async function refreshCaptures(){
 }
 $('onholdToday')?.addEventListener("click", async () => {
   const button = $("onholdToday");
-  if (!button || button.disabled) return;
+  if (!button || button.disabled || assignedParcelsLoading) return;
   assignedParcelsLoading = true;
   button.disabled = true;
+  const onHoldButton = $("spxOnhold");
+  if (onHoldButton) onHoldButton.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = "Loading Assigned Parcels…";
   setStatus("Getting Forward and Return Orders assigned today from SPX…");
   try {
-    const reply = await chrome.runtime.sendMessage({
-      target: "POD_CHECKER_BACKGROUND",
-      action: "EXPORT_ASSIGNED_PARCELS_TODAY"
-    });
-    if (!reply?.ok) throw new Error(reply?.error || "SPX assigned parcels could not be loaded.");
+    const requestId = "pod-checker-assigned-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+    const reply = window.podChrome
+      ? await startAssignedParcelsExportOverPort(requestId)
+      : await chrome.runtime.sendMessage({
+          target: "POD_CHECKER_BACKGROUND",
+          action: "EXPORT_ASSIGNED_PARCELS_TODAY"
+        });
+    if (!reply) throw new Error("The extension returned an empty Assigned Parcels Today result. Confirm Badoc Hub Extension v1.4.8 is connected, then reload the extension and refresh BADOC HUB.");
+    if (reply.ok !== true) throw new Error(reply.error || "The extension returned an empty result for Assigned Parcels Today. Reload Badoc Hub Extension v1.4.8 and try again.");
     const exportFiles = Array.isArray(reply.downloadedData)
       ? reply.downloadedData.filter(source => source && typeof source === "object")
       : [];
-    const hasDownloadedCsvRows = exportFiles.some(source =>
-      Array.isArray(source.headers) && source.headers.length > 0 &&
-      Array.isArray(source.rows) && source.rows.length > 0
-    );
     const oids = [...new Set((Array.isArray(reply.oids) ? reply.oids : [])
       .map(value => String(value || "").trim().toUpperCase()).filter(Boolean))];
     $("oids").value = oids.join("\n");
@@ -211,12 +289,9 @@ $('onholdToday')?.addEventListener("click", async () => {
       : "Assigned Time today (verified in CSV)";
     if (!oids.length) {
       setStatus(`No Forward or Return parcels were assigned on ${reply.todayDate || "today"}.`, "good");
-    } else if (!hasDownloadedCsvRows) {
-      setStatus(
-        `Loaded ${oids.length.toLocaleString()} OID(s), but the CSV rows were not received by the dashboard. Reload Chrome Extension v1.4.1 or Firefox SPX Bridge v69.5.2, refresh this page, and try again.`,
-        "error"
-      );
     } else {
+      // The dashboard deliberately receives OIDs and compact export metadata,
+      // not the full CSV rows. OIDs are the only data required by this checker.
       setStatus(
         `Loaded ${oids.length.toLocaleString()} unique OID(s) for ${reply.todayDate}: ${forwardCount.toLocaleString()} Forward, ${returnCount.toLocaleString()} Return; ${duplicateCount.toLocaleString()} duplicate(s) removed. Filters: Created Date within the last 14 days, Current Station Badoc Hub, ${assignedTimeDisplay}, excluding Delivering and Delivered. Click Check OIDs to validate them.`,
         "good"
@@ -228,6 +303,51 @@ $('onholdToday')?.addEventListener("click", async () => {
     assignedParcelsLoading = false;
     button.disabled = false;
     button.textContent = originalLabel;
+    if (onHoldButton) onHoldButton.disabled = false;
+  }
+});
+
+$('spxOnhold')?.addEventListener("click", async () => {
+  const button = $("spxOnhold");
+  if (!button || button.disabled || assignedParcelsLoading) return;
+  assignedParcelsLoading = true;
+  button.disabled = true;
+  const assignedButton = $("onholdToday");
+  if (assignedButton) assignedButton.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "Loading OnHold…";
+  setStatus("Getting current OnHold parcels from the SPX Forward Order export for Badoc Hub…");
+  try {
+    const requestId = "pod-checker-onhold-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+    const reply = window.podChrome
+      ? await startSpxOnHoldExportOverPort(requestId)
+      : await chrome.runtime.sendMessage({
+          target: "POD_CHECKER_BACKGROUND",
+          action: "EXPORT_ONHOLD_OIDS_FROM_SPX"
+        });
+    if (!reply) throw new Error("The extension returned an empty OnHold result. Reload the extension and refresh BADOC HUB.");
+    if (reply.ok !== true) throw new Error(reply.error || "OnHold data could not be loaded.");
+    const oids = [...new Set((Array.isArray(reply.oids) ? reply.oids : [])
+      .map(value => String(value || "").trim().toUpperCase()).filter(Boolean))];
+    $("oids").value = oids.join("\n");
+    saveOids().catch(error => console.warn("POD Checker could not save the OnHold OID list:", error));
+    if (!oids.length) {
+      setStatus("SPX returned no current OnHold OIDs for Badoc Hub.", "good");
+    } else {
+      setStatus(
+        "Loaded " + oids.length.toLocaleString() + " unique current OnHold OID(s) from the SPX Forward Order export for Badoc Hub; " +
+        Number(reply.duplicateCount || 0).toLocaleString() +
+        " duplicate(s) removed. No date restriction was applied. Click Check OIDs to validate them.",
+        "good"
+      );
+    }
+  } catch (error) {
+    setStatus(error?.message || String(error), "error");
+  } finally {
+    assignedParcelsLoading = false;
+    button.disabled = false;
+    button.textContent = originalLabel;
+    if (assignedButton) assignedButton.disabled = false;
   }
 });
 

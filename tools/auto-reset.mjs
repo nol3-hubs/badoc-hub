@@ -3,11 +3,11 @@
 // It refreshes only parcel/linehaul files that have already been uploaded to the shared cloud.
 import { chromium } from 'playwright';
 
-const APP_URL = process.env.APP_URL || 'https://nol3-hubs.github.io/badoc-hub/';
+const APP_URL = process.env.APP_URL;
 const EVENT = process.env.GITHUB_EVENT_NAME || 'workflow_dispatch';
 const IS_SCHEDULED = EVENT === 'schedule';
 const POLL_MS = Number(process.env.POLL_MS || 5000);
-const WAIT_TIMEOUT_MS = Number(process.env.WAIT_TIMEOUT_MS || 60 * 60 * 1000);
+const WAIT_TIMEOUT_MS = Number(process.env.WAIT_TIMEOUT_MS || 45 * 60 * 1000);
 
 if (!APP_URL) throw new Error('APP_URL is missing. Set it under Settings → Secrets and variables → Actions → Variables.');
 
@@ -39,7 +39,8 @@ function inResetWindow(t) {
 }
 console.log('Manila time: ' + startedAt.date + ' ' + startedAt.hour + ':' + startedAt.minute + ':' + startedAt.second);
 if (IS_SCHEDULED && !inResetWindow(startedAt)) {
-  throw new Error('Scheduled run began outside the midnight recovery window (11 PM–2:59 AM Manila). No reset was attempted.');
+  console.log('SAFE SKIP: scheduled run started outside the 11 PM–3 AM Manila reset window. Nothing was changed.');
+  process.exit(0);
 }
 
 const browser = await chromium.launch({ headless: true });
@@ -112,11 +113,11 @@ try {
     process.exit(0);
   }
 
-  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: cloud preflight finished outside the midnight recovery window.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: cloud preflight finished outside the midnight reset window.');
 
-  // Refresh and capture close to midnight. If GitHub starts the job just after
-  // midnight, recover the previous calendar day's data during the 00:00–02:59
-  // grace window, unless the shared marker proves another device reset already.
+  // Refresh and capture close to midnight. When a scheduled run starts before
+  // midnight, wait until 11:58 PM; if GitHub starts it just after midnight,
+  // recover the previous calendar day's still-uncleared data immediately.
   console.log('Holding reset until 11:58 PM Manila for final cloud and EOD refresh.');
   const waitStarted = Date.now();
   while (true) {
@@ -148,7 +149,7 @@ try {
     eodUpdatedAt: Number(window.__badocEodDashboard && window.__badocEodDashboard.updatedAt || 0)
   }));
   console.log('Final pre-capture refresh passed: ' + JSON.stringify(finalStats));
-  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: final refresh completed outside the midnight recovery window.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: final refresh completed outside the midnight reset window.');
 
   console.log('Saving Daily History for ' + operationalDate + '.');
   const snapshot = await page.evaluate(async date => {
@@ -184,7 +185,7 @@ try {
     if (Date.now() - captureWaitStarted > 5 * 60 * 1000) throw new Error('Timed out at the midnight boundary. Reset was not released.');
     await sleep(POLL_MS);
   }
-  if (manilaNow().date !== resetDate) throw new Error('SAFE STOP: current Manila date does not match expected reset date ' + resetDate + '.');
+  if (manilaNow().date !== resetDate) throw new Error('SAFE STOP: current Manila date does not match the expected reset date ' + resetDate + '.');
 
   await page.evaluate(() => {
     window.__BADOC_GITHUB_AUTOMATION_HOLD_RESET = false;
