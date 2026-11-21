@@ -1,9 +1,9 @@
-// Badoc Hub — GitHub-only cloud refresh, Daily History capture, and guarded 2 AM reset.
+// Badoc Hub — GitHub-only cloud refresh, Daily History capture, and guarded 12 AM reset.
 // GitHub Actions has no authenticated SPX tab or local Chrome extension, so it cannot run SPX Sync All.
 // It refreshes only parcel/linehaul files that have already been uploaded to the shared cloud.
 import { chromium } from 'playwright';
 
-const APP_URL = process.env.APP_URL;
+const APP_URL = process.env.APP_URL || 'https://nol3-hubs.github.io/badoc-hub/';
 const EVENT = process.env.GITHUB_EVENT_NAME || 'workflow_dispatch';
 const IS_SCHEDULED = EVENT === 'schedule';
 const POLL_MS = Number(process.env.POLL_MS || 5000);
@@ -31,10 +31,15 @@ function addDays(key, amount) {
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 const startedAt = manilaNow();
+const operationalDate = startedAt.hour === 23 ? startedAt.date : addDays(startedAt.date, -1);
+const resetDate = addDays(operationalDate, 1);
+function inResetWindow(t) {
+  return (t.date === operationalDate && t.hour === 23) ||
+    (t.date === resetDate && t.hour < 3);
+}
 console.log('Manila time: ' + startedAt.date + ' ' + startedAt.hour + ':' + startedAt.minute + ':' + startedAt.second);
-if (IS_SCHEDULED && startedAt.hour >= 2) {
-  console.log('SAFE SKIP: scheduled run started at/after 2 AM Manila. Nothing was opened or changed.');
-  process.exit(0);
+if (IS_SCHEDULED && !inResetWindow(startedAt)) {
+  throw new Error('Scheduled run began outside the midnight recovery window (11 PM–2:59 AM Manila). No reset was attempted.');
 }
 
 const browser = await chromium.launch({ headless: true });
@@ -58,7 +63,6 @@ try {
     null, { timeout: 60000 }
   );
 
-  const today = manilaNow().date;
   const markerDate = await page.evaluate(async () => {
     const cfg = window.BADOC_SHARED_CONFIG || {};
     if (!cfg.url || !cfg.key) throw new Error('Shared cloud configuration is incomplete.');
@@ -74,8 +78,8 @@ try {
     return String(saved && saved.date || '') || null;
   });
 
-  if (IS_SCHEDULED && markerDate === today) {
-    console.log('Already reset for ' + today + '; leaving data untouched.');
+  if (IS_SCHEDULED && markerDate === resetDate) {
+    console.log('Already reset for ' + resetDate + '; leaving data untouched.');
     process.exit(0);
   }
 
@@ -108,18 +112,21 @@ try {
     process.exit(0);
   }
 
-  if (manilaNow().hour >= 2) throw new Error('SAFE STOP: cloud preflight finished at/after 2 AM Manila.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: cloud preflight finished outside the midnight recovery window.');
 
-  // Wait to refresh and capture near the reset boundary, avoiding a snapshot from 30 minutes earlier.
-  console.log('Holding reset until 1:58 AM Manila for final cloud and EOD refresh.');
+  // Refresh and capture close to midnight. If GitHub starts the job just after
+  // midnight, recover the previous calendar day's data during the 00:00–02:59
+  // grace window, unless the shared marker proves another device reset already.
+  console.log('Holding reset until 11:58 PM Manila for final cloud and EOD refresh.');
   const waitStarted = Date.now();
   while (true) {
     const t = manilaNow();
-    if (t.hour > 1 || (t.hour === 1 && t.minute >= 58)) break;
+    if (t.date !== operationalDate || (t.hour === 23 && t.minute >= 58)) break;
+    if (!inResetWindow(t)) throw new Error('SAFE STOP: outside the midnight refresh window.');
     if (Date.now() - waitStarted > WAIT_TIMEOUT_MS) throw new Error('Timed out before final refresh. Reset was not released.');
     await sleep(POLL_MS);
   }
-  if (manilaNow().hour >= 2) throw new Error('SAFE STOP: missed the 1:58 AM refresh window.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: missed the midnight refresh window.');
 
   await page.evaluate(async () => { await window.__badocSharedPullNow(); });
   await waitForParcelData(60000);
@@ -141,9 +148,8 @@ try {
     eodUpdatedAt: Number(window.__badocEodDashboard && window.__badocEodDashboard.updatedAt || 0)
   }));
   console.log('Final pre-capture refresh passed: ' + JSON.stringify(finalStats));
-  if (manilaNow().hour >= 2) throw new Error('SAFE STOP: final refresh completed at/after 2 AM Manila.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: final refresh completed outside the midnight recovery window.');
 
-  const operationalDate = addDays(manilaNow().date, -1);
   console.log('Saving Daily History for ' + operationalDate + '.');
   const snapshot = await page.evaluate(async date => {
     const saved = await window.__badocCaptureDailyHistory('github-cloud-automation', date);
@@ -172,12 +178,13 @@ try {
   });
   console.log('CFR1 export: ' + JSON.stringify(cfr1));
 
-  console.log('Captures succeeded. Waiting until 2 AM Manila before releasing reset.');
+  console.log('Captures succeeded. Waiting until 12:00 AM Manila before releasing reset.');
   const captureWaitStarted = Date.now();
-  while (manilaNow().hour < 2) {
-    if (Date.now() - captureWaitStarted > 5 * 60 * 1000) throw new Error('Timed out at 2 AM boundary. Reset was not released.');
+  while (manilaNow().date === operationalDate) {
+    if (Date.now() - captureWaitStarted > 5 * 60 * 1000) throw new Error('Timed out at the midnight boundary. Reset was not released.');
     await sleep(POLL_MS);
   }
+  if (manilaNow().date !== resetDate) throw new Error('SAFE STOP: current Manila date does not match expected reset date ' + resetDate + '.');
 
   await page.evaluate(() => {
     window.__BADOC_GITHUB_AUTOMATION_HOLD_RESET = false;
@@ -188,10 +195,10 @@ try {
   await page.waitForFunction(date => {
     try {
       const status = JSON.parse(localStorage.getItem('badoc_reset_status') || 'null');
-      return status && status.date === date && status.state === 'done';
+      return status && status.date === date && (status.state === 'done' || status.state === 'already-done');
     } catch (_) { return false; }
-  }, today, { timeout: 8 * 60 * 1000, polling: POLL_MS });
-  console.log('Daily History, CFR summary, and guarded 2 AM reset completed for ' + today + '.');
+  }, resetDate, { timeout: 8 * 60 * 1000, polling: POLL_MS });
+  console.log('Daily History, CFR summary, and guarded 12:00 AM reset completed for ' + resetDate + '.');
 } catch (error) {
   console.error('GitHub-only automation stopped safely: ' + (error && (error.stack || error)));
   process.exitCode = 1;
