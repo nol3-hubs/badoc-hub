@@ -1259,6 +1259,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
           addOwner(record.proxy?.$data);
           addOwner(record.component?.data);
           addOwner(record.component?.$?.setupState);
+          addOwner(record.component?.exposed);
           record.propsList.forEach(addOwner);
         }
 
@@ -1354,8 +1355,9 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         }
         const matchesByComponent = new Map();
         for (const element of targets) {
-          const dialogRoot = closestDialog(element) || element;
-          const dialogText = String(dialogRoot.innerText || dialogRoot.textContent || "").slice(0, 3000);
+          const dialogRoot = closestDialog(element) || element.closest?.("form") || element;
+          const localText = String(dialogRoot.innerText || dialogRoot.textContent || "").slice(0, 3000);
+          const dialogText = localText.length > 30 ? localText : String(document.body?.innerText || "").slice(0, 3000);
           for (const rawVm of getVueChain(element)) {
             const candidate = getCandidate(rawVm, dialogText, dialogRoot);
             if (!candidate) continue;
@@ -1375,24 +1377,70 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         return matches[0]?.candidate || null;
       };
       let found = findExportComponent();
-      // Only the top SPX page opens the export menu. Child frames wait for the
-      // modal to appear and inspect it independently.
+      let exportActivationMethod = "";
       if (!found && isTopFrame) {
-        const existingDialogs = queryDeep(document, dialogSelector).filter(visible);
-        if (!existingDialogs.length) {
-          const exportButton = queryDeep(document, 'button,[role="button"]')
-            .filter(button => visible(button) && String(button.innerText || button.textContent || "").trim() === "Export")
-            .find(button => {
-              let el = button;
-              for (let i = 0; i < 7 && el; i++, el = el.parentElement) {
-                if (el.matches?.(".btns-container.btns-container-left.btns-container-wrapper")) return true;
-              }
-              return true;
-            });
-          if (!exportButton) throw new Error("SPX Assignment Task Export button was not found. Keep the Delivery Assignment → List page open.");
-          const dropdownVm = exportButton.__vue__?.$parent?.$parent;
-          if (typeof dropdownVm?.handleCommand === "function") dropdownVm.handleCommand("Export");
-          else exportButton.click();
+        const exportButton = queryDeep(document, 'button,[role="button"]')
+          .filter(button => visible(button) && String(button.innerText || button.textContent || "").replace(/\s+/g, " ").trim() === "Export")
+          .sort((a,b) => {
+            const score = el => (el.matches?.("button.ssc-customhook-group-btn") ? 20 : 0) +
+              (el.closest?.(".btns-container.btns-container-left.btns-container-wrapper") ? 10 : 0);
+            return score(b) - score(a);
+          })[0] || null;
+        if (!exportButton) {
+          throw new Error("SPX Assignment Task Export control was not found on the Delivery Assignment → List page.");
+        }
+
+        // SPX has shipped both Vue 2 and Vue 3 dropdowns. Vue 3 handlers live
+        // on the parent component proxy/setupState, not button.__vue__.
+        let commandHit = null;
+        for (const component of getVueChain(exportButton)) {
+          const owners = [
+            component, component?.proxy, component?.setupState, component?.ctx,
+            component?.exposed, component?.proxy?.$data, component?.$?.setupState
+          ];
+          for (const owner of owners) {
+            if (owner && typeof owner.handleCommand === "function") {
+              commandHit = { owner, fn: owner.handleCommand };
+              break;
+            }
+          }
+          if (commandHit) break;
+        }
+        if (commandHit) {
+          try {
+            commandHit.fn.call(commandHit.owner, "Export");
+            exportActivationMethod = "Vue dropdown command";
+          } catch (error) {
+            console.warn("SPX Vue Export dropdown command failed; trying the visible menu:", error);
+          }
+        }
+
+        // If the component method is not exposed, open the toolbar dropdown
+        // and click the actual Export menu option. Clicking the toolbar alone
+        // only opens the dropdown and does not submit the export command.
+        if (!exportActivationMethod) {
+          exportButton.click();
+          exportActivationMethod = "toolbar dropdown click";
+          const menuDeadline = Date.now() + 2500;
+          while (Date.now() < menuDeadline) {
+            const candidates = queryDeep(document,
+              '[role="menuitem"],[role="option"],.el-dropdown-menu__item,.ant-dropdown-menu-item,.ivu-dropdown-item,li,a,button,[role="button"],[class*="menu-item"],[class*="dropdown-item"]'
+            ).filter(visible).filter(item =>
+              item !== exportButton &&
+              String(item.innerText || item.textContent || item.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim() === "Export"
+            );
+            const menuItem = candidates.find(item =>
+              item.getAttribute?.("role") === "menuitem" ||
+              item.tagName === "LI" ||
+              /menu.*item|dropdown.*item/i.test(String(item.className || ""))
+            ) || candidates[0];
+            if (menuItem) {
+              menuItem.click();
+              exportActivationMethod = "visible Export menu option";
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         }
       }
 
@@ -1426,8 +1474,8 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
           visibleButtons ? "visible buttons: " + visibleButtons : "",
           visibleInputs ? "visible inputs: " + visibleInputs : ""
         ].filter(Boolean).join(" | ");
-        throw new Error("SPX Assignment Task Export dialog opened, but its internal form/export component could not be connected." +
-          (details ? " Detected dialog: " + details : " No visible export dialog controls were found. " + fallback));
+        throw new Error("SPX Assignment Task form was not detected after " + (exportActivationMethod || "checking the page") + "." +
+          (details ? " Detected dialog: " + details : " No export dialog container was detected. " + fallback));
       }
       const { vm: exportVm, form, createdKey, context } = found;
       if (!createdKey) {
