@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "SPX BRIDGE for BADOC HUB",
   "short_name": "SPX BRIDGE",
-  "version": "69.5.13",
+  "version": "69.5.14",
   "description": "Firefox SPX bridge with SPX exports, live Pickup Info, and parallel Sync All job support.",
   "permissions": [
     "cookies",
