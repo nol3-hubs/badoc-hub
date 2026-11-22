@@ -164,6 +164,7 @@
       "BADOC_START_PARCEL_SECONDARY_SYNC",
       "BADOC_START_FIRST_MILE_ORDERS_SYNC",
       "BADOC_START_FIRST_MILE_TASKS_SYNC",
+      "BADOC_START_ASSIGNMENT_TASK_EXPORT",
       "BADOC_LOOKUP_PICKUP_INFO",
       "BADOC_ABORT_SYNC",    ]);
     if (!supported.has(data.type)) return;
@@ -179,6 +180,7 @@
       const errorKind =         data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" :
         data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" ? "first-mile-orders" :
         data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC" ? "first-mile-tasks" :
+        data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT" ? "assignment-task" :
         data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
         data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
         data.type === "BADOC_START_RIDER_SYNC" ? "rider" : "parcel-inbound";
@@ -192,7 +194,7 @@
       const payload = { type: data.type };
       if (data.type === "BADOC_LOOKUP_PICKUP_INFO") { payload.reqId=String(data.reqId||""); payload.orderId=String(data.orderId||"").trim(); }
       if (data.type === "BADOC_START_POD_CHECKER_ASSIGNED_TODAY" || data.type === "BADOC_START_POD_CHECKER_ONHOLD") payload.requestId=String(data.requestId||"");
-      if (data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC") {
+      if (data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC" || data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
         if (data.selectedDate !== undefined) payload.selectedDate = String(data.selectedDate || "");
       }
       if (data.type === "BADOC_START_RIDER_SYNC") {
