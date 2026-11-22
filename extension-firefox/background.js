@@ -1118,14 +1118,11 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         for (const element of document.querySelectorAll('button,[role="button"],input,form')) {
           if (visible(element)) targets.add(element);
         }
-        const matches = [];
-        const seenComponents = new Set();
+        const matchesByComponent = new Map();
         for (const element of targets) {
           const dialogRoot = element.closest(dialogSelector) || element;
           const dialogText = String(dialogRoot.innerText || dialogRoot.textContent || "").slice(0, 3000);
           for (const rawVm of getVueChain(element)) {
-            if (seenComponents.has(rawVm)) continue;
-            seenComponents.add(rawVm);
             const candidate = getCandidate(rawVm, dialogText);
             if (!candidate) continue;
             const score =
@@ -1134,10 +1131,13 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
               (/assignment/i.test(dialogText) ? 4 : 0) +
               (/task/i.test(dialogText) ? 2 : 0) +
               (candidate.createdKey ? 3 : 0);
-            matches.push({ candidate, score });
+            const previous = matchesByComponent.get(rawVm);
+            if (!previous || score > previous.score) {
+              matchesByComponent.set(rawVm, { candidate, score });
+            }
           }
         }
-        matches.sort((a, b) => b.score - a.score);
+        const matches = [...matchesByComponent.values()].sort((a, b) => b.score - a.score);
         return matches[0]?.candidate || null;
       };
       let found = findExportComponent();
