@@ -64,7 +64,7 @@ jobs:
           index_path = Path("index.html")
           html = index_path.read_text(encoding="utf-8")
           assignment = "window.BADOC_BRIDGE_FILES=" + json.dumps(files, separators=(",", ":")) + ";"
-          pattern = re.compile(r"window\\.BADOC_BRIDGE_FILES\\s*=\\s*\\{.*?\\}\\s*;", re.DOTALL)
+          pattern = re.compile(r"window\.BADOC_BRIDGE_FILES\s*=\s*\{.*?\}\s*;", re.DOTALL)
           updated, count = pattern.subn(lambda _match: assignment, html, count=1)
           if count != 1:
               raise SystemExit(f"Expected one embedded bridge file map in index.html; found {count}.")
