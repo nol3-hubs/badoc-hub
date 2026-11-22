@@ -893,7 +893,10 @@ async function ensureToListRoute(tabId) {
 }
 
 async function invokeSpxNativeExport(tabId) {
-  const results = await extApi.scripting.executeScript({
+  let results = null;
+  let injectionError = null;
+  try {
+    results = await extApi.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
     func: async () => {
@@ -1192,24 +1195,13 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         return failure;
       }
     }
-  });
-  let result = null;
-  let injection = null;
-  let injectionError = null;
-  try {
-    const injectionResults = await extApi.scripting.executeScript({
-      target: { tabId },
-      world: "MAIN",
-      args: [selectedDate, requestId, resultStorageKey],
-      func: async (dateValue, exportRequestId, exportResultStorageKey) => {
-        return null;
-      }
-    });
-    injection = Array.isArray(injectionResults)
-      ? (injectionResults.find(item => item && item.frameId === 0) || injectionResults[0])
-      : null;
-    result = injection?.result || null;
   } catch (error) { injectionError = error; }
+  let result = null;
+  const injection = Array.isArray(results)
+    ? (results.find(item => item && item.frameId === 0) || results[0])
+    : null;
+  if (injection?.error) injectionError = new Error(String(injection.error.message || injection.error));
+  result = injection?.result || null;
   // The export callback writes its response to sessionStorage before SPX can
   // close/repaint its dialog. Read it back if executeScript lost its return.
   if (!result) {
