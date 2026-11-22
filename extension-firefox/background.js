@@ -893,10 +893,7 @@ async function ensureToListRoute(tabId) {
 }
 
 async function invokeSpxNativeExport(tabId) {
-  let results = null;
-  let injectionError = null;
-  try {
-    results = await extApi.scripting.executeScript({
+  const results = await extApi.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
     func: async () => {
