@@ -1027,6 +1027,181 @@ async function invokeSpxNativeExport(tabId) {
 }
 
 
+async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
+  const results = await extApi.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    args: [selectedDate],
+    func: async dateValue => {
+      const visible = el => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        if (!rect.width || !rect.height) return false;
+        const style = getComputedStyle(el);
+        return style.display !== "none" && style.visibility !== "hidden";
+      };
+      const route = String(location.hash || "");
+      if (!route.includes("assignment-task-new")) {
+        throw new Error("Open SPX Delivery Assignment → List before requesting the Assignment Task report.");
+      }
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || "")) ? String(dateValue) : new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit"
+      }).format(new Date());
+      const startText = date + " 00:00:00";
+      const endText = date + " 23:59:59";
+      const findExportComponent = () => {
+        const buttons = [...document.querySelectorAll("button")]
+          .filter(visible)
+          .filter(button => /^(confirm|export|ok|submit|matukoy)$/i.test(String(button.innerText || button.textContent || "").trim()));
+        for (const button of buttons) {
+          let vm = button.__vue__;
+          let depth = 0;
+          while (vm && depth++ < 12) {
+            const props = vm.$options?.propsData || {};
+            const form = vm.form || vm.$data?.form || vm.$props?.form;
+            const exportFunction = vm.exportFunction || props.exportFunction;
+            if (typeof vm.confirm === "function" && typeof exportFunction === "function" && form && typeof form === "object") {
+              const keys = Object.keys(form);
+              const createdKey = keys.find(key => {
+                const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+                return (normalized.includes("create") || normalized.includes("ctime")) &&
+                  (normalized.includes("time") || normalized.includes("date") || normalized.endsWith("at"));
+              });
+              const context = String(props.contextName || vm.contextName || "");
+              if (createdKey || /assignment|task/i.test(context)) return { vm, props, form, createdKey, context };
+            }
+            vm = vm.$parent;
+          }
+        }
+        return null;
+      };
+      let found = findExportComponent();
+      if (!found) {
+        const exportButton = [...document.querySelectorAll("button")]
+          .filter(button => visible(button) && String(button.innerText || button.textContent || "").trim() === "Export")
+          .find(button => {
+            let el = button;
+            for (let i = 0; i < 7 && el; i++, el = el.parentElement) {
+              if (el.matches?.(".btns-container.btns-container-left.btns-container-wrapper")) return true;
+            }
+            return true;
+          });
+        if (!exportButton) throw new Error("SPX Assignment Task Export button was not found. Keep the Delivery Assignment → List page open.");
+        const dropdownVm = exportButton.__vue__?.$parent?.$parent;
+        if (typeof dropdownVm?.handleCommand === "function") dropdownVm.handleCommand("Export");
+        else exportButton.click();
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+          found = findExportComponent();
+          if (found) break;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      if (!found) throw new Error("SPX Assignment Task Export dialog opened, but its Created Date form could not be identified.");
+      const { vm: exportVm, form, createdKey, context } = found;
+      if (!createdKey) throw new Error("SPX Assignment Task export form has no Created Date field. Detected fields: " + Object.keys(form).join(", "));
+      const existing = form[createdKey];
+      const buildDateValue = (text, sample) => {
+        if (sample instanceof Date) return new Date(text.replace(" ", "T"));
+        if (sample && typeof sample.clone === "function" && typeof sample.startOf === "function") {
+          const datePart = text.slice(0, 10), timePart = text.slice(11);
+          const parsed = new Date(datePart + "T" + timePart);
+          if (window.moment) return window.moment(parsed);
+          return sample.clone().set({
+            year: parsed.getFullYear(), month: parsed.getMonth(), date: parsed.getDate(),
+            hour: parsed.getHours(), minute: parsed.getMinutes(), second: parsed.getSeconds(), millisecond: 0
+          });
+        }
+        if (typeof sample === "number") {
+          const stamp = new Date(text.replace(" ", "T")).getTime();
+          return sample > 100000000000 ? stamp : Math.floor(stamp / 1000);
+        }
+        return text;
+      };
+      if (Array.isArray(existing)) {
+        form[createdKey] = [buildDateValue(startText, existing[0]), buildDateValue(endText, existing[1] ?? existing[0])];
+      } else if (existing && typeof existing === "object" && ("start" in existing || "end" in existing || "startTime" in existing || "endTime" in existing)) {
+        const clone = { ...existing };
+        const startKey = "start" in clone ? "start" : "startTime";
+        const endKey = "end" in clone ? "end" : "endTime";
+        clone[startKey] = buildDateValue(startText, clone[startKey]);
+        clone[endKey] = buildDateValue(endText, clone[endKey]);
+        form[createdKey] = clone;
+      } else form[createdKey] = [startText, endText];
+      try { exportVm.$forceUpdate?.(); } catch (_) {}
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const originalExportFunction = exportVm.exportFunction;
+      if (typeof originalExportFunction !== "function") throw new Error("SPX Assignment Task export callback is unavailable.");
+      let apiResult = null;
+      exportVm.exportFunction = async function(params) {
+        const response = await originalExportFunction.call(this, params);
+        const body = response?.data ?? response ?? null;
+        try { apiResult = JSON.parse(JSON.stringify(body)); }
+        catch (_) { apiResult = { retcode: body?.retcode, message: body?.message, data: { task_id: body?.data?.task_id, download_url: body?.data?.download_url } }; }
+        return response;
+      };
+      try { await exportVm.confirm(); }
+      finally { exportVm.exportFunction = originalExportFunction; }
+      const taskId = getTaskIdFromPageResponse(apiResult);
+      const data = apiResult?.data || apiResult || {};
+      return { taskId, apiResult, directUrl: String(data.download_url || data.url || "").trim(), createdDate: date, context };
+      function getTaskIdFromPageResponse(value, depth = 0) {
+        if (!value || depth > 5) return 0;
+        if (Array.isArray(value)) { for (const item of value) { const id = getTaskIdFromPageResponse(item, depth + 1); if (id) return id; } return 0; }
+        if (typeof value !== "object") return 0;
+        for (const key of ["task_id", "taskId", "export_task_id", "exportTaskId", "id"]) {
+          const id = Number(value[key] || 0); if (Number.isFinite(id) && id > 0) return id;
+        }
+        for (const key of ["task", "export_task", "exportTask", "data", "result"]) {
+          const id = getTaskIdFromPageResponse(value[key], depth + 1); if (id) return id;
+        }
+        return 0;
+      }
+    }
+  });
+  const result = results?.[0]?.result;
+  if (!result) throw new Error("SPX Assignment Task export returned no result.");
+  return result;
+}
+
+async function runAssignmentTaskExportJob(job) {
+  const port = job.ownerPort;
+  try {
+    job.startedAt = Date.now();
+    const tabs = await extApi.tabs.query({ url: SPX_ORIGIN + "/*" });
+    const tab = tabs.find(item => String(item.url || "").includes("/#/assignment-task-new/list")) ||
+      tabs.find(item => String(item.url || "").includes("assignment-task-new"));
+    if (!tab?.id) throw new Error("Open the authenticated SPX Delivery Assignment → List page, then retry Assignment Task in Reports.");
+    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+      message: "SPX Assignment Task page found. Starting its Export dialog for " + job.selectedDate + "…"
+    });
+    const result = await invokeSpxAssignmentTaskExport(tab.id, job.selectedDate);
+    let csv = null;
+    let taskId = Number(result.taskId || getExportTaskId(result.apiResult) || 0);
+    if (result.directUrl) csv = await downloadCsv(result.directUrl);
+    else if (taskId) {
+      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        message: "SPX accepted Assignment Task export " + taskId + ". Waiting for the CSV…"
+      });
+      const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
+      const completed = await waitForCompletion(taskId, waitStartSec, job);
+      const signedUrl = await getSignedDownloadUrl(taskId, String(completed?.source || "fms"));
+      csv = await downloadCsv(signedUrl);
+    } else throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");
+    const rowCount = Math.max(0, String(csv.text || "").split(/\r?\n/).filter(Boolean).length - 1);
+    if (!rowCount) throw new Error("SPX Assignment Task export completed but contained no data rows.");
+    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_CSV", {
+      taskId: taskId || "direct", selectedDate: job.selectedDate,
+      fileName: csv.fileName || "assignment_task.csv", csvText: csv.text, rowCount
+    });
+  } catch (error) {
+    console.error("BADOC SPX Assignment Task export failed:", error);
+    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", { message: error?.message || String(error), selectedDate: job.selectedDate });
+  } finally {
+    releaseActiveJob(job);
+  }
+}
+
 function setsEqual(a, b) {
   const aa = new Set((a || []).map(String));
   const bb = new Set((b || []).map(String));
@@ -1911,6 +2086,25 @@ extApi.runtime.onConnect.addListener(port => {
     if(type==="BADOC_LOOKUP_PICKUP_INFO"){void runBadocPickupInfoLookup(port,message);return;}
     const failBusy = (kind, text = "A BADOC SPX sync is already running.") =>
       sendToPort(port, "BADOC_SPX_ERROR", { message: text, ...(kind ? { kind } : {}) });
+
+    if (type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
+      const selectedDate = String(message?.selectedDate || "").trim();
+      const job = reserveActiveJob("assignment-task", port, {
+        selectedDate: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? selectedDate : phDateString(),
+        startedAt: Date.now()
+      });
+      if (!job) {
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", {
+          message: "Another SPX export is already running. Retry Assignment Task after it finishes."
+        });
+        return;
+      }
+      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        message: "Extension accepted the Assignment Task export request…"
+      });
+      void runAssignmentTaskExportJob(job);
+      return;
+    }
 
     if (type === "BADOC_START_PARCEL_SECONDARY_SYNC") {
       const job = reserveActiveJob("parcel-secondary", port);
