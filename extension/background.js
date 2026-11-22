@@ -1018,10 +1018,7 @@ async function ensureToListRoute(tabId) {
 }
 
 async function invokeSpxNativeExport(tabId) {
-  let results = null;
-  let injectionError = null;
-  try {
-    results = await chrome.scripting.executeScript({
+  const results = await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
     func: async () => {
