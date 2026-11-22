@@ -46,6 +46,31 @@ jobs:
           zip -X -qr "$GITHUB_WORKSPACE/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" .
           cd "$GITHUB_WORKSPACE"
           sha256sum "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" > "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
+      - name: Refresh embedded Chrome bridge in dashboard
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import re
+          from pathlib import Path
+
+          root = Path("extension")
+          files = {
+              path.relative_to(root).as_posix(): base64.b64encode(path.read_bytes()).decode("ascii")
+              for path in sorted(root.rglob("*"))
+              if path.is_file()
+          }
+          index_path = Path("index.html")
+          html = index_path.read_text(encoding="utf-8")
+          assignment = "window.BADOC_BRIDGE_FILES=" + json.dumps(files, separators=(",", ":")) + ";"
+          pattern = re.compile(r"window\\.BADOC_BRIDGE_FILES\\s*=\\s*\\{.*?\\}\\s*;", re.DOTALL)
+          updated, count = pattern.subn(lambda _match: assignment, html, count=1)
+          if count != 1:
+              raise SystemExit(f"Expected one embedded bridge file map in index.html; found {count}.")
+          index_path.write_text(updated, encoding="utf-8")
+          print(f"Embedded {len(files)} Chrome extension files into index.html.")
+
       - name: Publish ZIP in repository
         shell: bash
         run: |
@@ -54,7 +79,7 @@ jobs:
           cp "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256" downloads/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
+          git add index.html "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
           if ! git diff --cached --quiet; then
             git commit -m "Publish Chrome SPX Bridge ${PACKAGE_VERSION} package"
             for attempt in 1 2 3; do

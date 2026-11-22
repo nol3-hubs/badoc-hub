@@ -1159,7 +1159,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
   let injectionError = null;
   try {
     results = await chrome.scripting.executeScript({
-    target: { tabId },
+    target: { tabId, allFrames: true },
     world: "MAIN",
     args: [selectedDate, requestId, resultStorageKey],
     func: async (dateValue, exportRequestId, exportResultStorageKey) => {
@@ -1171,8 +1171,9 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         const style = getComputedStyle(el);
         return style.display !== "none" && style.visibility !== "hidden";
       };
+      const isTopFrame = window === window.top;
       const route = String(location.hash || "");
-      if (!route.includes("assignment-task-new")) {
+      if (isTopFrame && !route.includes("assignment-task-new")) {
         throw new Error("Open SPX Delivery Assignment → List before requesting the Assignment Task report.");
       }
       const date = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || "")) ? String(dateValue) : new Intl.DateTimeFormat("en-CA", {
@@ -1182,6 +1183,40 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       const endText = date + " 23:59:59";
 
       const dialogSelector = '[role="dialog"],[aria-modal="true"],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal,[class*="dialog"],[class*="modal"],[class*="Dialog"],[class*="Modal"]';
+      // SPX may render its export form inside an open shadow root or a child frame.
+      // The same helper is used in each injected frame, so we can discover the
+      // actual dialog controls without assuming a single top-level DOM tree.
+      const queryDeep = (root, selector) => {
+        const found = [];
+        const scopes = [root];
+        const seenScopes = new Set();
+        while (scopes.length) {
+          const scope = scopes.shift();
+          if (!scope || seenScopes.has(scope) || typeof scope.querySelectorAll !== "function") continue;
+          seenScopes.add(scope);
+          try {
+            found.push(...scope.querySelectorAll(selector));
+            for (const node of scope.querySelectorAll("*")) {
+              if (node.shadowRoot) scopes.push(node.shadowRoot);
+            }
+          } catch (_) {}
+        }
+        return [...new Set(found)];
+      };
+      const closestDialog = element => {
+        let current = element;
+        while (current) {
+          try {
+            if (current.matches?.(dialogSelector)) return current;
+          } catch (_) {}
+          if (current.parentElement) current = current.parentElement;
+          else {
+            const root = current.getRootNode?.();
+            current = root?.host || null;
+          }
+        }
+        return null;
+      };
       const getVueChain = element => {
         const queue = [element?.__vue__, element?.__vueParentComponent].filter(Boolean);
         const seen = new Set();
@@ -1306,20 +1341,20 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         };
       };
       const findExportComponent = () => {
-        const roots = [...document.querySelectorAll(dialogSelector)].filter(visible);
+        const roots = queryDeep(document, dialogSelector).filter(visible);
         const targets = new Set();
         for (const root of roots) {
           targets.add(root);
-          for (const child of root.querySelectorAll("*")) {
+          for (const child of queryDeep(root, "*")) {
             if (visible(child)) targets.add(child);
           }
         }
-        for (const element of document.querySelectorAll('button,[role="button"],input,form')) {
+        for (const element of queryDeep(document, 'button,[role="button"],input,form')) {
           if (visible(element)) targets.add(element);
         }
         const matchesByComponent = new Map();
         for (const element of targets) {
-          const dialogRoot = element.closest(dialogSelector) || element;
+          const dialogRoot = closestDialog(element) || element;
           const dialogText = String(dialogRoot.innerText || dialogRoot.textContent || "").slice(0, 3000);
           for (const rawVm of getVueChain(element)) {
             const candidate = getCandidate(rawVm, dialogText, dialogRoot);
@@ -1339,43 +1374,60 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         const matches = [...matchesByComponent.values()].sort((a, b) => b.score - a.score);
         return matches[0]?.candidate || null;
       };
-
       let found = findExportComponent();
-      if (!found) {
-        const exportButton = [...document.querySelectorAll("button")]
-          .filter(button => visible(button) && String(button.innerText || button.textContent || "").trim() === "Export")
-          .find(button => {
-            let el = button;
-            for (let i = 0; i < 7 && el; i++, el = el.parentElement) {
-              if (el.matches?.(".btns-container.btns-container-left.btns-container-wrapper")) return true;
-            }
-            return true;
-          });
-        if (!exportButton) throw new Error("SPX Assignment Task Export button was not found. Keep the Delivery Assignment → List page open.");
-        const dropdownVm = exportButton.__vue__?.$parent?.$parent;
-        if (typeof dropdownVm?.handleCommand === "function") dropdownVm.handleCommand("Export");
-        else exportButton.click();
-
-        const deadline = Date.now() + 8000;
-        while (Date.now() < deadline) {
-          found = findExportComponent();
-          if (found) break;
-          await new Promise(resolve => setTimeout(resolve, 100));
+      // Only the top SPX page opens the export menu. Child frames wait for the
+      // modal to appear and inspect it independently.
+      if (!found && isTopFrame) {
+        const existingDialogs = queryDeep(document, dialogSelector).filter(visible);
+        if (!existingDialogs.length) {
+          const exportButton = queryDeep(document, 'button,[role="button"]')
+            .filter(button => visible(button) && String(button.innerText || button.textContent || "").trim() === "Export")
+            .find(button => {
+              let el = button;
+              for (let i = 0; i < 7 && el; i++, el = el.parentElement) {
+                if (el.matches?.(".btns-container.btns-container-left.btns-container-wrapper")) return true;
+              }
+              return true;
+            });
+          if (!exportButton) throw new Error("SPX Assignment Task Export button was not found. Keep the Delivery Assignment → List page open.");
+          const dropdownVm = exportButton.__vue__?.$parent?.$parent;
+          if (typeof dropdownVm?.handleCommand === "function") dropdownVm.handleCommand("Export");
+          else exportButton.click();
         }
       }
+
+      // Poll in every frame because SPX may mount the modal in a child frame
+      // after the top-frame Export command has been dispatched.
+      const dialogDeadline = Date.now() + 8000;
+      while (!found && Date.now() < dialogDeadline) {
+        found = findExportComponent();
+        if (found) break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       if (!found) {
-        const details = [...document.querySelectorAll(dialogSelector)].filter(visible).map(root => {
-          const text = String(root.innerText || root.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180);
-          const inputs = [...root.querySelectorAll("input")].filter(visible).map(input =>
+        const details = queryDeep(document, dialogSelector).filter(visible).map(root => {
+          const text = String(root.innerText || root.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 180);
+          const inputs = queryDeep(root, "input,[role='textbox']").filter(visible).map(input =>
             input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.type || "input"
           ).slice(0, 8).join(", ");
-          const buttons = [...root.querySelectorAll("button,[role='button']")].filter(visible).map(button =>
-            String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
+          const buttons = queryDeep(root, "button,[role='button']").filter(visible).map(button =>
+            String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim()
           ).filter(Boolean).slice(0, 8).join(", ");
           return [text, inputs ? "inputs: " + inputs : "", buttons ? "buttons: " + buttons : ""].filter(Boolean).join(" | ");
         }).join(" || ").slice(0, 850);
+        const visibleButtons = queryDeep(document, 'button,[role="button"]').filter(visible).map(button =>
+          String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim()
+        ).filter(Boolean).slice(0, 10).join(", ");
+        const visibleInputs = queryDeep(document, "input,[role='textbox']").filter(visible).map(input =>
+          input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.type || "input"
+        ).slice(0, 8).join(", ");
+        const fallback = [
+          "frame: " + String(location.href || ""),
+          visibleButtons ? "visible buttons: " + visibleButtons : "",
+          visibleInputs ? "visible inputs: " + visibleInputs : ""
+        ].filter(Boolean).join(" | ");
         throw new Error("SPX Assignment Task Export dialog opened, but its internal form/export component could not be connected." +
-          (details ? " Detected dialog: " + details : " No visible export dialog controls were found."));
+          (details ? " Detected dialog: " + details : " No visible export dialog controls were found. " + fallback));
       }
       const { vm: exportVm, form, createdKey, context } = found;
       if (!createdKey) {
@@ -1528,9 +1580,16 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
   });
   } catch (error) { injectionError = error; }
   let result = null;
-  const injection = Array.isArray(results)
-    ? (results.find(item => item && item.frameId === 0) || results[0])
+  const successfulTopFrame = Array.isArray(results)
+    ? results.find(item => item && item.frameId === 0 && item.result?.__badocAssignmentTask && item.result.ok === true)
     : null;
+  const successfulFrame = Array.isArray(results)
+    ? results.find(item => item && item.result?.__badocAssignmentTask && item.result.ok === true)
+    : null;
+  const injection = successfulTopFrame || successfulFrame || (Array.isArray(results)
+    ? (results.find(item => item && item.frameId === 0) || results[0])
+    : null);
+  const injectionFrameId = Number.isInteger(injection?.frameId) ? injection.frameId : null;
   if (injection?.error) injectionError = new Error(String(injection.error.message || injection.error));
   result = injection?.result || null;
   // The export callback writes its response to sessionStorage before SPX can
@@ -1540,7 +1599,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
     while (Date.now() < readDeadline && !result) {
       try {
         const storedResults = await chrome.scripting.executeScript({
-          target: { tabId },
+          target: injectionFrameId === null ? { tabId } : { tabId, frameIds: [injectionFrameId] },
           world: "MAIN",
           args: [resultStorageKey],
           func: key => {
