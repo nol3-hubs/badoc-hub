@@ -1159,7 +1159,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
   let injectionError = null;
   try {
     results = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
+    target: { tabId },
     world: "MAIN",
     args: [selectedDate, requestId, resultStorageKey],
     func: async (dateValue, exportRequestId, exportResultStorageKey) => {
@@ -1377,9 +1377,51 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         return matches[0]?.candidate || null;
       };
       let found = findExportComponent();
-      let exportActivationMethod = "";
+      let exportActivationMethod = "manual trusted click";
+      let exportButton = null;
+      let hint = null;
+      let previousOutline = "";
+      let previousOutlineOffset = "";
+
+      const updateManualHint = (title, message) => {
+        if (!isTopFrame) return;
+        if (!hint) {
+          hint = document.createElement("div");
+          hint.id = "badocAssignmentTaskManualExportHint";
+          hint.style.cssText = "position:fixed;top:14px;right:18px;z-index:2147483647;width:min(390px,calc(100vw - 36px));padding:14px 16px;border:2px solid #0ea5e9;border-radius:12px;background:#071522;color:#eaf6ff;box-shadow:0 10px 35px rgba(0,0,0,.45);font:13px/1.45 Arial,sans-serif;box-sizing:border-box";
+          const heading = document.createElement("div");
+          heading.dataset.role = "heading";
+          heading.style.cssText = "font-weight:800;font-size:14px;margin-bottom:6px";
+          const body = document.createElement("div");
+          body.dataset.role = "body";
+          const close = document.createElement("button");
+          close.type = "button";
+          close.textContent = "×";
+          close.setAttribute("aria-label", "Close");
+          close.style.cssText = "position:absolute;top:5px;right:8px;border:0;background:transparent;color:#eaf6ff;font-size:22px;cursor:pointer";
+          close.addEventListener("click", () => hint?.remove());
+          hint.append(heading, body, close);
+          document.documentElement.appendChild(hint);
+        }
+        const heading = hint.querySelector('[data-role="heading"]');
+        const body = hint.querySelector('[data-role="body"]');
+        if (heading) heading.textContent = title;
+        if (body) body.textContent = message;
+      };
+
+      const findVisibleExportMenuItem = () => queryDeep(document,
+        '[role="menuitem"],[role="option"],.el-dropdown-menu__item,.ant-dropdown-menu-item,.ivu-dropdown-item,li,a,button,[role="button"],[class*="menu-item"],[class*="dropdown-item"]'
+      ).filter(visible).filter(item =>
+        item !== exportButton &&
+        String(item.innerText || item.textContent || item.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim() === "Export"
+      ).find(item =>
+        item.getAttribute?.("role") === "menuitem" ||
+        item.tagName === "LI" ||
+        /menu.*item|dropdown.*item/i.test(String(item.className || ""))
+      ) || null;
+
       if (!found && isTopFrame) {
-        const exportButton = queryDeep(document, 'button,[role="button"]')
+        exportButton = queryDeep(document, 'button,[role="button"]')
           .filter(button => visible(button) && String(button.innerText || button.textContent || "").replace(/\s+/g, " ").trim() === "Export")
           .sort((a,b) => {
             const score = el => (el.matches?.("button.ssc-customhook-group-btn") ? 20 : 0) +
@@ -1389,74 +1431,59 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         if (!exportButton) {
           throw new Error("SPX Assignment Task Export control was not found on the Delivery Assignment → List page.");
         }
-
-        // Invoke the actual visible control selected by the operator. On the
-        // current SPX page, calling Vue handleCommand("Export") returns without
-        // opening the export workflow. A DOM click runs its registered handler.
-        exportButton.click();
-        exportActivationMethod = "visible Export button click";
-
-        // If this control opens a dropdown, select its separate Export item.
-        // If it is a direct action, the export form appears after the click.
-        const menuDeadline = Date.now() + 2500;
-        while (Date.now() < menuDeadline) {
-          found = findExportComponent();
-          if (found) {
-            exportActivationMethod = "visible Export button click opened form";
-            break;
-          }
-          const candidates = queryDeep(document,
-            '[role="menuitem"],[role="option"],.el-dropdown-menu__item,.ant-dropdown-menu-item,.ivu-dropdown-item,li,a,button,[role="button"],[class*="menu-item"],[class*="dropdown-item"]'
-          ).filter(visible).filter(item =>
-            item !== exportButton &&
-            String(item.innerText || item.textContent || item.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim() === "Export"
-          );
-          const menuItem = candidates.find(item =>
-            item.getAttribute?.("role") === "menuitem" ||
-            item.tagName === "LI" ||
-            /menu.*item|dropdown.*item/i.test(String(item.className || ""))
-          ) || candidates[0];
-          if (menuItem) {
-            menuItem.click();
-            exportActivationMethod = "visible Export menu item click";
-            break;
-          }
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        previousOutline = exportButton.style.outline;
+        previousOutlineOffset = exportButton.style.outlineOffset;
+        exportButton.style.outline = "3px solid #0ea5e9";
+        exportButton.style.outlineOffset = "3px";
+        try { exportButton.scrollIntoView({ block: "center", inline: "nearest" }); } catch (_) {}
+        updateManualHint(
+          "Badoc Hub is waiting for SPX Export",
+          "Click the highlighted Export button in the SPX toolbar. If a dropdown appears, click its Export option. Badoc Hub will detect the form and continue with " + date + "."
+        );
       }
 
-      // Poll in every frame because SPX may mount the modal in a child frame
-      // after the top-frame Export command has been dispatched.
-      const dialogDeadline = Date.now() + 8000;
+      // SPX did not react to extension-generated clicks in the live page.
+      // Wait for a real user gesture rather than repeating a synthetic click.
+      const dialogDeadline = Date.now() + 60000;
+      let menuPromptShown = false;
       while (!found && Date.now() < dialogDeadline) {
         found = findExportComponent();
         if (found) break;
-        await new Promise(resolve => setTimeout(resolve, 100));
+        const menuItem = isTopFrame ? findVisibleExportMenuItem() : null;
+        if (menuItem && !menuPromptShown) {
+          menuPromptShown = true;
+          updateManualHint(
+            "SPX Export menu is open",
+            "Select Export in the open SPX menu. Badoc Hub will take over when the export form appears."
+          );
+        }
+        await new Promise(resolve => setTimeout(resolve, 180));
       }
+
+      if (exportButton) {
+        exportButton.style.outline = previousOutline;
+        exportButton.style.outlineOffset = previousOutlineOffset;
+      }
+      if (found && hint) hint.remove();
+
       if (!found) {
-        const details = queryDeep(document, dialogSelector).filter(visible).map(root => {
-          const text = String(root.innerText || root.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 180);
-          const inputs = queryDeep(root, "input,[role='textbox']").filter(visible).map(input =>
-            input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.type || "input"
-          ).slice(0, 8).join(", ");
-          const buttons = queryDeep(root, "button,[role='button']").filter(visible).map(button =>
-            String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim()
-          ).filter(Boolean).slice(0, 8).join(", ");
-          return [text, inputs ? "inputs: " + inputs : "", buttons ? "buttons: " + buttons : ""].filter(Boolean).join(" | ");
-        }).join(" || ").slice(0, 850);
+        if (hint) {
+          updateManualHint(
+            "SPX Export was not opened",
+            "The 60-second wait ended. Click Export in SPX, then retry Assignment Task in Badoc Hub."
+          );
+          setTimeout(() => hint?.remove(), 12000);
+        }
         const visibleButtons = queryDeep(document, 'button,[role="button"]').filter(visible).map(button =>
-          String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim()
-        ).filter(Boolean).slice(0, 10).join(", ");
+          String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
+        ).filter(Boolean).slice(0, 12).join(", ");
         const visibleInputs = queryDeep(document, "input,[role='textbox']").filter(visible).map(input =>
           input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.type || "input"
-        ).slice(0, 8).join(", ");
-        const fallback = [
-          "frame: " + String(location.href || ""),
-          visibleButtons ? "visible buttons: " + visibleButtons : "",
-          visibleInputs ? "visible inputs: " + visibleInputs : ""
-        ].filter(Boolean).join(" | ");
-        throw new Error("SPX Assignment Task form was not detected after " + (exportActivationMethod || "checking the page") + "." +
-          (details ? " Detected dialog: " + details : " No export dialog container was detected. " + fallback));
+        ).slice(0, 10).join(", ");
+        throw new Error(
+          "Timed out waiting for the SPX Export form. The SPX tab was focused; click the highlighted Export button and select Export in its menu if shown, then retry. " +
+          "Visible buttons: " + visibleButtons + " | visible inputs: " + visibleInputs
+        );
       }
       const { vm: exportVm, form, createdKey, context } = found;
       if (!createdKey) {
@@ -1674,8 +1701,14 @@ async function runAssignmentTaskExportJob(job) {
     if (!tab?.id) {
       throw new Error("Open the authenticated SPX Delivery Assignment → List page, then retry Assignment Task in Reports.");
     }
+    try {
+      await chrome.tabs.update(tab.id, { active: true });
+      if (Number.isInteger(tab.windowId)) await chrome.windows.update(tab.windowId, { focused: true });
+    } catch (focusError) {
+      console.warn("Could not focus SPX Assignment Task tab:", focusError);
+    }
     sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-      message: "SPX Assignment Task page found. Starting its Export dialog for " + job.selectedDate + "…"
+      message: "SPX tab is active. Click its highlighted Export button (and choose Export in the menu if shown); Badoc Hub will continue automatically."
     });
     const result = await invokeSpxAssignmentTaskExport(tab.id, job.selectedDate);
     let csv = null;
