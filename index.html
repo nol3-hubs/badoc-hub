@@ -7165,6 +7165,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       const status=String(value??"").trim();
       const key=fmNorm(status);
       if(key==="canceled"||key==="cancelled"||key.startsWith("cancelled"))return "Cancelled";
+      if(key==="accepted")return "Assigned";
       return ["inbounded","pickedup"].includes(key) ? "Picked - Up" : status;
     };
     const lines=[];
@@ -7182,19 +7183,21 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         const pointId=fmPickupPointId(task)||group.pickupPointId||"";
         const taskNumber=fmValue(task,["Pickup Task Number","Task Number","Pickup Task No","Task ID","task_id","pickup_task_number"]);
         const taskStatus=fmCombinedPickupStatus(group)||(group.isTaskOnlyInbounded?"Inbounded":"Onhold");
+        const isAcceptedTask=fmNorm(taskStatus)==="accepted";
+        const useDefaultPackaging=isAcceptedTask||group.isTaskOnlyOnhold===true;
         const cells=[
           sheetDate,             // Date (Asia/Manila)
           pointId,               // Pickup Point ID
           "",                    // No verified pickup Order ID in SPX Tasks export
-          group.isTaskOnlyOnhold ? "Non-bulky" : "", // Bulky type for Onhold task rows
+          useDefaultPackaging ? "Non-bulky" : "", // Bulky type
           "",                    // total_sc_weight
           "",                    // sc_max_item_max_dimension
           "",                    // sc_sum_item_height
           "",                    // packaging_type
           assignedRider,         // Assigned Rider from SPX Tasks
-          group.isTaskOnlyOnhold ? "TRUE" : "", // Printed AWB? checked for Onhold task rows
-          group.isTaskOnlyOnhold ? "Pouch - M" : "", // Packaging Material for Onhold task rows
-          (group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true) ? "" : sheetPickupStatus(taskStatus), // Preserve other standalone task statuses
+          useDefaultPackaging ? "TRUE" : "", // Printed AWB checkbox
+          useDefaultPackaging ? "Pouch - M" : "", // Packaging Material
+          (group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true) ? "" : sheetPickupStatus(taskStatus), // Preserve special Inbounded/OnHold behavior
           "",                    // 7PM STATUS
           "",                    // 9PM STATUS
           "",                    // EOD Status
