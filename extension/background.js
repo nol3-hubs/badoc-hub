@@ -1390,57 +1390,38 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
           throw new Error("SPX Assignment Task Export control was not found on the Delivery Assignment → List page.");
         }
 
-        // SPX has shipped both Vue 2 and Vue 3 dropdowns. Vue 3 handlers live
-        // on the parent component proxy/setupState, not button.__vue__.
-        let commandHit = null;
-        for (const component of getVueChain(exportButton)) {
-          const owners = [
-            component, component?.proxy, component?.setupState, component?.ctx,
-            component?.exposed, component?.proxy?.$data, component?.$?.setupState
-          ];
-          for (const owner of owners) {
-            if (owner && typeof owner.handleCommand === "function") {
-              commandHit = { owner, fn: owner.handleCommand };
-              break;
-            }
-          }
-          if (commandHit) break;
-        }
-        if (commandHit) {
-          try {
-            commandHit.fn.call(commandHit.owner, "Export");
-            exportActivationMethod = "Vue dropdown command";
-          } catch (error) {
-            console.warn("SPX Vue Export dropdown command failed; trying the visible menu:", error);
-          }
-        }
+        // Invoke the actual visible control selected by the operator. On the
+        // current SPX page, calling Vue handleCommand("Export") returns without
+        // opening the export workflow. A DOM click runs its registered handler.
+        exportButton.click();
+        exportActivationMethod = "visible Export button click";
 
-        // If the component method is not exposed, open the toolbar dropdown
-        // and click the actual Export menu option. Clicking the toolbar alone
-        // only opens the dropdown and does not submit the export command.
-        if (!exportActivationMethod) {
-          exportButton.click();
-          exportActivationMethod = "toolbar dropdown click";
-          const menuDeadline = Date.now() + 2500;
-          while (Date.now() < menuDeadline) {
-            const candidates = queryDeep(document,
-              '[role="menuitem"],[role="option"],.el-dropdown-menu__item,.ant-dropdown-menu-item,.ivu-dropdown-item,li,a,button,[role="button"],[class*="menu-item"],[class*="dropdown-item"]'
-            ).filter(visible).filter(item =>
-              item !== exportButton &&
-              String(item.innerText || item.textContent || item.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim() === "Export"
-            );
-            const menuItem = candidates.find(item =>
-              item.getAttribute?.("role") === "menuitem" ||
-              item.tagName === "LI" ||
-              /menu.*item|dropdown.*item/i.test(String(item.className || ""))
-            ) || candidates[0];
-            if (menuItem) {
-              menuItem.click();
-              exportActivationMethod = "visible Export menu option";
-              break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
+        // If this control opens a dropdown, select its separate Export item.
+        // If it is a direct action, the export form appears after the click.
+        const menuDeadline = Date.now() + 2500;
+        while (Date.now() < menuDeadline) {
+          found = findExportComponent();
+          if (found) {
+            exportActivationMethod = "visible Export button click opened form";
+            break;
           }
+          const candidates = queryDeep(document,
+            '[role="menuitem"],[role="option"],.el-dropdown-menu__item,.ant-dropdown-menu-item,.ivu-dropdown-item,li,a,button,[role="button"],[class*="menu-item"],[class*="dropdown-item"]'
+          ).filter(visible).filter(item =>
+            item !== exportButton &&
+            String(item.innerText || item.textContent || item.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim() === "Export"
+          );
+          const menuItem = candidates.find(item =>
+            item.getAttribute?.("role") === "menuitem" ||
+            item.tagName === "LI" ||
+            /menu.*item|dropdown.*item/i.test(String(item.className || ""))
+          ) || candidates[0];
+          if (menuItem) {
+            menuItem.click();
+            exportActivationMethod = "visible Export menu item click";
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
