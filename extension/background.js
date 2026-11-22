@@ -1332,7 +1332,7 @@ async function runAssignmentTaskExportJob(job) {
   const port = job.ownerPort;
   try {
     job.startedAt = Date.now();
-    const tabs = await chrome.tabs.query({ url: \`\${SPX_ORIGIN}/*\` });
+    const tabs = await chrome.tabs.query({ url: SPX_ORIGIN + "/*" });
     const tab = tabs.find(item => String(item.url || "").includes("/#/assignment-task-new/list")) ||
       tabs.find(item => String(item.url || "").includes("assignment-task-new"));
     if (!tab?.id) {
