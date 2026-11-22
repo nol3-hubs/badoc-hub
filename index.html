@@ -2944,11 +2944,11 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
             return String(row[key]).trim();
           }
         }
-        const key=Object.keys(row||{}).find(name=>/parcel\\s*status\\s*to|status\\s*to|to\\s*status/i.test(name));
+        const key=Object.keys(row||{}).find(name=>/parcel\s*status\s*to|status\s*to|to\s*status/i.test(name));
         return key?String(row[key]??"").trim():"";
       }
       function lmInventoryStatusKey(value){
-        return String(value??"").trim().toUpperCase().replace(/[_-]+/g," ").replace(/\\s+/g," ").trim();
+        return String(value??"").trim().toUpperCase().replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
       }
       async function copyLmHubInventory(button){
         // Wait for the saved Forward/Return status snapshot to finish restoring
@@ -2967,7 +2967,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           "DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD","LMHUB ON HOLD"
         ]);
         const filtered=planningRows.filter(row=>{
-          const station=String(row?.["Current Station"]??"").trim().replace(/\\s+/g," ").toUpperCase();
+          const station=String(row?.["Current Station"]??"").trim().replace(/\s+/g," ").toUpperCase();
           if(station!=="BADOC HUB")return false;
           return allowedStatuses.has(lmInventoryStatusKey(lmInventoryStatusValue(row)));
         });
