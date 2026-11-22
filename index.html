@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v122">
+<meta name="badoc-app-version" content="v123">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -3002,13 +3002,13 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           if(key==="lm-inventory"){
             await copyLmHubInventory(button);
           }else if(key==="fm-inventory"||key==="pickup-task-management"){
-            if(typeof fmCopyRawExportRows!=="function"){
-              setStatus(button,"Pickup menu copy source is not available on this page.","warn");
+            const pickupCopySource=window.__badocCopyPickupRawExportRows;
+            if(typeof pickupCopySource!=="function"){
+              setStatus(button,"Pickup menu copy source is unavailable. Refresh the dashboard and try again.","error");
             }else{
               const kind=key==="fm-inventory"?"orders":"tasks";
               const label=key==="fm-inventory"?"FM Hub Inventory":"Pickup Task Management";
-              await fmCopyRawExportRows(kind,button,label);
-            }
+              await pickupCopySource(kind,button,label);
           }else if(key==="assignment-task"||key==="batch-search-result"||key==="hourly"){
             const sources={
               "assignment-task":["__badocAssignmentTaskRows","#assignmentTaskTable"],
@@ -6920,6 +6920,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
     return copied;
   }
+  // Let the Reports tab reuse this exact Pickup menu export implementation.
+  window.__badocCopyPickupRawExportRows=fmCopyRawExportRows;
   $("copyFMHubInventory")?.addEventListener("click",event=>fmCopyRawExportRows("orders",event.currentTarget,"FM Hub Inventory"));
   $("copyPickupTaskManagement")?.addEventListener("click",event=>fmCopyRawExportRows("tasks",event.currentTarget,"Pickup Task Management"));
   function renderFirstMileCombined(){
