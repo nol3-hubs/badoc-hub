@@ -2787,14 +2787,90 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
   </div>
 </section>
 <section id="reports" class="page">
-  <div class="card" style="padding:20px;min-height:180px">
+  <div class="card reports-workspace" style="padding:20px;min-height:220px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <span aria-hidden="true" style="font-size:22px;line-height:1">▤</span>
       <h2 style="margin:0">Reports</h2>
     </div>
-    <p style="margin:0;color:var(--muted)">This is the Reports workspace. Report types and filters can be added here.</p>
-    <div class="empty" style="margin-top:18px">No reports available yet.</div>
+    <p style="margin:0;color:var(--muted)">Select a report category.</p>
+
+    <style id="badoc-reports-tabs-style">
+      #reports .reports-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 14px;padding:0 0 12px;border-bottom:1px solid var(--line,#334155)}
+      #reports .reports-tab{appearance:none;border:1px solid var(--line,#334155);border-radius:9px;background:var(--panel,#111827);color:var(--muted,#94a3b8);padding:10px 14px;min-height:40px;font:700 12px/1.2 inherit;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}
+      #reports .reports-tab:hover{border-color:var(--blue,#38bdf8);color:var(--text,#f8fafc)}
+      #reports .reports-tab[aria-selected="true"]{background:var(--blue,#1683ff);border-color:var(--blue,#1683ff);color:#fff}
+      #reports .reports-tab:focus-visible{outline:2px solid var(--blue,#38bdf8);outline-offset:2px}
+      #reports .reports-panel{padding:16px;border:1px solid var(--line,#334155);border-radius:10px;background:var(--panel,#111827);min-height:112px}
+      #reports .reports-panel h3{margin:0 0 6px;font-size:15px}
+      #reports .reports-panel p{margin:0;color:var(--muted,#94a3b8);font-size:12px}
+    </style>
+
+    <div class="reports-tabs" role="tablist" aria-label="Report categories">
+      <button type="button" class="reports-tab" id="report-tab-mnl3" role="tab" aria-selected="true" aria-controls="report-panel-mnl3" tabindex="0" data-report-tab="mnl3">MNL3 Dashboard</button>
+      <button type="button" class="reports-tab" id="report-tab-hourly" role="tab" aria-selected="false" aria-controls="report-panel-hourly" tabindex="-1" data-report-tab="hourly">Hourly</button>
+      <button type="button" class="reports-tab" id="report-tab-pickup" role="tab" aria-selected="false" aria-controls="report-panel-pickup" tabindex="-1" data-report-tab="pickup">Pickup</button>
+      <button type="button" class="reports-tab" id="report-tab-performance" role="tab" aria-selected="false" aria-controls="report-panel-performance" tabindex="-1" data-report-tab="performance">Performance</button>
+      <button type="button" class="reports-tab" id="report-tab-consolidated" role="tab" aria-selected="false" aria-controls="report-panel-consolidated" tabindex="-1" data-report-tab="consolidated">Consolidated</button>
+    </div>
+
+    <div id="report-panel-mnl3" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-mnl3" data-report-panel="mnl3">
+      <h3>MNL3 Dashboard</h3>
+      <p>This report section is ready for its content.</p>
+    </div>
+    <div id="report-panel-hourly" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-hourly" data-report-panel="hourly" hidden>
+      <h3>Hourly</h3>
+      <p>This report section is ready for its content.</p>
+    </div>
+    <div id="report-panel-pickup" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-pickup" data-report-panel="pickup" hidden>
+      <h3>Pickup</h3>
+      <p>This report section is ready for its content.</p>
+    </div>
+    <div id="report-panel-performance" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-performance" data-report-panel="performance" hidden>
+      <h3>Performance</h3>
+      <p>This report section is ready for its content.</p>
+    </div>
+    <div id="report-panel-consolidated" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-consolidated" data-report-panel="consolidated" hidden>
+      <h3>Consolidated</h3>
+      <p>This report section is ready for its content.</p>
+    </div>
   </div>
+  <script id="badoc-reports-tabs-runtime">
+    (function(){
+      const root=document.getElementById("reports");
+      if(!root||root.dataset.reportsTabsBound==="1")return;
+      root.dataset.reportsTabsBound="1";
+      const tabs=Array.from(root.querySelectorAll("[data-report-tab]"));
+      const panels=Array.from(root.querySelectorAll("[data-report-panel]"));
+      function activate(key,moveFocus){
+        const tab=tabs.find(item=>item.dataset.reportTab===key);
+        if(!tab)return;
+        tabs.forEach(item=>{
+          const active=item===tab;
+          item.setAttribute("aria-selected",String(active));
+          item.tabIndex=active?0:-1;
+        });
+        panels.forEach(panel=>{panel.hidden=panel.dataset.reportPanel!==key;});
+        if(moveFocus)tab.focus();
+      }
+      root.addEventListener("click",event=>{
+        const tab=event.target.closest("[data-report-tab]");
+        if(tab&&root.contains(tab))activate(tab.dataset.reportTab,false);
+      });
+      root.addEventListener("keydown",event=>{
+        const current=event.target.closest("[data-report-tab]");
+        if(!current)return;
+        const index=tabs.indexOf(current);
+        let next=index;
+        if(event.key==="ArrowRight")next=(index+1)%tabs.length;
+        else if(event.key==="ArrowLeft")next=(index-1+tabs.length)%tabs.length;
+        else if(event.key==="Home")next=0;
+        else if(event.key==="End")next=tabs.length-1;
+        else return;
+        event.preventDefault();
+        activate(tabs[next].dataset.reportTab,true);
+      });
+    })();
+  </script>
 </section>
 <section id="kpi" class="page">
   <div class="kpi-sheet" id="kpiLiveSheet">
