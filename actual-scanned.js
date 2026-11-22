@@ -11,6 +11,21 @@ function value(row,names){
   }
   return "";
 }
+function trackingNumber(row){
+  // Prefer the shared SPX normalizer, but keep the row usable when that
+  // helper is unavailable or a particular export uses a different header.
+  if(typeof window.spxTN==="function"){
+    try{
+      const normalized=String(window.spxTN(row)||"").trim();
+      if(normalized)return normalized;
+    }catch(_){}
+  }
+  return value(row,[
+    "SPX TN","SLS Tracking Number","SPX Tracking Number","Tracking Number",
+    "Tracking No","Tracking No.","SPX Tracking No","SPX Tracking No.",
+    "Shipment Tracking Number","Waybill Number","AWB"
+  ]);
+}
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function vehicle(v){
   const k=key(v);
@@ -65,15 +80,31 @@ function assignmentMap(roster){
 }
 function build(){
   const source=typeof getParcelCountRows==="function"?getParcelCountRows():(typeof current!=="undefined"&&Array.isArray(current?.rows)?current.rows:[]);
+  const sourceRows=Array.isArray(source)?source:[];
   const roster=rosterIndexes(),assignments=assignmentMap(roster);
-  const holdKeys=window.__badocOnholdTnKeys instanceof Set?window.__badocOnholdTnKeys:new Set();
+  // Use the exact same OnHold population as Dashboard / Planning Board:
+  // status + Pick Up Time cutoff, current export precedence, exceptions and TN dedup.
+  // Do not infer OnHold from raw status text in this rider view.
+  const sharedOnholdRows=typeof window.__badocGetOnholdRows==="function"
+    ?window.__badocGetOnholdRows(sourceRows,false):[];
+  const onholdRowsByTn=new Map();
+  (Array.isArray(sharedOnholdRows)?sharedOnholdRows:[]).forEach(row=>{
+    const tn=trackingNumber(row);
+    const tnKey=key(tn);
+    if(tnKey&&!onholdRowsByTn.has(tnKey))onholdRowsByTn.set(tnKey,row);
+  });
   const seen=new Set(),records=[];
-  (Array.isArray(source)?source:[]).forEach(row=>{
-    const tn=typeof window.spxTN==="function"?String(window.spxTN(row)||"").trim():"";
+  sourceRows.forEach(row=>{
+    const tn=trackingNumber(row);
     const tnKey=key(tn);if(!tnKey||seen.has(tnKey))return;seen.add(tnKey);
     // Deliberately exclude "Assigned Rider" fields: they describe the plan, not who scanned the parcel.
-    const driverId=value(row,["Driver ID","Rider ID","Delivery Driver ID","Delivery Rider ID","Last Mile Driver ID","LM Driver ID","Scan Driver ID","Actual Driver ID","Courier ID"]);
-    const sourceName=value(row,["Driver Name","Rider Name","Delivery Driver Name","Delivery Rider Name","Last Mile Driver Name","LM Driver Name","Scan Driver Name","Actual Driver Name","Courier Name","Driver","Rider"]);
+    const rawDriverId=value(row,["Driver ID","Rider ID","Delivery Driver ID","Delivery Rider ID","Last Mile Driver ID","LM Driver ID","Scan Driver ID","Actual Driver ID","Courier ID"]);
+    // SPX uses 0 / blank-like values as an unassigned driver placeholder.
+    // Never turn that placeholder into a real "Driver 0" rider.
+    const invalidDriverValue=v=>/^(?:0+|N\/?A|NONE|NULL|UNKNOWN|UNASSIGNED|-)$/i.test(String(v||"").trim());
+    const driverId=invalidDriverValue(rawDriverId)?"":rawDriverId;
+    const rawSourceName=value(row,["Driver Name","Rider Name","Delivery Driver Name","Delivery Rider Name","Last Mile Driver Name","LM Driver Name","Scan Driver Name","Actual Driver Name","Courier Name","Driver","Rider"]);
+    const sourceName=invalidDriverValue(rawSourceName)?"":rawSourceName;
     const rider=(driverId&&roster.byId.get(key(driverId)))||(sourceName&&roster.byName.get(key(sourceName)))||null;
     const actualId=driverId||String(rider?.["Driver ID"]||"").trim();
     const actualName=(driverId&&rider?String(rider["Driver Name"]||"").trim():"")||sourceName||String(rider?.["Driver Name"]||"").trim();
@@ -90,13 +121,20 @@ function build(){
       comparison=actualId&&assignedId?(key(actualId)===key(assignedId)?"Match":"Mismatch"):(key(actualName)===key(assigned)?"Match":"Mismatch");
     }
     const status=value(row,["Parcel Status To","Status To","TO Status","To Status","Status To (Current)","Status","Parcel Status","Delivery Status","Current Status"])||"Unknown";
-    const statusKey=key(status),onhold=(tn&&(holdKeys.has(typeof window.badocOnholdKey==="function"?window.badocOnholdKey(tn):tn)))||statusKey.includes("ONHOLD")||statusKey.includes("ON HOLD");
+    const statusNorm=norm(status).replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+    // OnHold alone comes from the canonical Dashboard / Planning Board classifier.
+    const onhold=onholdRowsByTn.has(tnKey);
+    const displayStatus=onhold?"OnHold":status;
+    const activityStatusKey=onhold?"ONHOLD":key(status);
+    const delivered=!onhold&&statusNorm==="DELIVERED";
+    const delivering=!onhold&&statusNorm==="DELIVERING";
     records.push({
       row:row,tn:tn,orderId:value(row,["Order ID","Shopee Order SN","Order SN","Order Number"]),
       town:town,townKey:norm(town),actualId:actualId,actualName:actualName||(actualId?"Driver "+actualId:"Unidentified"),
       riderKey:riderKey,hasScanner:hasScanner,vehicle:vehicleType,assigned:assigned,
-      comparison:comparison,status:status,onhold:!!onhold,delivered:statusKey.includes("DELIVERED"),
-      date:activityDate(row,statusKey)
+      comparison:comparison,status:displayStatus,onhold:onhold,delivered:delivered,
+      delivering:delivering,area:String(row?._area||"").trim().toUpperCase(),
+      date:activityDate(onhold?(onholdRowsByTn.get(tnKey)||row):row,activityStatusKey)
     });
   });
   return {records:records,sourceCount:Array.isArray(source)?source.length:0};
@@ -217,6 +255,9 @@ function render(){
   }));
 }
 window.__badocRenderActualScannedByRiders=render;
+// Shared read-only data contract for EOD Data: use the exact same deduplicated
+// Parcel Count rows and actual scanner attribution as the Actual Scanned page.
+window.__badocGetActualScannedByRidersData=function(){return build()};
 window.addEventListener("badoc:parcel-data-updated",function(){if(byId("actualScannedByRiders")?.classList.contains("active"))render()});
 document.addEventListener("input",function(e){if(e.target?.closest?.("#actualScannedByRiders .actual-scan-filters"))render()});
 document.addEventListener("change",function(e){if(e.target?.closest?.("#actualScannedByRiders .actual-scan-filters"))render()});

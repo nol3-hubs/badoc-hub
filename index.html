@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v113">
+<meta name="badoc-app-version" content="v119">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -531,13 +531,7 @@ window.BADOC_SHARED_CONFIG = { url: window.BADOC_FIREBASE_CONFIG.databaseURL, ke
 })();
 
 </script>
-<script>
-/* Daily History Google Sheets Web App URL */
-window.BADOC_DAILY_HISTORY_SPX_EXPORT_URL = "https://script.google.com/a/macros/spxexpress.com/s/AKfycbxRMaXmJA_Du7wrSqDUmt2xMflAzLa7YpPCY5n74XQod1lApgXPjOJul2nJy_ld4eawWA/exec";
-// Daily History snapshots and CFR Daily Summary stay in shared cloud only.
-// Their optional Google Sheets mirror is intentionally disabled.
-window.BADOC_DAILY_HISTORY_SPX_EXPORT_MIRROR_ENABLED = false;
-</script>
+
 
 <script id="v2-config">
 window.DASHBOARD_V2 = {
@@ -3691,7 +3685,7 @@ async function importParcelCsvText(text,fileName="export_forward_order.csv",sour
     if(!k)return;
     if(seen.has(k)){
       const idx=uniqueRows.findIndex(x=>spxTN(x)===k);
-      if(idx>=0)uniqueRows[idx]=r;
+      if(idx>=0)uniqueRows[idx]=mergeParcelRowsPreservingPickup(uniqueRows[idx],r);
       updated++;dupes++;return;
     }
     if(existingByKey.has(k)){updated++;dupes++;}else added++;
@@ -4002,13 +3996,40 @@ setExemptionCloudState("pending","Connecting to shared exemption list…");
 // Start polling immediately so a temporary startup/network failure is retried.
 startExemptionFallbackPoll();
 setTimeout(()=>syncExceptionsFromCloud(),500);
+function badocPickupTimeValue(row){
+  if(!row||typeof row!=="object")return "";
+  const keys=Object.keys(row);
+  const normalizeHeader=value=>String(value??"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const aliases=[
+    "Pick Up Time","Pick up time","PICK UP TIME","Pickup Time",
+    "First Pick Up Time","First Pickup Time","At Pick Up Time",
+    "Pickup Date Time","Pickup Datetime","Pickup Timestamp","Scanned Time","scannedTime"
+  ];
+  for(const alias of aliases){
+    const wanted=normalizeHeader(alias);
+    const key=keys.find(candidate=>normalizeHeader(candidate)===wanted&&String(row[candidate]??"").trim()!=="");
+    if(key)return String(row[key]).trim();
+  }
+  const key=keys.find(candidate=>normalizeHeader(candidate).includes("pickuptime")&&String(row[candidate]??"").trim()!=="");
+  return key?String(row[key]).trim():"";
+}
+function mergeParcelRowsPreservingPickup(previous,incoming){
+  const merged={...(previous||{}),...(incoming||{})};
+  // Delivery-status exports do not always include the first Pick Up Time.
+  // Keep the latest non-empty pickup timestamp already available for this TN.
+  const pickup=badocPickupTimeValue(incoming)||badocPickupTimeValue(previous);
+  if(pickup)merged["Pick Up Time"]=pickup;
+  return merged;
+}
 function mergeRowsUnique(rows){
   const map=new Map();
   for(const r of rows){
     const k=spxTN(r);
     // Parcel Count is keyed by SPX TN. Rows without an SPX TN are not parcels
     // and must not create a new count on every upload.
-    if(k) map.set(k,r);
+    if(!k)continue;
+    const previous=map.get(k);
+    map.set(k,previous?mergeParcelRowsPreservingPickup(previous,r):r);
   }
   return [...map.values()];
 }
@@ -5814,7 +5835,7 @@ function removeTown(key,i){if(role!=="Admin")return alert("Admin only.");if(conf
 function loadBatch(i){current=batches[i];render();showPage("dashboard")}
 async function deleteBatch(i){if(role!=="Admin")return alert("Admin only.");if(confirm("Delete this upload permanently from this browser?")){batches.splice(i,1);current=mergeAllBatches();saveTownSettings();render()}}
 function download(name,text,type="text/csv"){let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-function csv(rows){if(!rows.length)return "";let keys=Object.keys(rows[0]).filter(k=>k!="_area");let q=x=>`"${String(x??"").replace(/"/g,'""')}"`;return [keys.map(q).join(","),...rows.map(r=>keys.map(k=>q(r[k])).join(","))].join("\n")}
+function csv(rows){if(!rows.length)return "";let keys=[...new Set(rows.flatMap(r=>Object.keys(r||{})))].filter(k=>k!="_area");let q=x=>`"${String(x??"").replace(/"/g,'""')}"`;return [keys.map(q).join(","),...rows.map(r=>keys.map(k=>q(r?.[k])).join(","))].join("\n")}
 let ridersData=[];
 const ridersFields=["Driver ID","Driver Name","Person ID","Gender","LSP Driver","Vehicle Type","Service Point Name","License Type","License Number","Plate Number","Pickup Station ID","Line Haul Station ID","Delivery Station ID","Return Station ID","Sort Code List","Create Time","Modify Time","License Expiry Date","Contract Type","Employee ID","Distance Coverage","Route Expertise","Default Rate","New Rate","Joined Date","Last Date","Effective Start","ShopeePay Account","Agency","Driver Group","Pickup Station Shift ID","Line Haul Station Shift ID","Delivery Station Shift ID","Return Station Shift ID","LSP Status","SPX Status","Suspension Reason","Terminated Reason","Trip Handover Level","Collect SF/COD channel","Settle SF/COD channel","Feeder Mode","AT Level Handover","Allow Feeders to Self-trigger Transferred Status","Zone","Parcel Transfer","Linked Account With Shopee","Calculated Rating","Number of Rating Received","Push Driver Photo To Frontend","(Driver-Station) Allow Driver to perform Bulk Handover","(Driver-Driver) Allow Driver to perform Bulk Handover","Blocklist","Pickup sub-function(use ',' as separator)"];
 function parseCsvText(text){
@@ -7303,7 +7324,11 @@ $("clearRecordFilters").onclick=async()=>{
 $("misSearch").addEventListener("input",renderMis);
 function exportValidFiltered(){
   if(!current){alert("There is no current upload to export.");return;}
-  const all=Array.isArray(current.valid)?current.valid:[];
+  // Export the same merged parcel population used in Parcel Records, including
+  // the latest Assigned Today SPX Forward/Return status and pickup-time fields.
+  const all=typeof getParcelRecordRows==="function"
+    ?getParcelRecordRows()
+    :(Array.isArray(current.valid)?current.valid:[]);
   const filtered=Array.isArray(window.__parcelRecordFiltered)?window.__parcelRecordFiltered:all;
   const active=recordFiltersActive();
   const rows=active?filtered:all;
@@ -11152,7 +11177,7 @@ window.updateOperationProgress=function(){
   };
   const cfr1IsScannedStatus=r=>{
     if(r?.ruleBUnscanned===true)return false;
-    const statusScanned=["DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD"].includes(cfr1Status(r));
+    const statusScanned=["DELIVERING","LMHUB DELIVERING","DELIVERED","LMHUB DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD","LMHUB ON HOLD"].includes(cfr1Status(r));
     return statusScanned || cfr1PickupIsToday(r);
   };
 
@@ -11231,15 +11256,96 @@ window.updateOperationProgress=function(){
     return norm(entry?.[1]??"");
   };
 
-  const cfr1Rows=(Array.isArray(batches)?batches:[]).flatMap(b=>
-    Array.isArray(b?.rows)?b.rows.map((r,i)=>({r,btime:Number(b?.time||0),ri:i})):[]
+  const cfr1BatchRows=(Array.isArray(batches)?batches:[]).flatMap(b=>
+    Array.isArray(b?.rows)?b.rows.map((r,i)=>({r,btime:Number(b?.time||0),ri:i,source:"uploaded-batch"})):[]
   );
+  // Assigned Today Forward/Return exports are persisted outside the parcel
+  // upload batches. Include their merged rows in CFR1 eligibility candidates.
+  // Rule A still requires Badoc Hub, an allowed town, and Current Station
+  // Received Time at/before 4:00 AM Manila time. Rule B still requires its
+  // original pre-4:00 AM uploaded-batch timestamp.
+  const cfr1DashboardRows=typeof getParcelCountRows==="function"
+    ?getParcelCountRows({includeExemptions:true})
+    :(Array.isArray(current?.rows)?current.rows:[]);
+  const cfr1Rows=[
+    ...cfr1BatchRows,
+    ...cfr1DashboardRows.map((r,i)=>({r,btime:0,ri:i,source:"dashboard-merged"}))
+  ];
   const latestByKey=new Map();
+  const cfr1PickupTimeByKey=new Map();
+  // Existing CFR1 ledger entries may be keyed by Order ID, while newer SPX
+  // delivery exports can identify the same parcel by SLS Tracking Number.
+  // Index each source row under BOTH identifiers so a current status is never
+  // missed simply because one export omitted the other identifier.
+  const cfr1LookupKeys=r=>{
+    const keys=[];
+    const oid=exceptionKey(r?.["Order ID"]);
+    const tn=tnKey(spxTN(r));
+    if(oid)keys.push("OID:"+oid);
+    if(tn)keys.push("TN:"+tn);
+    return [...new Set(keys)];
+  };
   cfr1Rows.forEach(x=>{
-    const key=cfr1Key(x.r); if(!key)return;
-    const prev=latestByKey.get(key);
-    if(!prev || x.btime>prev.btime || (x.btime===prev.btime && x.ri>prev.ri)) latestByKey.set(key,x);
+    const keys=cfr1LookupKeys(x.r); if(!keys.length)return;
+    const pickup=cfr1PickUpTime(x.r);
+    keys.forEach(key=>{
+      const prev=latestByKey.get(key);
+      if(!prev || x.btime>prev.btime || (x.btime===prev.btime && x.ri>prev.ri)) latestByKey.set(key,x);
+      // Keep the newest non-empty Pick Up Time across all source uploads.
+      // A newer delivery-status export may omit that field entirely.
+      const prevPickup=cfr1PickupTimeByKey.get(key);
+      if(pickup && (!prevPickup || x.btime>prevPickup.btime || (x.btime===prevPickup.btime && x.ri>prevPickup.ri))){
+        cfr1PickupTimeByKey.set(key,{value:pickup,btime:x.btime,ri:x.ri});
+      }
+    });
   });
+  // The dashboard's Combined uploads row set is the same merged parcel
+  // population used by its live status cards. Overlay these rows as the
+  // authoritative current-state source for EXISTING CFR1 members. This does
+  // not add members to the frozen 7 AM ledger; it only refreshes their status
+  // and retains any pickup timestamp present on the merged parcel row.
+  // Use the exact merged operational population used by Dashboard and
+  // Planning Board. getParcelCountRows() overlays the latest Assigned Today
+  // Forward/Return statuses onto the original Parcel Count records. Reading
+  // current.rows alone misses those external status updates.
+  cfr1DashboardRows.forEach((r,ri)=>{
+    const keys=cfr1LookupKeys(r); if(!keys.length)return;
+    const live={r,btime:Number.MAX_SAFE_INTEGER,ri};
+    const pickup=cfr1PickUpTime(r);
+    keys.forEach(key=>{
+      latestByKey.set(key,live);
+      if(pickup)cfr1PickupTimeByKey.set(key,{value:pickup,btime:Number.MAX_SAFE_INTEGER,ri});
+    });
+  });
+  // Resolve a saved CFR1 record using its original key plus both identifiers.
+  // This is essential when the original record had an Order ID but a newer
+  // SPX delivery export matches only by tracking number (or vice versa).
+  const cfr1LatestForRecord=rec=>{
+    const candidates=[
+      rec?.tn?"TN:"+tnKey(rec.tn):"",
+      rec?.orderId?"OID:"+exceptionKey(rec.orderId):"",
+      String(rec?.key||"")
+    ].filter(Boolean);
+    let best=null;
+    [...new Set(candidates)].forEach(candidateKey=>{
+      const candidate=latestByKey.get(candidateKey);
+      // On equal source recency, prefer the exact tracking-number match.
+      if(candidate && (!best || candidate.btime>best.btime)) best=candidate;
+    });
+    return best;
+  };
+  const cfr1PickupForRecord=rec=>{
+    const candidates=[
+      String(rec?.key||""),
+      rec?.orderId?"OID:"+exceptionKey(rec.orderId):"",
+      rec?.tn?"TN:"+tnKey(rec.tn):""
+    ].filter(Boolean);
+    for(const candidateKey of [...new Set(candidates)]){
+      const pickup=cfr1PickupTimeByKey.get(candidateKey)?.value;
+      if(pickup)return pickup;
+    }
+    return "";
+  };
 
   // Do not delete existing CFR1 members solely because their received date
   // is not today. Rule A uses the existing 4:00 AM cutoff without a same-day
@@ -11309,7 +11415,7 @@ window.updateOperationProgress=function(){
         latestBatchTime:x.btime,
         latestRowTime:x.btime,
         status:String(statusTo(r)||r?.["Status"]||"").trim(),
-        scannedTime:isRuleB?"":cfr1PickUpTime(r),
+        scannedTime:isRuleB?"":(cfr1PickUpTime(r)||cfr1PickupTimeByKey.get(key)?.value||""),
         noTownFilter:isRuleB,
         ruleBUnscanned:isRuleB
       };
@@ -11327,10 +11433,19 @@ window.updateOperationProgress=function(){
   // (the daily CFR1 total membership). Statuses remain live after 7:00 AM:
   // later SPX imports must update each admitted parcel's current status and
   // its SCANNED / UNSCANNED classification without adding new parcel IDs.
+  let cfr1LiveStatusRefreshMatches=0;
+  const cfr1LiveStatusRefreshSamples=[];
   Object.keys(cfr1Ledger.records).forEach(key=>{
     const rec=cfr1Ledger.records[key];
-    const latest=latestByKey.get(key);
+    const latest=cfr1LatestForRecord(rec);
     if(latest){
+      cfr1LiveStatusRefreshMatches++;
+      if(cfr1LiveStatusRefreshSamples.length<12)cfr1LiveStatusRefreshSamples.push({
+        orderId:String(rec.orderId||""),
+        tn:String(rec.tn||""),
+        status:String(statusTo(latest.r)||latest.r?.["Status"]||""),
+        source:latest.btime===Number.MAX_SAFE_INTEGER?"dashboard-merged":"uploaded-batch"
+      });
       const r=latest.r;
       // Keep the latest parcel data live even when it is listed in Exemptions.
       // Exemptions only add an INTERCEPT cue to unscanned details; they do not
@@ -11343,9 +11458,11 @@ window.updateOperationProgress=function(){
       // still reports LMHub_Received. Rule B is explicitly unscanned.
       if(rec.ruleBUnscanned===true){
         rec.scannedTime="";
-      }else if(cfr1PickUpTime(r)){
-        // Refresh a stale prior-day pickup timestamp from the latest upload.
-        rec.scannedTime=cfr1PickUpTime(r);
+      }else{
+        // Prefer the latest row's pickup field; fall back to the newest
+        // non-empty timestamp retained from any SPX source upload for this TN.
+        const pickup=cfr1PickUpTime(r)||cfr1PickupForRecord(rec);
+        if(pickup)rec.scannedTime=pickup;
       }
       const latestStation=norm(r?.["Current Station"]||"");
       const latestStatus=cfr1Status(r);
@@ -11368,7 +11485,7 @@ window.updateOperationProgress=function(){
   const cfr1ScannedRows=[], cfr1UnscannedRows=[];
   Object.values(cfr1Ledger.records).forEach(rec=>{
     const key=rec.key;
-    const latest=latestByKey.get(key)?.r;
+    const latest=cfr1LatestForRecord(rec)?.r;
     // Exemptions never remove a parcel from CFR1. They are only marked as
     // INTERCEPT in the Unscanned details when the current parcel is unscanned.
     const isIntercept=cfr1IsExempt(latest||rec);
@@ -11409,6 +11526,20 @@ window.updateOperationProgress=function(){
     // The same eligible ledger rows feed both tabs, so scanned + unscanned
     // must equal the displayed CFR1 total.
     totalCount:cfr1ScannedRows.length+cfr1UnscannedRows.length
+  };
+  // Diagnostic snapshot for support: confirms whether an existing CFR1
+  // member matched a live merged parcel row and which latest status was used.
+  window.__badocCfr1Debug={
+    date:cfr1DateKey,
+    ledgerRecords:Object.keys(cfr1Ledger.records||{}).length,
+    liveStatusRefreshMatches:cfr1LiveStatusRefreshMatches,
+    uploadBatchCandidateRows:cfr1BatchRows.length,
+    dashboardStatusRows:cfr1DashboardRows.length,
+    eligibilityCandidateRows:cfr1Rows.length,
+    assignedTodaySourceRows:Array.isArray(window.__badocOnholdExportRows)?window.__badocOnholdExportRows.length:0,
+    latestSamples:cfr1LiveStatusRefreshSamples,
+    scannedCount:cfr1ScannedRows.length,
+    unscannedCount:cfr1UnscannedRows.length
   };
   setText("opCfr1Scanned",window.__badocCfr1Details.scannedCount);
   setText("opCfr1Total",window.__badocCfr1Details.totalCount);
@@ -13226,7 +13357,7 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
 
   const BUCKET="exported-files";
   const PREFIX="daily-history/";
-  const SNAPSHOT_VERSION="v226";
+  const SNAPSHOT_VERSION="v227";
   let historyClient=null;
 
   function cfg(){
@@ -13335,6 +13466,26 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     const cfr1HistoryTotalCount=Math.max(cfr1HistoryScannedCount,n(liveCfr1.totalCount??(cfr1HistoryScanned.length+cfr1HistoryUnscanned.length)));
     const cfr1HistoryUnscannedCount=Math.max(0,cfr1HistoryTotalCount-cfr1HistoryScannedCount);
     const mis=Array.isArray(current?.mis)?current.mis:[];
+    const exemptionLookupRows=[
+      ...(Array.isArray(current?.valid)?current.valid:[]),
+      ...(Array.isArray(current?.mis)?current.mis:[]),
+      ...(Array.isArray(window.__badocOnholdExportRows)?window.__badocOnholdExportRows:[]),
+      ...(typeof getParcelCountRows==="function"?getParcelCountRows({includeExemptions:true}):[])
+    ];
+    const exemptionRowsByTn=new Map();
+    exemptionLookupRows.forEach(row=>{
+      const tn=clean(typeof spxTN==="function"?spxTN(row):"");
+      const key=tn.toUpperCase().replace(/[\\s\\-_.]/g,"");
+      if(key)exemptionRowsByTn.set(key,row);
+    });
+    const exemptionDetails=(Array.isArray(exceptionTrackingNumbers)?exceptionTrackingNumbers:[]).map(value=>{
+      const tracking=clean(value);
+      const key=tracking.toUpperCase().replace(/[\\s\\-_.]/g,"");
+      const row=exemptionRowsByTn.get(key)||null;
+      return {tracking,orderId:clean(row?.["Order ID"]||row?.["Shopee Order SN"]||row?.["Order SN"]||""),
+        town:clean(row?.["Town Name"]||row?.["Town"]||row?.["town"]||""),
+        currentStation:clean(row?.["Current Station"]||""),status:row?statusOf(row):""};
+    });
     const incomingEnabled=typeof parcelIncomingEnabled==="function"&&parcelIncomingEnabled();
     const incoming= incomingEnabled&&typeof getParcelIncomingLinehaul==="function"
       ? getParcelIncomingLinehaul()
@@ -13351,75 +13502,63 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     const totalVolume=rows.length+n(incoming.total);
     const riderGroups=layoutSnapshot();
 
-    let three=0,two=0,flex=0;
-    riderGroups.forEach(g=>{if(g.is3wc)three++;if(g.is2wh)two++;if(g.isFlex)flex++});
-
-    // Top-line totals now come from Daily Data > EOD Data (live Google Sheet)
-    // instead of the live Parcel Count dataset. Rider/town breakdown below is
-    // untouched and still comes from Parcel Count + Town Counts as before.
-    const eodNormKey=v=>String(v??"").trim().toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-    const eodVal=(...keys)=>{
-      const d=window.__badocEodDashboard||{};
-      for(const k of keys){
-        const v=d[eodNormKey(k)];
-        if(v!==undefined&&String(v).trim()!=="")return v;
-      }
-      return "";
-    };
-    const eodNum=v=>{const x=parseFloat(String(v??"").replace(/,/g,"").replace("%",""));return Number.isFinite(x)?x:0};
-    const eodDispatched=eodNum(eodVal("total dispatched"));
-    const eodDelivered=eodNum(eodVal("total delivered"));
-    const eodOnhold=eodNum(eodVal("total onhold","total on hold"));
-    const eodRedelivery=eodNum(eodVal("total redelivery"));
-    const eodRts=eodNum(eodVal("total rts"));
-    // EOD Sheet values can arrive after Daily History's first render. If the
-    // sheet has not populated yet, use loaded parcel data instead of false zeros.
-    const parcelStatusForHistory=statusCounts(rows);
-    const eodHasPerformance=[eodDispatched,eodDelivered,eodOnhold,eodRedelivery,eodRts].some(v=>v!==0);
-    const historyDispatched=totalVolume; // Match Planning Board: Parcel Count rows + enabled incoming linehaul.
-    // Delivered must reflect actual parcel statuses in the currently loaded rows.
-    // The EOD sheet may contain a stale/aggregate delivered value that incorrectly
-    // equals total dispatched (e.g. 1,152 delivered while live dashboard shows 487).
-    const historyDelivered=parcelStatusForHistory.delivered;
-    const historyOnhold=eodHasPerformance?eodOnhold:parcelStatusForHistory.hold;
-    // Redeliver and RTS are not ordinary Parcel Count status buckets. Read
-    // the authoritative counts populated by updateOperationProgress above.
-    // EOD remains a fallback only when the Dashboard runtime has not provided
-    // a valid numeric display value.
-    const historyRedelivery=readDashboardCount("opRedelivery",eodHasPerformance?eodRedelivery:0);
-    const historyRts=readDashboardCount("opRts",eodHasPerformance?eodRts:0);
-    const eodFleet3w=eodNum(eodVal("fleet 3w","3w"));
-    const eodFleet2w=eodNum(eodVal("fleet 2w","2w"));
-    const eodFleetFlexi=eodNum(eodVal("fleet flexi","flexi"));
-    const eodDash=window.__badocEodDashboard||{};
-    const eodRate=eodNum(eodDash.deliveryPerformance);
-    const eodTotalRiders=eodDash.totalRidersUsed!=null&&eodDash.totalRidersUsed!==""?eodNum(eodDash.totalRidersUsed):(eodFleet3w+eodFleet2w+eodFleetFlexi);
-    const eodLeaderboard=(Array.isArray(window.__badocEodLeaderboard)?window.__badocEodLeaderboard:[]).map(r=>({
-      rank:clean(r[0]||""),service:clean(r[1]||""),name:clean(r[2]||""),
-      delivered:clean(r[3]||""),onHold:clean(r[4]||""),successRate:clean(r[5]||"")
-    }));
-
-    const groupDetails=riderGroups.map(g=>{
-      const groupRows=[];
-      (g.towns||[]).forEach(t=>{
-        areaRows[g.label==="BADOC"?"Badoc":"Pinili"].forEach(r=>{
-          if(clean(r["Town Name"]).toUpperCase()===clean(t).toUpperCase())groupRows.push(r);
-        });
-      });
-      const sc=statusCounts(groupRows);
-      const total=groupRows.length;
-      const townDetails=(g.towns||[]).map(town=>{
-        const townRows=areaRows[g.label==="BADOC"?"Badoc":"Pinili"].filter(r=>clean(r["Town Name"]).toUpperCase()===clean(town).toUpperCase());
-        const ts=statusCounts(townRows);
-        const townTotal=townRows.length;
-        const townDen=ts.received+ts.delivered+ts.delivering+ts.hold;
-        return {town:clean(town),delivered:ts.delivered,onHold:ts.hold,delivering:ts.delivering,received:ts.received,total:townTotal,successRate:pct(ts.delivered,townDen)};
-      });
-      return {...g,delivered:sc.delivered,onHold:sc.hold,delivering:sc.delivering,received:sc.received,total,
-        successRate:pct(sc.delivered,sc.received+sc.delivered+sc.delivering+sc.hold),
-        townDetails,
-        fleetProductivity:g.is3wc||g.is2wh?pct(sc.delivered+sc.delivering+sc.hold,40):0};
+    // EOD Riders and Leaderboard share the same deduplicated actual-scanner data as the dashboard page.
+    const actualScanData=typeof window.__badocGetActualScannedByRidersData==="function"
+      ?window.__badocGetActualScannedByRidersData():{records:[],sourceCount:0};
+    const actualParcelRecords=Array.isArray(actualScanData?.records)?actualScanData.records:[];
+    const actualRecords=actualParcelRecords.filter(r=>r&&r.hasScanner);
+    const normRiderName=v=>clean(v).toUpperCase().replace(/[\s_-]+/g,"");
+    const layoutByRiderArea=new Map();
+    riderGroups.forEach(g=>{if(clean(g.rider)){const k=normRiderName(g.rider)+"|"+clean(g.area).toUpperCase();if(!layoutByRiderArea.has(k))layoutByRiderArea.set(k,g);}});
+    const actualRiderGroups=new Map(),leaderboardGroups=new Map(),uniqueActualRiders=new Map();
+    actualRecords.forEach(r=>{
+      const riderKey=clean(r.riderKey)||(r.actualId?"ID:"+normRiderName(r.actualId):"NAME:"+normRiderName(r.actualName));
+      const name=clean(r.actualName)||(riderKey||"Unidentified");
+      if(!riderKey)return;
+      const rowArea=clean(r.area).toUpperCase();
+      const fallbackLayout=[...layoutByRiderArea.values()].find(g=>normRiderName(g.rider)===normRiderName(name));
+      const area=(rowArea==="BADOC"||rowArea==="PINILI")?rowArea:(fallbackLayout?.area||"UNASSIGNED");
+      const layout=layoutByRiderArea.get(normRiderName(name)+"|"+area)||fallbackLayout||null;
+      const vehicle=clean(r.vehicle||layout?.vehicleType||"UNKNOWN").toUpperCase();
+      const groupKey=riderKey+"|"+area;
+      if(!actualRiderGroups.has(groupKey))actualRiderGroups.set(groupKey,{key:groupKey,riderKey,name,area,vehicle,scannedCount:0,delivered:0,delivering:0,onHold:0,townBreakdown:new Map()});
+      const g=actualRiderGroups.get(groupKey);g.scannedCount++;
+      if(r.delivered)g.delivered++;if(r.delivering)g.delivering++;if(r.onhold)g.onHold++;
+      if(g.vehicle==="UNKNOWN"&&vehicle!=="UNKNOWN")g.vehicle=vehicle;
+      const town=clean(r.town);
+      if(town){const townKey=normRiderName(town);if(!g.townBreakdown.has(townKey))g.townBreakdown.set(townKey,{town,count:0,delivered:0,delivering:0,onHold:0});
+        const t=g.townBreakdown.get(townKey);t.count++;if(r.delivered)t.delivered++;if(r.delivering)t.delivering++;if(r.onhold)t.onHold++;}
+      if(!uniqueActualRiders.has(riderKey))uniqueActualRiders.set(riderKey,{name,vehicle});
+      else if(uniqueActualRiders.get(riderKey).vehicle==="UNKNOWN"&&vehicle!=="UNKNOWN")uniqueActualRiders.get(riderKey).vehicle=vehicle;
+      if(!leaderboardGroups.has(riderKey))leaderboardGroups.set(riderKey,{riderKey,name,vehicle,scanned:0,delivered:0,delivering:0,onHold:0});
+      const leader=leaderboardGroups.get(riderKey);leader.scanned++;
+      if(r.delivered)leader.delivered++;if(r.delivering)leader.delivering++;if(r.onhold)leader.onHold++;
+      if(leader.vehicle==="UNKNOWN"&&vehicle!=="UNKNOWN")leader.vehicle=vehicle;
     });
+    const actualRiderPerformance=[...actualRiderGroups.values()].map(g=>{
+      const layout=layoutByRiderArea.get(normRiderName(g.name)+"|"+g.area)||null;
+      const townDetails=[...g.townBreakdown.values()].sort((a,b)=>b.count-a.count||a.town.localeCompare(b.town)).map(t=>({
+        town:t.town,delivered:t.delivered,delivering:t.delivering,onHold:t.onHold,total:t.count,
+        successRate:pct(t.delivered,t.count)
+      }));
+      const label=g.area==="BADOC"?"BADOC":g.area==="PINILI"?"PINILI":(layout?.label||"UNASSIGNED");
+      return {area:g.area,label,position:Number(layout?.position)||0,rider:g.name,riderId:clean(layout?.riderId),vehicleType:g.vehicle,
+        towns:townDetails.map(t=>t.town),townDetails,delivered:g.delivered,delivering:g.delivering,onHold:g.onHold,
+        total:g.scannedCount,scanned:g.scannedCount,successRate:pct(g.delivered,g.scannedCount)};
+    }).sort((a,b)=>a.area.localeCompare(b.area)||a.position-b.position||a.rider.localeCompare(b.rider));
+    let three=0,two=0,flex=0;
+    uniqueActualRiders.forEach(r=>{const v=clean(r.vehicle).toUpperCase().replace(/[\s_-]+/g,"");
+      if(v==="3WH"||v==="3WC"||v==="3W")three++;else if(v==="2WH"||v==="2W")two++;else if(v==="FLEXI"||v==="FLEX")flex++;});
+    const eodLeaderboard=[...leaderboardGroups.values()].sort((a,b)=>b.scanned-a.scanned||a.name.localeCompare(b.name))
+      .map((r,index)=>({rank:index+1,service:r.vehicle,name:r.name,scanned:r.scanned,delivered:r.delivered,delivering:r.delivering,
+        onHold:r.onHold,successRate:pct(r.delivered,r.scanned)}));
+    const historyDispatched=totalVolume;
+    const historyDelivered=allStatus.delivered;
+    const historyOnhold=allStatus.hold;
+    const historyRedelivery=readDashboardCount("opRedelivery",0);
+    const historyRts=readDashboardCount("opRts",0);
+
+    const groupDetails=actualRiderPerformance;
 
     return {
       version:SNAPSHOT_VERSION,
@@ -13428,9 +13567,9 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
       captureReason:"pre-reset",
       source:{
         topTotals:"Planning Board source: current Parcel Count rows + enabled incoming linehaul for total volume",
-        parcelCount:"Current Parcel Count dataset (merged uploaded parcel CSVs) — used for Rider/Town breakdown only",
+        parcelCount:"Current Parcel Count dataset (merged uploaded parcel CSVs), deduplicated by SPX TN",
         linehaul:incomingEnabled?"Current Linehaul Task dataset":"Not included (incoming linehaul disabled)",
-        riders:"Current Riders Data",
+        riders:"Actual Scanned by Riders: unique Parcel Count TNs with recognized actual Driver/Rider ID or name",
         townCounts:"Current Town Counts layout and parcel statuses",
         onHold:"Uploaded Parcel Count On-Hold status + latest SPX Forward/Return exports, deduplicated by SPX TN",
         riderPositions:"Current Town Counts rider selections/positions",
@@ -13444,11 +13583,11 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
         onHold:historyOnhold,
         redelivery:historyRedelivery,
         rts:historyRts,
-        successRate:pct(historyDelivered,historyDelivered+historyOnhold+parcelStatusForHistory.delivering+parcelStatusForHistory.received),
-        threeWcRiders:eodFleet3w,
-        twoWhRiders:eodFleet2w,
-        flexiRiders:eodFleetFlexi,
-        totalRiders:eodTotalRiders,
+        successRate:pct(historyDelivered,historyDelivered+historyOnhold+allStatus.delivering+allStatus.received),
+        threeWcRiders:three,
+        twoWhRiders:two,
+        flexiRiders:flex,
+        totalRiders:uniqueActualRiders.size,
         misrouted:mis.length,
         exemptions:Array.isArray(exceptionTrackingNumbers)?exceptionTrackingNumbers.length:0,
         cfr1Total:cfr1HistoryTotalCount,
@@ -13470,7 +13609,14 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
         currentStation:clean(r?.["Current Station"]||""),
         status:statusOf(r)
       })),
-      exemptionDetails:(Array.isArray(exceptionTrackingNumbers)?exceptionTrackingNumbers:[]).map(clean).filter(Boolean),
+      exemptionDetails,
+      // Show the coverage behind rider percentages: rows without an actual
+      // Driver/Rider ID or name cannot be assigned to an individual rider.
+      riderAttribution:{
+        eligibleParcels:actualParcelRecords.length,
+        attributedParcels:actualRecords.length,
+        unattributedParcels:Math.max(0,actualParcelRecords.length-actualRecords.length)
+      },
       riderPerformance:groupDetails,
       townPerformance:Object.entries(areaRows).flatMap(([area,areaList])=>{
         const byTown=new Map();
@@ -13498,94 +13644,6 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     };
   }
 
-  function googleSheetsUrl(){
-    return clean(window.BADOC_DAILY_HISTORY_SPX_EXPORT_URL||"");
-  }
-  function googleSheetsConfigured(){
-    return window.BADOC_DAILY_HISTORY_SPX_EXPORT_MIRROR_ENABLED === true &&
-      /^https:\/\/script\.google\.com\/(?:macros\/s\/[^/]+\/exec|a\/macros\/[^/]+\/s\/[^/]+\/exec)(?:\?.*)?$/i.test(googleSheetsUrl());
-  }
-  function googleSheetsBridgeRequest(action, payload={}){
-    const endpoint=googleSheetsUrl();
-    if(!googleSheetsConfigured())return Promise.reject(new Error("Daily History Google Sheets is not connected. Deploy the Daily History Apps Script and set BADOC_DAILY_HISTORY_SPX_EXPORT_URL."));
-    return new Promise((resolve,reject)=>{
-      const requestId="dh_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2);
-      const frame=document.createElement("iframe");
-      frame.name="badocDailyHistoryBridge_"+requestId;
-      frame.id="badocDailyHistoryBridge_"+requestId;
-      frame.title="Daily History storage bridge";
-      frame.setAttribute("aria-hidden","true");
-      frame.style.cssText="position:fixed;width:1px;height:1px;border:0;left:-10000px;top:-10000px;opacity:0;pointer-events:none";
-      let done=false;
-      let form=null;
-      let timer=null;
-      const cleanup=()=>{
-        if(done)return;
-        done=true;
-        if(timer)clearTimeout(timer);
-        window.removeEventListener("message",onMessage);
-        if(frame.parentNode)frame.parentNode.removeChild(frame);
-        if(form&&form.parentNode)form.parentNode.removeChild(form);
-      };
-      const finish=(error,data)=>{
-        if(done)return;
-        cleanup();
-        if(error)reject(error);
-        else if(!data||data.ok!==true)reject(new Error(data&&data.error?String(data.error):"Google Sheets request failed."));
-        else resolve(data);
-      };
-      const onMessage=(event)=>{
-        // Apps Script HtmlService adds a sandboxed inner iframe. Its postMessage
-        // source may therefore be a nested frame rather than frame.contentWindow.
-        // Accept only Google-hosted/opaque sandbox origins plus our unguessable
-        // per-request ID and dedicated message channel.
-        const origin=String(event.origin||"");
-        let allowedOrigin=(origin==="null");
-        try{
-          const host=new URL(origin).hostname.toLowerCase();
-          allowedOrigin=allowedOrigin||host==="script.google.com"||host==="script.googleusercontent.com"||host.endsWith(".googleusercontent.com");
-        }catch(e){}
-        if(!allowedOrigin)return;
-        const data=event.data;
-        if(!data||data.channel!=="BADOC_DAILY_HISTORY_SPX_EXPORT"||data.requestId!==requestId)return;
-        finish(null,data.payload);
-      };
-      window.addEventListener("message",onMessage);
-      timer=setTimeout(()=>finish(new Error("Timed out waiting for Google Sheets. Check that the latest Apps Script version is deployed and accessible to your account.")),30000);
-      document.body.appendChild(frame);
-      const actionKey=String(action||"").toLowerCase();
-      if(actionKey==="save"||actionKey==="savecfrsummary"){
-        if(actionKey==="save"&&(!payload.snapshot||!payload.snapshot.date)){finish(new Error("Daily History snapshot is missing its date."));return;}
-        if(actionKey==="savecfrsummary"&&(!payload.summary||!payload.summary.date)){finish(new Error("CFR summary is missing its date."));return;}
-        form=document.createElement("form");
-        form.method="POST";
-        form.action=endpoint;
-        form.target=frame.name;
-        form.enctype="application/x-www-form-urlencoded";
-        form.acceptCharset="UTF-8";
-        form.style.display="none";
-        const parentOrigin=location.protocol==="file:"?"null":location.origin;
-        const fields=actionKey==="save"
-          ?{bridge:"1",bridgeAction:"save",requestId,parentOrigin,snapshotJson:JSON.stringify(payload.snapshot)}
-          :{bridge:"1",bridgeAction:"savecfrsummary",requestId,parentOrigin,summaryJson:JSON.stringify(payload.summary)};
-        Object.keys(fields).forEach(name=>{
-          const input=document.createElement("input");
-          input.type="hidden";input.name=name;input.value=fields[name];form.appendChild(input);
-        });
-        document.body.appendChild(form);
-        try{form.submit()}catch(e){finish(new Error("Could not submit the Google Sheets save form: "+String(e&&e.message||e)));}
-      }else{
-        const parentOrigin=location.protocol==="file:"?"null":location.origin;
-        const params=new URLSearchParams({bridge:"1",bridgeAction:String(action),requestId,parentOrigin,_:String(Date.now())});
-        if(payload.date)params.set("date",String(payload.date));
-        const separator=endpoint.includes("?")?"&":"?";
-        frame.src=endpoint+separator+params.toString();
-      }
-    });
-  }
-  async function googleSheetsRequest(action, payload={}){
-    return await googleSheetsBridgeRequest(action,payload);
-  }
   // ───────── Firebase storage for Daily History ─────────
   // /badoc/blobs/exported-files/daily-history/<date>.json  full snapshot (gzip)
   // /badoc/rows/daily_history_index/<date>                 small metrics row for lists/trends
@@ -13614,8 +13672,6 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     if(up.error)throw new Error(up.error.message||"Daily History cloud save failed");
     const ix=await client().from(INDEX_TABLE).upsert(indexRow(snapshot),{onConflict:"id"});
     if(ix.error)console.warn("Daily History index update failed:",ix.error);
-    // Optional mirror to the team's Google Sheet; never blocks or fails the capture.
-    if(googleSheetsConfigured())googleSheetsRequest("save",{snapshot}).catch(e=>console.warn("Google Sheets mirror skipped:",e&&e.message||e));
     if(markFinal){try{localStorage.setItem("badoc_daily_history_last_saved_v210",snapshot.date)}catch(e){}}
     return true;
   }
@@ -13709,7 +13765,7 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
       <button type="button" class="dh2-pill${ui.below?" is-on":""}" data-dh-below>Below 90%</button></div>`;
   }
   function statRow(o){
-    return `<div class="dh2-stats"><span><b>${fmt(o.delivered)}</b>Delivered</span><span><b>${fmt(o.delivering)}</b>Delivering</span><span><b>${fmt(o.onHold)}</b>On hold</span><span><b>${fmt(o.total)}</b>Total</span></div>`;
+    return `<div class="dh2-stats"><span><b>${fmt(o.delivered)}</b>Delivered</span><span><b>${fmt(o.onHold)}</b>On hold</span><span><b>${fmt(o.total)}</b>Total</span></div>`;
   }
   function tabRiders(s){
     let g=(Array.isArray(s.riderPerformance)?s.riderPerformance:[]).filter(x=>ui.area==="all"||clean(x.area).toUpperCase()===ui.area);
@@ -13721,21 +13777,23 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
       const key=clean(x.area)+"|"+x.position,sr=n(x.successRate),name=clean(x.rider),cls=name?srClass(sr):"";
       const towns=Array.isArray(x.townDetails)?x.townDetails:[];
       return `<article class="dh2-rider sr-${cls||"none"}" data-rider-name="${escH(name)}">
-        <header><div><strong>${name?escH(name):'<i>No rider assigned</i>'}</strong><small>${escH(clean(x.label||x.area))} · Group ${n(x.position)}${x.vehicleType?" · "+escH(x.vehicleType):""}</small></div><div class="dh2-sr">${name?fmt1(sr)+"%":"—"}</div></header>
+        <header><div><strong>${name?escH(name):'<i>No rider assigned</i>'}</strong><small>${escH(clean(x.label||x.area))}${n(x.position)>0?" · Group "+n(x.position):""}${x.vehicleType?" · "+escH(x.vehicleType):""}</small></div><div class="dh2-sr">${name?fmt1(sr)+"%":"—"}</div></header>
         <div class="dh2-bar"><i style="width:${Math.min(100,Math.max(0,sr)).toFixed(1)}%"></i></div>
         ${statRow(x)}
         <div class="dh2-chips-sm">${(x.towns||[]).map(t=>`<span>${escH(t)}</span>`).join("")}</div>
         ${towns.length?`<details data-dh-open="${escH(key)}"${ui.open.has(key)?" open":""}><summary>Town breakdown</summary><div class="dh2-mini">${towns.map(t=>`<div><span>${escH(t.town)}</span><span>${fmt(t.delivered)}/${fmt(t.total)}</span><b class="sr-${srClass(t.successRate)||"none"}">${fmt1(t.successRate)}%</b></div>`).join("")}</div></details>`:""}
       </article>`}).join("");
-    return toolbar(true)+(cards?`<div class="dh2-grid">${cards}</div>`:'<div class="dh2-empty">No riders match these filters.</div>');
+    const a=s.riderAttribution&&typeof s.riderAttribution==="object"?s.riderAttribution:null;
+    const attributionNote=a?`<div class="dh2-note">Source: ${fmt(a.eligibleParcels)} unique eligible Parcel Count parcels; ${fmt(a.attributedParcels)} have an actual Driver/Rider ID or name and are included in rider rates; ${fmt(a.unattributedParcels)} without an identifiable actual rider are excluded. Success rate = Delivered ÷ attributed parcels. Planned Assigned Rider is not used.</div>`:"";
+    return toolbar(true)+attributionNote+(cards?`<div class="dh2-grid">${cards}</div>`:'<div class="dh2-empty">No riders match these filters.</div>');
   }
   function tabTowns(s){
     let t=(Array.isArray(s.townPerformance)?s.townPerformance:[]).filter(x=>x&&clean(x.town)&&(ui.area==="all"||clean(x.area).toUpperCase()===ui.area));
     t=t.filter(x=>matchQ(x.town));
     if(ui.below)t=t.filter(x=>n(x.successRate)<90);
     t=t.slice().sort((a,b)=>n(a.successRate)-n(b.successRate)||String(a.town).localeCompare(String(b.town)));
-    const rows=t.map(x=>`<tr><td><strong>${escH(x.town)}</strong><small>${escH(x.area)}</small></td><td>${fmt(x.delivered)}</td><td>${fmt(x.delivering)}</td><td>${fmt(x.onHold)}</td><td>${fmt(x.total)}</td><td><div class="dh2-rate"><i class="sr-${srClass(x.successRate)||"none"}" style="--w:${Math.min(100,n(x.successRate)).toFixed(1)}%"></i><b>${fmt1(x.successRate)}%</b></div></td></tr>`).join("");
-    return toolbar(false)+(rows?`<div class="dh2-tablewrap"><table class="dh2-table"><thead><tr><th>Town</th><th>Delivered</th><th>Delivering</th><th>On hold</th><th>Total</th><th>Success</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="dh2-empty">No towns match these filters.</div>');
+    const rows=t.map(x=>`<tr><td><div class="dh2-town-cell"><strong>${escH(x.town)}</strong><small class="dh2-area-label">${escH(x.area)}</small></div></td><td>${fmt(x.delivered)}</td><td>${fmt(x.onHold)}</td><td>${fmt(x.total)}</td><td><div class="dh2-rate"><i class="sr-${srClass(x.successRate)||"none"}" style="--w:${Math.min(100,n(x.successRate)).toFixed(1)}%"></i><b>${fmt1(x.successRate)}%</b></div></td></tr>`).join("");
+    return toolbar(false)+(rows?`<div class="dh2-tablewrap"><table class="dh2-table"><thead><tr><th>Town</th><th>Delivered</th><th>On hold</th><th>Total</th><th>Success</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="dh2-empty">No towns match these filters.</div>');
   }
   function tabCfr1(s){
     const c=s.cfr1&&typeof s.cfr1==="object"?s.cfr1:null,m=s.metrics||{};
@@ -13745,24 +13803,31 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     const list=ui.cfr==="scanned"?sc:un,LIM=500,showScan=ui.cfr==="scanned";
     const rows=list.slice(0,LIM).map(r=>`<tr><td>${escH(r.orderId||"—")}</td><td>${escH(r.town||"—")}</td><td>${escH(r.status||"—")}</td><td>${escH(r.receivedTime||"—")}</td>${showScan?`<td>${escH(r.scannedTime||"—")}</td>`:""}</tr>`).join("");
     return `<div class="dh2-cards dh2-cards-3">${card("CFR1 total",fmt(total))}${card("Scanned",fmt(scn),"","is-good")}${card("Unscanned",fmt(unc),"",unc?"is-bad":"")}</div>
-      <div class="dh2-tools"><div class="dh2-seg"><button type="button" data-dh-cfr="unscanned" class="${ui.cfr==="unscanned"?"is-on":""}">Unscanned (${fmt(un.length)})</button><button type="button" data-dh-cfr="scanned" class="${ui.cfr==="scanned"?"is-on":""}">Scanned (${fmt(sc.length)})</button></div>
+      <div class="dh2-tools"><div class="dh2-seg"><button type="button" data-dh-cfr="unscanned" class="${ui.cfr==="unscanned"?"is-on":""}" aria-pressed="${ui.cfr==="unscanned"?"true":"false"}">Unscanned (${fmt(un.length)})</button><button type="button" data-dh-cfr="scanned" class="${ui.cfr==="scanned"?"is-on":""}" aria-pressed="${ui.cfr==="scanned"?"true":"false"}">Scanned (${fmt(sc.length)})</button></div>
       <button type="button" class="dh2-pill" data-action="daily-history-copy-cfr1-ids">Copy Order IDs</button></div>
       ${rows?`<div class="dh2-tablewrap dh2-tall"><table class="dh2-table"><thead><tr><th>Order ID</th><th>Town</th><th>Status</th><th>Received</th>${showScan?"<th>Scanned</th>":""}</tr></thead><tbody>${rows}</tbody></table></div>${list.length>LIM?`<div class="dh2-note">Showing first ${LIM} of ${fmt(list.length)}. Use Copy Order IDs for the full list.</div>`:""}`:`<div class="dh2-empty">No ${ui.cfr} CFR1 parcels saved for this date.</div>`}`;
   }
   function tabBoard(s){
     const l=Array.isArray(s.eodLeaderboard)?s.eodLeaderboard:[];
-    if(!l.length)return '<div class="dh2-empty">No EOD leaderboard was saved for this date.</div>';
-    return `<div class="dh2-tablewrap"><table class="dh2-table"><thead><tr><th>#</th><th>Rider</th><th>Service</th><th>Delivered</th><th>On hold</th><th>Success</th></tr></thead><tbody>${l.map(r=>`<tr><td>${escH(r.rank)}</td><td><strong>${escH(r.name)}</strong></td><td>${escH(r.service)}</td><td>${escH(r.delivered)}</td><td>${escH(r.onHold)}</td><td>${escH(r.successRate)}</td></tr>`).join("")}</tbody></table></div>`;
+    if(!l.length)return '<div class="dh2-empty">No riders with recognized actual scans for this date.</div>';
+    return '<div class="dh2-tablewrap"><table class="dh2-table"><thead><tr><th>#</th><th>Rider</th><th>Vehicle</th><th>Scanned</th><th>Delivered</th><th>On hold</th><th>Success</th></tr></thead><tbody>'+l.map(r=>
+      '<tr><td>'+escH(r.rank)+'</td><td><strong>'+escH(r.name)+'</strong></td><td>'+escH(r.service||"—")+'</td>'+
+      '<td>'+fmt(r.scanned)+'</td><td>'+fmt(r.delivered)+'</td><td>'+fmt(r.onHold)+'</td><td>'+fmt1(r.successRate)+'%</td></tr>').join("")+
+      '</tbody></table></div>';
   }
   function tabExceptions(s){
-    const mis=Array.isArray(s.misroutedDetails)?s.misroutedDetails:[],ex=Array.isArray(s.exemptionDetails)?s.exemptionDetails:[];
-    return `<h4 class="dh2-h">Misrouted parcels <span>${fmt(mis.length)}</span></h4>
-      ${mis.length?`<div class="dh2-tablewrap"><table class="dh2-table"><thead><tr><th>Tracking</th><th>Order ID</th><th>Town</th><th>Current station</th><th>Status</th></tr></thead><tbody>${mis.map(r=>`<tr><td>${escH(r.tracking)}</td><td>${escH(r.orderId)}</td><td>${escH(r.town)}</td><td>${escH(r.currentStation)}</td><td>${escH(r.status)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="dh2-empty">None.</div>'}
-      <h4 class="dh2-h">Exemptions <span>${fmt(ex.length)}</span></h4>
-      ${ex.length?`<div class="dh2-chips-sm dh2-wrapall">${ex.map(r=>`<span>${escH(r)}</span>`).join("")}</div>`:'<div class="dh2-empty">None.</div>'}`;
+    const mis=Array.isArray(s.misroutedDetails)?s.misroutedDetails:[];
+    const rawEx=Array.isArray(s.exemptionDetails)?s.exemptionDetails:[];
+    const ex=rawEx.map(r=>typeof r==="string"?({tracking:r,orderId:"",town:"",currentStation:"",status:""}):(r||{}));
+    const parcelTable=rows=>rows.length?'<div class="dh2-tablewrap"><table class="dh2-table dh2-exception-table"><thead><tr><th>Tracking</th><th>Order ID</th><th>Town</th><th>Current station</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>
+      '<tr><td>'+escH(r.tracking||"—")+'</td><td>'+escH(r.orderId||"—")+'</td><td>'+escH(r.town||"—")+'</td><td>'+escH(r.currentStation||"—")+'</td><td>'+escH(r.status||"—")+'</td></tr>').join("")+
+      '</tbody></table></div>':'<div class="dh2-empty">No matching parcels.</div>';
+    return '<h4 class="dh2-h">Exemptions <span>'+fmt(ex.length)+'</span></h4>'+
+      (ex.length?parcelTable(ex):'<div class="dh2-empty">No exemptions.</div>')+
+      '<h4 class="dh2-h">Misrouted parcels <span>'+fmt(mis.length)+'</span></h4>'+
+      (mis.length?parcelTable(mis):'<div class="dh2-empty">No misrouted parcels.</div>');
   }
-
-  function buildHtml(s,date,live){
+      function buildHtml(s,date,live){
     const m=s.metrics||{},prev=prevRow(date),groups=Array.isArray(s.riderPerformance)?s.riderPerformance:[],towns=Array.isArray(s.townPerformance)?s.townPerformance:[];
     const riderBelow=groups.filter(g=>clean(g.rider)&&n(g.successRate)<90).length,townBelow=towns.filter(t=>clean(t.town)&&n(t.successRate)<90).length;
     const sr=n(m.successRate);
@@ -13780,7 +13845,7 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
       <button type="button" class="dh2-alert${townBelow?"":" is-disabled"}" data-action="daily-history-below90-towns">${fmt(townBelow)} towns below 90%</button></div>`;
     const pts=trendPoints(s);
     const charts=`<div class="dh2-charts">${chart(pts,"totalVolume","Volume · last "+pts.length+" days","bars",date)}${chart(pts,"successRate","Success rate","line",date,"%")}</div>`;
-    const tabs=[["riders","Riders",groups.length],["towns","Towns",towns.length],["cfr1","CFR1",null],["board","Leaderboard",Array.isArray(s.eodLeaderboard)?s.eodLeaderboard.length:0],["exceptions","Exceptions",n(m.misrouted)+n(m.exemptions)]];
+    const tabs=[["riders","Riders",n(m.totalRiders)],["towns","Towns",towns.length],["cfr1","CFR1",null],["board","Leaderboard",Array.isArray(s.eodLeaderboard)?s.eodLeaderboard.length:0],["exceptions","Exemptions",n(m.misrouted)+n(m.exemptions)]];
     const bar=`<nav class="dh2-tabs" role="tablist">${tabs.map(t=>`<button type="button" role="tab" data-dh-tab="${t[0]}" class="${ui.tab===t[0]?"is-on":""}" aria-selected="${ui.tab===t[0]}">${t[1]}${t[2]?`<em>${fmt(t[2])}</em>`:""}</button>`).join("")}</nav>`;
     const body={riders:tabRiders,towns:tabTowns,cfr1:tabCfr1,board:tabBoard,exceptions:tabExceptions}[ui.tab](s);
     const meta=live?`<div class="dh2-meta is-live"><i></i>Live view of today — not saved until you tap Capture Now.</div>`:`<div class="dh2-meta">Saved snapshot${s.capturedAt?" · captured "+escH(prettyDate(String(s.capturedAt).slice(0,10)))+" "+escH(timeOf(s.capturedAt)):""}${s.captureReason?" · "+escH(s.captureReason):""}</div>`;
@@ -13877,23 +13942,15 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     finally{dailyHistoryRefreshInFlight=null}
   };
   window.renderDailyHistory=function(date){return show(date||curDate||todayDate())};
-
-    async function waitForEodDashboard(timeoutMs=15000){
-    const started=Date.now();
-    while(Date.now()-started<timeoutMs){
-      const d=window.__badocEodDashboard;
-      // The EOD loader stamps updatedAt only after it has parsed the Google Sheet.
-      // Accept legitimate zero values; readiness is based on loader completion,
-      // not on whether the totals happen to be nonzero.
-      if(d && Number(d.updatedAt)>0 && d.date && Object.keys(d).length>3) return d;
-      await new Promise(resolve=>setTimeout(resolve,250));
+  window.addEventListener("badoc:parcel-data-updated",function(){
+    const page=document.getElementById("dailyHistory");
+    if(page?.classList.contains("active")&&(curDate||todayDate())===todayDate()){
+      snapCache.delete(todayDate());lastHtml="";renderSnapshot(buildSnapshot(todayDate()),todayDate());
     }
-    throw new Error("EOD Google Sheets data has not loaded. Daily History was not saved. Check the EOD sheet connection, then try again.");
-  }
+  });
 
   // v40: preflight preview for manual Capture Now. Existing date records are updated in place (upsert), not stacked.
   window.__badocPreviewDailyCapture=async function(date=dayKey()){
-    await waitForEodDashboard();
     const snapshot=buildSnapshot(date);
     const existing=await loadSnapshot(date);
     const m=snapshot.metrics||{};
@@ -13912,16 +13969,8 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
 
   window.__badocCaptureDailyHistory=async function(reason="pre-reset",date=dayKey()){
     try{
-      await waitForEodDashboard();
       const snapshot=buildSnapshot(date);
-      snapshot.source=Object.assign({},snapshot.source,{eodSheetStatus:"Loaded before capture",eodSheetUpdatedAt:new Date(Number(window.__badocEodDashboard.updatedAt)).toISOString()});
       snapshot.captureReason=reason;
-      const eod=window.__badocEodDashboard||{};
-      const normEodKey=v=>String(v??"").trim().toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-      const hasEodField=(...keys)=>keys.some(k=>Object.prototype.hasOwnProperty.call(eod,normEodKey(k)));
-      if(!hasEodField("total dispatched") || !hasEodField("total delivered") || !hasEodField("total onhold","total on hold")){
-        throw new Error("EOD Google Sheets data is incomplete (missing Dispatched, Delivered, or On Hold). Snapshot was not saved.");
-      }
       await saveSnapshot(snapshot,reason==="pre-reset");
       await refreshDates();
       const input=document.getElementById("dailyHistoryDate");
@@ -13964,22 +14013,6 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
   function cfrSummaryMeta(row){
     try{if(typeof window.__badocRowMeta==="function")return window.__badocRowMeta(row)||{};}catch(e){}
     return {station:row?.["Current Station"]||"",destination:row?.["Destination Station"]||"",status:statusOf(row)};
-  }
-  function cfrSummaryEodValue(labels){
-    const d=window.__badocEodDashboard||{};
-    const normKey=v=>String(v??"").trim().toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-    for(const label of labels){
-      const target=normKey(label);
-      for(const [k,v] of Object.entries(d))if(normKey(k)===target&&String(v??"").trim()!=="")return v;
-    }
-    // Fallback to the currently-rendered EOD summary if its source label varies slightly.
-    for(const row of document.querySelectorAll("#eodDashboardSummary .eod-row")){
-      const cells=row.querySelectorAll("span");
-      if(cells.length<2)continue;
-      const label=normKey(cells[0].textContent);
-      if(labels.some(candidate=>{const target=normKey(candidate);return label===target||label.includes(target)||target.includes(label);}))return cells[cells.length-1].textContent;
-    }
-    return null;
   }
   function cfrSummaryNumber(value){const v=parseFloat(String(value??"").replace(/,/g,"").replace(/%/g,""));return Number.isFinite(v)?v:0;}
   function buildCfrDailySummary(date){
@@ -14110,7 +14143,6 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     const blob=new Blob([JSON.stringify(summary)],{type:"application/json"});
     const r=await storage().upload(CFR_PREFIX+summary.date+".json",blob,{contentType:"application/json",upsert:true});
     if(r.error)throw new Error(r.error.message||"CFR summary cloud save failed");
-    if(googleSheetsConfigured())googleSheetsRequest("saveCfrSummary",{summary}).catch(e=>console.warn("Google Sheets CFR mirror skipped:",e&&e.message||e));
     console.log("BADOC CFR Daily Summary saved:",summary.date);
     return summary;
   };
@@ -14127,7 +14159,7 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
     const title=type==="misrouted"?"Misrouted Parcels":"Exemptions";
     let body="";
     if(type==="misrouted") body=rows.length?`<table class="badoc-detail-table"><thead><tr><th>Tracking</th><th>Order ID</th><th>Town</th><th>Current Station</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escH(r.tracking)}</td><td>${escH(r.orderId)}</td><td>${escH(r.town)}</td><td>${escH(r.currentStation)}</td><td>${escH(r.status)}</td></tr>`).join("")}</tbody></table>`:`<div class="badoc-detail-empty">No misrouted parcels.</div>`;
-    else body=rows.length?`<table class="badoc-detail-table"><thead><tr><th>#</th><th>Tracking Number</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${escH(r)}</td></tr>`).join("")}</tbody></table>`:`<div class="badoc-detail-empty">No exemptions.</div>`;
+    else {const items=rows.map(r=>typeof r==="string"?({tracking:r}):(r||{}));body=items.length?`<table class="badoc-detail-table"><thead><tr><th>Tracking</th><th>Order ID</th><th>Town</th><th>Current Station</th><th>Status</th></tr></thead><tbody>${items.map(r=>`<tr><td>${escH(r.tracking||"—")}</td><td>${escH(r.orderId||"—")}</td><td>${escH(r.town||"—")}</td><td>${escH(r.currentStation||"—")}</td><td>${escH(r.status||"—")}</td></tr>`).join("")}</tbody></table>`:`<div class="badoc-detail-empty">No exemptions.</div>`;}
     overlay.innerHTML=`<div class="badoc-detail-modal" role="dialog" aria-modal="true" aria-label="${title}"><div class="badoc-detail-head"><h3>${title}</h3><button type="button" class="badoc-detail-close" aria-label="Close">×</button></div><div class="badoc-detail-body"><div class="badoc-detail-count">${rows.length.toLocaleString()} item${rows.length===1?"":"s"}</div>${body}</div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector(".badoc-detail-close").onclick=closeBadocDetailPopup;
@@ -14299,6 +14331,16 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
 
   // ───────── events ─────────
   function onChange(){const s=window.__badocDailyHistoryCurrentSnapshot;if(s)renderSnapshot(s,curDate||todayDate())}
+  // Capture CFR1 button presses before global click handlers can intercept them.
+  document.addEventListener("click",e=>{
+    const button=e.target&&e.target.closest?e.target.closest("#dailyHistory [data-dh-cfr]"):null;
+    if(!button)return;
+    e.preventDefault();e.stopPropagation();
+    ui.cfr=button.getAttribute("data-dh-cfr")==="scanned"?"scanned":"unscanned";
+    lastHtml="";
+    const snapshot=window.__badocDailyHistoryCurrentSnapshot;
+    if(snapshot)renderSnapshot(snapshot,curDate||todayDate());
+  },true);
   document.addEventListener("click",e=>{
     const root=e.target&&e.target.closest?e.target.closest("#dailyHistory"):null;
     if(!root)return;
@@ -14372,11 +14414,8 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
       try{
         const preview=await window.__badocPreviewDailyCapture(d);
         const approved=await showCaptureDialog({
-          title:"Review Capture Now",
-          subtitle:"Check today's figures before saving anything.",
-          confirm:true,
-          confirmLabel:"Confirm Capture",
-          cancelLabel:"Cancel",
+          title:"Review Capture Now",subtitle:"Check today\'s figures before saving anything.",
+          confirm:true,confirmLabel:"Confirm Capture",cancelLabel:"Cancel",
           rows:[
             {label:"Date",value:preview.date},
             {label:"Daily History",value:preview.existing?"Existing record will be UPDATED":"New daily record will be CREATED"},
@@ -14387,54 +14426,35 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
             {label:"CFR1 Scanned",value:preview.cfr1Scanned.toLocaleString()},
             {label:"CFR1 Unscanned",value:preview.cfr1Unscanned.toLocaleString()}
           ],
-          message:"This saves the Daily History snapshot and CFR summary to cloud storage, then exports CFR1 to Google Sheets."
+          message:"This saves the EOD snapshot and CFR daily summary to shared cloud storage. No Google Sheets source or export is required."
         });
-        if(!approved){
-          captureBtn.textContent=old;
-          captureBtn.title="Capture cancelled. No save was started.";
-          return;
-        }
-        captureBtn.textContent="Saving snapshot + verifying CFR1…";
+        if(!approved){captureBtn.textContent=old;captureBtn.title="Capture cancelled. No save was started.";return;}
+        captureBtn.textContent="Saving EOD snapshot + CFR summary…";
         const outcomes=await Promise.allSettled([
-          (async()=>await window.__badocCaptureDailyHistory("manual",d))(),
-          (async()=>await window.__badocCaptureCfrSummary(d))(),
-          (async()=>{if(typeof window.__badocExportCfr1ToSheet!=="function")throw new Error("CFR1 export function is unavailable.");return await window.__badocExportCfr1ToSheet()})()
+          window.__badocCaptureDailyHistory("manual",d),
+          window.__badocCaptureCfrSummary(d)
         ]);
-        const [snap,cfr,cfr1]=outcomes,ok=o=>o.status==="fulfilled";
-        const line=(label,o,f)=>label+": "+(ok(o)?(f?f(o.value):"saved"):"FAILED — "+String(o.reason&&o.reason.message||o.reason||"Unknown error"));
-        const cfr1Description=v=>{
-          if(v&&v.skipped)return "confirmed; no rows exported — "+String(v.reason||"no eligible CFR1 rows");
-          const added=Number(v&&v.count)||0;
-          const received=Number(v&&v.received)||0;
-          const duplicates=Number(v&&v.skippedAlreadyUploadedToday)||0;
-          const repeated=Number(v&&v.skippedDuplicateInRequest)||0;
-          const missing=Number(v&&v.skippedMissingOrderId)||0;
-          return "Google Sheets CONFIRMED; "+added+" added / "+received+" received; "+duplicates+" already exported today; "+repeated+" duplicate rows; "+missing+" missing Order ID";
-        };
+        const [snap,cfr]=outcomes,ok=o=>o.status==="fulfilled";
+        const line=(label,o,f)=>label+": "+(ok(o)?(f?f(o.value):"SAVED"):"FAILED — "+String(o.reason&&o.reason.message||o.reason||"Unknown error"));
         const detail=[
           "Capture result for "+d,
-          line("Daily History cloud snapshot",snap,v=>"SAVED · "+(v.capturedAt||"timestamp recorded")),
-          line("CFR daily summary cloud file",cfr,v=>"SAVED · "+(v.capturedAt||"timestamp recorded")),
-          line("CFR1 Google Sheets export",cfr1,cfr1Description)
+          line("EOD cloud snapshot",snap,v=>"SAVED · "+(v.capturedAt||"timestamp recorded")),
+          line("CFR daily summary cloud file",cfr,v=>"SAVED · "+(v.capturedAt||"timestamp recorded"))
         ].join("\n");
-        if(ok(snap)&&ok(cfr)&&ok(cfr1)){
-          const added=Number(cfr1.value&&cfr1.value.count)||0;
-          captureBtn.textContent=added?"✓ Saved · CFR1 +"+added:"✓ Captured · CFR1 confirmed";
-          captureBtn.title=detail;
-          await showCaptureDialog({title:"Capture Confirmed",subtitle:"All three save steps completed.",tone:"success",message:detail});
+        if(ok(snap)&&ok(cfr)){
+          captureBtn.textContent="✓ EOD Captured";captureBtn.title=detail;
+          await showCaptureDialog({title:"Capture Confirmed",subtitle:"Both cloud save steps completed.",tone:"success",message:detail});
         }else{
-          captureBtn.textContent=(ok(snap)||ok(cfr)||ok(cfr1))?"⚠ PARTIAL — CHECK DETAILS":"✕ CAPTURE FAILED";
-          captureBtn.title=detail;
-          await showCaptureDialog({title:"Capture Needs Attention",subtitle:"At least one save step failed or was not confirmed.",tone:"error",message:detail+"\n\nDo not assume failed or unconfirmed steps were saved. A CFR1 timeout may still have reached Google Sheets; check Apps Script → Executions before retrying."});
+          captureBtn.textContent=(ok(snap)||ok(cfr))?"⚠ PARTIAL — CHECK DETAILS":"✕ CAPTURE FAILED";captureBtn.title=detail;
+          await showCaptureDialog({title:"Capture Needs Attention",subtitle:"At least one cloud save step failed.",tone:"error",message:detail+"\n\nCheck cloud connectivity before retrying."});
         }
         snapCache.delete(d);
       }catch(e){
-        console.warn("Capture Now preflight failed:",e);
-        captureBtn.textContent="✕ Not Captured";
+        console.warn("Capture Now preflight failed:",e);captureBtn.textContent="✕ Not Captured";
         await showCaptureDialog({title:"Capture Not Completed",subtitle:"The capture could not be started or completed.",tone:"error",message:String(e&&e.message||e)});
       }finally{
         window.__badocCaptureInFlight=false;
-        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;captureBtn.title="Review today's data, then save the snapshot and verify the CFR1 export.";},6000);
+        setTimeout(()=>{captureBtn.textContent=old;captureBtn.disabled=false;captureBtn.title="Review today\'s operational data, then save the EOD snapshot and CFR summary to cloud storage.";},6000);
       }
     });
     // refresh whenever the page is opened, and every 20s while viewing today
@@ -17502,7 +17522,21 @@ html[data-theme="dark"] #dailyHistory #dh2TabBody article.dh2-rider .dh2-stats>s
   else bind();
 })();
 </script>
-<script src="actual-scanned.js?v=town-breakdown-v1"></script>
+<script src="actual-scanned.js?v=eod-actual-scans-v6"></script>
+<style id="eod-data-tabs-refinement-v1">
+#dailyHistory .dh2-town-cell{display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:3px!important;min-width:0!important}
+#dailyHistory .dh2-town-cell strong{display:block!important;line-height:1.3!important}
+#dailyHistory .dh2-area-label{display:block!important;margin:0!important;padding:0!important;font-size:9px!important;line-height:1.2!important;font-weight:750!important;letter-spacing:.35px!important;text-transform:uppercase!important;color:var(--muted,#8293a2)!important}
+#dailyHistory .dh2-seg{display:inline-flex!important;align-items:stretch!important;gap:0!important;border:1px solid var(--line,#344252)!important;border-radius:10px!important;overflow:hidden!important;background:var(--panel,#111821)!important}
+#dailyHistory .dh2-seg>button{appearance:none!important;-webkit-appearance:none!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:38px!important;height:38px!important;padding:0 15px!important;border:0!important;border-right:1px solid var(--line,#344252)!important;border-radius:0!important;background:var(--panel2,#1a2633)!important;color:var(--text,#e8f1f7)!important;font:inherit!important;font-size:12px!important;font-weight:800!important;line-height:1!important;white-space:nowrap!important;cursor:pointer!important;box-shadow:none!important}
+#dailyHistory .dh2-seg>button:last-child{border-right:0!important}
+#dailyHistory .dh2-seg>button.is-on{background:linear-gradient(135deg,#0a84ff,#00aef0)!important;color:#fff!important}
+#dailyHistory .dh2-seg>button:hover{filter:brightness(1.12)!important}
+#dailyHistory .dh2-seg>button:focus-visible{outline:2px solid #38a5ff!important;outline-offset:-3px!important}
+#dailyHistory .dh2-exemption-list{display:flex!important;flex-wrap:wrap!important;align-items:flex-start!important;gap:7px!important;width:100%!important;margin:8px 0 16px!important}
+#dailyHistory .dh2-exemption-chip{display:inline-flex!important;align-items:center!important;max-width:100%!important;padding:7px 10px!important;border:1px solid var(--line,#344252)!important;border-radius:8px!important;background:var(--panel2,#17222d)!important;color:var(--text,#e8f1f7)!important;font-size:11px!important;font-weight:700!important;overflow-wrap:anywhere!important;white-space:normal!important}
+@media(max-width:760px){#dailyHistory .dh2-town-cell{gap:2px!important}#dailyHistory .dh2-exemption-chip{font-size:10px!important}}
+</style>
 
 <style id="sync-all-layout-fix">
 #homeDashboard #syncAll.syncall{display:flex!important;flex-direction:column!important;gap:12px!important;padding:16px!important;box-sizing:border-box!important}
@@ -17694,7 +17728,6 @@ html[data-theme="dark"] #homeDashboard .dashboard-summary-grid > .dashboard-summ
   }
 }
 </style>
-\n
 <style id="dashboard-one-row-status-colors-v3">
 /* Override the later dashboard-two-column rule that was forcing two top cards per row. */
 #homeDashboard .dashboard-overview .dashboard-summary-grid{
@@ -17820,5 +17853,43 @@ html[data-theme="dark"] #homeDashboard .dashboard-status-card.rts span{color:#fe
   padding:9px 11px!important;
   box-sizing:border-box!important;
 }
+</style>
+
+
+
+<style id="eod-layout-and-exception-header-fix-v1">
+/* Three rider KPIs after removing Delivering. */
+#dailyHistory #dh2TabBody article.dh2-rider .dh2-stats{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+}
+/* Keep EOD exception headings aligned with the values beneath them. */
+#dailyHistory .dh2-exception-table{
+  width:100%!important;
+  min-width:760px!important;
+  table-layout:fixed!important;
+}
+#dailyHistory .dh2-exception-table th,
+#dailyHistory .dh2-exception-table td{
+  box-sizing:border-box!important;
+  padding:10px 14px!important;
+  text-align:left!important;
+  vertical-align:middle!important;
+}
+#dailyHistory .dh2-exception-table th{
+  white-space:nowrap!important;
+}
+#dailyHistory .dh2-exception-table td{
+  overflow-wrap:anywhere!important;
+}
+#dailyHistory .dh2-exception-table th:nth-child(1),
+#dailyHistory .dh2-exception-table td:nth-child(1){width:25%}
+#dailyHistory .dh2-exception-table th:nth-child(2),
+#dailyHistory .dh2-exception-table td:nth-child(2){width:20%}
+#dailyHistory .dh2-exception-table th:nth-child(3),
+#dailyHistory .dh2-exception-table td:nth-child(3){width:18%}
+#dailyHistory .dh2-exception-table th:nth-child(4),
+#dailyHistory .dh2-exception-table td:nth-child(4){width:21%}
+#dailyHistory .dh2-exception-table th:nth-child(5),
+#dailyHistory .dh2-exception-table td:nth-child(5){width:16%}
 </style>
 
