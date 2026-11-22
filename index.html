@@ -4251,6 +4251,28 @@ function updateTownMoveStatus(){
   });
 }
 
+function badocActiveRiderRosterSignature(){
+  // Town-card dropdowns depend on the active rider roster. Include that roster
+  // in the render signature so a cloud/CSV refresh cannot leave a stale picker.
+  const seen=new Set();
+  const rows=(Array.isArray(ridersData)?ridersData:[])
+    .filter(r=>riderNorm(r["SPX Status"])==="ACTIVE")
+    .map(r=>({
+      name:String(r["Driver Name"]||"").trim(),
+      id:String(r["Driver ID"]||"").trim(),
+      vehicle:String(r["Vehicle Type"]||"").trim()
+    }))
+    .filter(r=>r.name)
+    .filter(r=>{
+      const k=r.name.toUpperCase()+"|"+r.id;
+      if(seen.has(k))return false;
+      seen.add(k);
+      return true;
+    })
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  return rows.map(r=>[r.name,r.id,r.vehicle].join("\u001f")).join("\u001e");
+}
+
 function badocTownGridSignature(id,list,rows,extraCounts,groups){
   const c=counts(rows),sc=townStatusCounts(rows);
   const zoneSig={};
@@ -4267,7 +4289,7 @@ function badocTownGridSignature(id,list,rows,extraCounts,groups){
   const metricRows=[...(rows||[]),...(Array.isArray(window.__badocParcelIncomingMetricRows)?window.__badocParcelIncomingMetricRows:[])];
   const metricTown=parcelMetricTownSummary(metricRows);
   const metricSig=Object.keys(metricTown).sort().map(k=>[k,metricTown[k].bulky,metricTown[k].highValue]);
-  return JSON.stringify([id,(list||[]).map(norm),countsSig,statusSig,extra,metricSig,zoneSigOut,groupSig,loadTownNotes()?.[id==="badocGrid"?"badoc":"pinili"]||[],selectedGroupMove&&selectedGroupMove.key===id?selectedGroupMove.index:null,selectedTownMove&&selectedTownMove.key===id?selectedTownMove.town:null]);
+  return JSON.stringify([id,(list||[]).map(norm),countsSig,statusSig,extra,metricSig,zoneSigOut,badocActiveRiderRosterSignature(),groupSig,loadTownNotes()?.[id==="badocGrid"?"badoc":"pinili"]||[],selectedGroupMove&&selectedGroupMove.key===id?selectedGroupMove.index:null,selectedTownMove&&selectedTownMove.key===id?selectedTownMove.town:null]);
 }
 
 function parcelMetricFlags(row){
@@ -5853,6 +5875,14 @@ function parseCsvText(text){
 }
 function riderNorm(v){return String(v??'').trim().toUpperCase();}
 function renderRiders(){
+  // Rider records can arrive after the town grid's first render. Refresh the
+  // grid only when its active roster changes; do not touch saved town notes.
+  const activeRosterSignature=badocActiveRiderRosterSignature();
+  if(window.__badocTownGridRosterSignature!==activeRosterSignature){
+    window.__badocTownGridRosterSignature=activeRosterSignature;
+    BADOC_TOWN_GRID_RENDER_CACHE.clear();
+    if(typeof render==="function"&&document.getElementById("badocGrid"))render();
+  }
   window.__badocRenderDashboardRiderSummary?.();
   if(document.getElementById("actualScannedByRiders")?.classList.contains("active"))window.__badocRenderActualScannedByRiders?.();
   // Rider data can finish loading after the town cards were first rendered.
