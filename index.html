@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v123">
+<meta name="badoc-app-version" content="v124">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -3009,6 +3009,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
               const kind=key==="fm-inventory"?"orders":"tasks";
               const label=key==="fm-inventory"?"FM Hub Inventory":"Pickup Task Management";
               await pickupCopySource(kind,button,label);
+            }
           }else if(key==="assignment-task"||key==="batch-search-result"||key==="hourly"){
             const sources={
               "assignment-task":["__badocAssignmentTaskRows","#assignmentTaskTable"],
