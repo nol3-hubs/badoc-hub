@@ -1028,11 +1028,13 @@ async function invokeSpxNativeExport(tabId) {
 
 
 async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
+  const requestId = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+  const resultStorageKey = "badoc_assignment_task_export_" + requestId;
   const results = await extApi.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
-    args: [selectedDate],
-    func: async dateValue => {
+    args: [selectedDate, requestId, resultStorageKey],
+    func: async (dateValue, exportRequestId, exportResultStorageKey) => {
       try {
       const visible = el => {
         if (!el) return false;
@@ -1138,14 +1140,35 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         const response = await originalExportFunction.call(this, params);
         const body = response?.data ?? response ?? null;
         try { apiResult = JSON.parse(JSON.stringify(body)); }
-        catch (_) { apiResult = { retcode: body?.retcode, message: body?.message, data: { task_id: body?.data?.task_id, download_url: body?.data?.download_url } }; }
+        catch (_) {
+          apiResult = {
+            retcode: body?.retcode,
+            message: body?.message,
+            data: { task_id: body?.data?.task_id, download_url: body?.data?.download_url }
+          };
+        }
+        try {
+          sessionStorage.setItem(exportResultStorageKey, JSON.stringify({
+            __badocAssignmentTask: true, ok: true, stage: "api-response",
+            taskId: getTaskIdFromPageResponse(apiResult), apiResult,
+            directUrl: String(apiResult?.data?.download_url || apiResult?.data?.url || "").trim(),
+            createdDate: date, context
+          }));
+        } catch (_) {}
         return response;
       };
       try { await exportVm.confirm(); }
       finally { exportVm.exportFunction = originalExportFunction; }
       const taskId = getTaskIdFromPageResponse(apiResult);
       const data = apiResult?.data || apiResult || {};
-      return { __badocAssignmentTask: true, ok: true, taskId, apiResult, directUrl: String(data.download_url || data.url || "").trim(), createdDate: date, context };
+      const finalResult = {
+        __badocAssignmentTask: true, ok: true, stage: "confirmed",
+        taskId, apiResult,
+        directUrl: String(data.download_url || data.url || "").trim(),
+        createdDate: date, context
+      };
+      try { sessionStorage.setItem(exportResultStorageKey, JSON.stringify(finalResult)); } catch (_) {}
+      return finalResult;
       function getTaskIdFromPageResponse(value, depth = 0) {
         if (!value || depth > 5) return 0;
         if (Array.isArray(value)) { for (const item of value) { const id = getTaskIdFromPageResponse(item, depth + 1); if (id) return id; } return 0; }
@@ -1159,28 +1182,67 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         return 0;
       }
       } catch(error) {
-        return {
-          __badocAssignmentTask: true,
-          ok: false,
+        const failure = {
+          __badocAssignmentTask: true, ok: false,
           error: String(error?.message || error),
           stack: String(error?.stack || "").slice(0, 1200),
           route: String(location.href || "")
         };
+        try { sessionStorage.setItem(exportResultStorageKey, JSON.stringify(failure)); } catch (_) {}
+        return failure;
       }
     }
   });
-  const injection = Array.isArray(results)
-    ? (results.find(item => item && item.frameId === 0) || results[0])
-    : null;
-  if (!injection) {
-    throw new Error("SPX page injection produced no frame result. Confirm the authenticated Assignment Task tab is open, then reload it and retry.");
-  }
-  if (injection.error) {
-    throw new Error("SPX page injection failed: " + String(injection.error.message || injection.error));
-  }
-  const result = injection.result;
+  let result = null;
+  let injection = null;
+  let injectionError = null;
+  try {
+    const injectionResults = await extApi.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      args: [selectedDate, requestId, resultStorageKey],
+      func: async (dateValue, exportRequestId, exportResultStorageKey) => {
+        return null;
+      }
+    });
+    injection = Array.isArray(injectionResults)
+      ? (injectionResults.find(item => item && item.frameId === 0) || injectionResults[0])
+      : null;
+    result = injection?.result || null;
+  } catch (error) { injectionError = error; }
+  // The export callback writes its response to sessionStorage before SPX can
+  // close/repaint its dialog. Read it back if executeScript lost its return.
   if (!result) {
-    throw new Error("SPX page injection returned an empty result (frame " + String(injection.frameId ?? "unknown") + "). Reload the SPX Assignment Task tab and retry.");
+    const readDeadline = Date.now() + 5000;
+    while (Date.now() < readDeadline && !result) {
+      try {
+        const storedResults = await extApi.scripting.executeScript({
+          target: { tabId },
+          world: "MAIN",
+          args: [resultStorageKey],
+          func: key => {
+            try {
+              const raw = sessionStorage.getItem(key);
+              if (!raw) return null;
+              sessionStorage.removeItem(key);
+              return JSON.parse(raw);
+            } catch (error) {
+              return { __badocAssignmentTask: true, ok: false, error: "Could not read saved SPX export response: " + String(error?.message || error) };
+            }
+          }
+        });
+        const stored = Array.isArray(storedResults)
+          ? (storedResults.find(item => item && item.frameId === 0) || storedResults[0])
+          : null;
+        result = stored?.result || null;
+        if (result) break;
+      } catch (error) { injectionError = injectionError || error; }
+      await sleep(250);
+    }
+  }
+  if (!result) {
+    const detail = injectionError?.message ? " " + injectionError.message : "";
+    throw new Error("SPX did not return its Assignment Task export response before the page handoff ended. Confirm the Export dialog was submitted and retry." + detail);
   }
   if (result.__badocAssignmentTask && result.ok === false) {
     throw new Error("SPX Assignment Task page: " + result.error + (result.route ? " · " + result.route : ""));
