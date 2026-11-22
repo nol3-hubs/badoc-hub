@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v120">
+<meta name="badoc-app-version" content="v121">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2830,7 +2830,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           <button type="button" class="reports-copy-btn" data-report-copy="fm-inventory">⧉ FM HUB INVENTORY</button>
           <button type="button" class="reports-copy-btn" data-report-copy="pickup-task-management">⧉ PICKUP TASK MANAGEMENT</button>
         </div>
-        <div class="reports-source-note">LM HUB INVENTORY copies the OID list currently loaded in POD/POOH Checker. FM HUB INVENTORY and PICKUP TASK MANAGEMENT use the existing current-day First Mile exports.</div>
+        <div class="reports-source-note">LM HUB INVENTORY copies Planning Board parcel rows filtered to Delivering, Delivered, and OnHold with Current Station = Badoc Hub. FM HUB INVENTORY and PICKUP TASK MANAGEMENT use the existing current-day First Mile exports.</div>
       </div>
       <div class="reports-group">
         <h4>Hourly AT</h4>
@@ -2918,6 +2918,79 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
         const value=window[globalName];
         return Array.isArray(value)?value:[];
       }
+
+      // Keep LM HUB INVENTORY aligned with the actual Planning Board dataset.
+      // getParcelCountRows() merges the uploaded Parcel Count records with the
+      // latest Forward/Return status snapshots and applies Planning Board rules.
+      const lmInventoryHeaders=[
+        "Order ID","SLS Tracking Number","Shopee Order SN","Longitude","Latitude",
+        "Sort Code Name","Town Name","Location Type","Driver ID","Driver Name",
+        "Driver Phone","Received Time","Current Station Received Time","Delivering Time",
+        "Delivered Time","OnHold Time","OnHoldReason","Reschedule Date","Status",
+        "Reject remark","COD Amount","Manifest Number","Order Account","Original ASF",
+        "Rounding ASF","Total of On Hold Times","Reschedule Time","Delivery Attempts",
+        "Bulky Type","SLA Target Date","Time to SLA","Payment Method","Current Station",
+        "Shop ID","Shop Category","Zone ID","Zone","Destination Station","Next Station",
+        "Pickup Station","Ros","Driver Contract Type","Pick Up Time","Collected Time",
+        "Transported to sp time","SLA Tag","High Value","Specical Dg Type","Damaged Tag",
+        "Return Destination","Chargeable Weight","Cache Type","Size Type"
+      ];
+      const lmInventoryStatusKeys=[
+        "Parcel Status To","Status To","TO Status","To Status","Status To (Current)","Status"
+      ];
+      function lmInventoryStatusValue(row){
+        for(const key of lmInventoryStatusKeys){
+          if(row&&Object.prototype.hasOwnProperty.call(row,key)&&String(row[key]??"").trim()){
+            return String(row[key]).trim();
+          }
+        }
+        const key=Object.keys(row||{}).find(name=>/parcel\\s*status\\s*to|status\\s*to|to\\s*status/i.test(name));
+        return key?String(row[key]??"").trim():"";
+      }
+      function lmInventoryStatusKey(value){
+        return String(value??"").trim().toUpperCase().replace(/[_-]+/g," ").replace(/\\s+/g," ").trim();
+      }
+      async function copyLmHubInventory(button){
+        // Wait for the saved Forward/Return status snapshot to finish restoring
+        // before reading the same merged rows used by Planning Board.
+        if(window.__badocOnholdExportsReady)await window.__badocOnholdExportsReady;
+        if(typeof getParcelCountRows!=="function"){
+          setStatus(button,"Planning Board data source is unavailable on this page.","error");
+          return;
+        }
+        const planningRows=getParcelCountRows();
+        if(!Array.isArray(planningRows)||!planningRows.length){
+          setStatus(button,"No Planning Board parcel data is loaded. Load the Parcel Count data first.","warn");
+          return;
+        }
+        const allowedStatuses=new Set([
+          "DELIVERING","DELIVERED","ONHOLD","ON HOLD","LMHUB ONHOLD","LMHUB ON HOLD"
+        ]);
+        const filtered=planningRows.filter(row=>{
+          const station=String(row?.["Current Station"]??"").trim().replace(/\\s+/g," ").toUpperCase();
+          if(station!=="BADOC HUB")return false;
+          return allowedStatuses.has(lmInventoryStatusKey(lmInventoryStatusValue(row)));
+        });
+        if(!filtered.length){
+          setStatus(button,"No Planning Board rows match Delivering, Delivered, or OnHold with Current Station = Badoc Hub.","warn");
+          return;
+        }
+        const outputRows=filtered.map(row=>{
+          const output={};
+          const planningStatus=lmInventoryStatusValue(row);
+          lmInventoryHeaders.forEach(header=>{
+            // The Inventory sheet has a single Status column. Put the Planning
+            // Board's effective status there (including its OnHold mapping).
+            output[header]=header==="Status"?planningStatus:(row?.[header]??"");
+          });
+          return output;
+        });
+        await copyText(
+          button,
+          rowsToTsv(outputRows),
+          "Copied "+filtered.length.toLocaleString()+" Planning Board row(s) for LM HUB INVENTORY · Delivering, Delivered, OnHold · Current Station: Badoc Hub."
+        );
+      }
       root.addEventListener("click",async event=>{
         const tab=event.target.closest("[data-report-tab]");
         if(tab&&root.contains(tab)){activate(tab.dataset.reportTab,false);return;}
@@ -2927,9 +3000,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
         button.disabled=true;
         try{
           if(key==="lm-inventory"){
-            const oidText=String(document.getElementById("oids")&&document.getElementById("oids").value||"").trim();
-            const count=oidText?oidText.split(String.fromCharCode(10)).map(value=>value.trim()).filter(Boolean).length:0;
-            await copyText(button,oidText,count?"Copied "+count.toLocaleString()+" loaded OID(s) from POD/POOH Checker.":"");
+            await copyLmHubInventory(button);
           }else if(key==="fm-inventory"||key==="pickup-task-management"){
             if(typeof fmTodayExportRows!=="function"){setStatus(button,"First Mile export data is not available on this page.","warn");}
             else{
