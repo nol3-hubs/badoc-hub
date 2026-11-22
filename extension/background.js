@@ -436,13 +436,42 @@ async function listTasks(startSec, source = "", page = 1, omitStartTime = false,
   return known[0] || [];
 }
 
-async function getSignedDownloadUrl(taskId, preferredSource = "fms") {
+function getExportMediaId(value, depth = 0) {
+  if (value == null || depth > 8) return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = getExportMediaId(item, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (typeof value !== "object") return "";
+  for (const key of ["media_id", "mediaId", "mediaID"]) {
+    const raw = value[key];
+    if (raw != null && String(raw).trim()) return String(raw).trim();
+  }
+  const entries = Object.entries(value).sort(([a], [b]) => {
+    const score = key => /media|file|attachment|data|result|task/i.test(key) ? 0 : 1;
+    return score(a) - score(b);
+  });
+  for (const [, child] of entries) {
+    const found = getExportMediaId(child, depth + 1);
+    if (found) return found;
+  }
+  return "";
+}
+
+async function getSignedDownloadUrl(taskId, preferredSource = "fms", mediaId = "") {
   let lastError = "";
+  const media = String(mediaId || "").trim();
   const sources = [...new Set([preferredSource, "fms", "fm", ""])];
   for (const source of sources) {
-    const query = `${source ? `source=${encodeURIComponent(source)}&` : ""}task_id=${encodeURIComponent(taskId)}`;
+    const params = new URLSearchParams();
+    if (source) params.set("source", source);
+    params.set("task_id", String(taskId));
+    if (media) params.set("media_id", media);
     try {
-      const response = await extensionFetchText(`${SPX_ORIGIN}${SIGNED_URL_PATH}?${query}`);
+      const response = await extensionFetchText(`${SPX_ORIGIN}${SIGNED_URL_PATH}?${params.toString()}`);
       const json = parseJsonResponse("SPX signed download URL", response);
       if (Number(json?.retcode) !== 0) { lastError = json?.message || "SPX did not return a signed download URL."; continue; }
       const url = String(json?.data?.download_url || json?.data?.url || json?.download_url || "").trim();
@@ -1804,7 +1833,11 @@ async function runAssignmentTaskExportJob(job) {
       });
       const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
       const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
-      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source);
+      const mediaId = getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+      if (!mediaId) {
+        throw new Error("SPX completed the Assignment Task export, but no media_id was found in its task record or export response. The CSV download request was not sent.");
+      }
+      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId);
       csv = await downloadCsv(signedUrl);
     } else {
       throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");
