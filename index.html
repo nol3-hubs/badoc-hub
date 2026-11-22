@@ -6814,7 +6814,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     if(meta)meta.textContent="Showing "+filtered.length.toLocaleString()+" of "+firstMileCombinedRows.length.toLocaleString()+" rows: "+eligibleOrderGroups.length.toLocaleString()+" orders with ETA today and "+taskOnlyRows.length.toLocaleString()+" standalone tasks created today (Philippine time). Matched tasks stay on their order row; unmatched tasks appear separately regardless of status. Hidden "+excludedCancelledWithoutDisabled.toLocaleString()+" cancelled orders without a matched Disabled task.";
 
     const copyBtn=$("copyFirstMileForSheet");
-    const sheetRowCount=filtered.filter(group=>!group.taskOnly||group.isTaskOnlyInbounded||group.isTaskOnlyOnhold).length;
+    const sheetRowCount=filtered.length;
     const hasSheetRows=sheetRowCount>0;
     if(copyBtn){copyBtn.disabled=!hasSheetRows;copyBtn.textContent=hasSheetRows?"Copy for Sheet ("+sheetRowCount+")":"Copy for Sheet";}
 
@@ -7125,7 +7125,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }catch(error){console.warn("Could not load yesterday's Pickup Orders baseline:",error);}
     const previousOrderStatuses=previousOrderBaseline?.byId||{};
     const hasCanceledCandidates=sourceGroups.some(group=>{
-      if(group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true||group.taskDisabled===true)return false;
+      if(group.taskOnly===true||group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true||group.taskDisabled===true)return false;
       const order=(group.eligibleOrders||[])[0];
       const status=fmNorm(order?fmPickupOrderStatus(order)||fmOrderSheetStatus(order):"");
       return ["canceled","cancelled","disabled"].includes(status);
@@ -7144,7 +7144,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
     let skippedPreviousDayCanceled=0;
     const groups=sourceGroups.filter(group=>{
-      if(group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true)return true;
+      if(group.taskOnly===true||group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true)return true;
       const order=(group.eligibleOrders||[])[0];
       if(!order)return true;
       const id=fmNorm(fmOrderId(order));
@@ -7159,7 +7159,8 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     });
     const clean=value=>String(value??"").replace(/[\t\r\n]+/g," ").trim();
     // Copy for Sheet maps Inbounded and Picked Up to the sheet's "Picked - Up" label.
-    // This conversion is deliberately local to the copy action; the Pickup UI/export keep their own statuses.
+    // Other standalone task statuses (for example Accepted) are written to 5PM STATUS.
+    // This conversion is local to the copy action; Pickup UI/export keep their own statuses.
     const sheetPickupStatus=value=>{
       const status=String(value??"").trim();
       const key=fmNorm(status);
@@ -7176,7 +7177,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     for(const group of groups){
       const orders=group.eligibleOrders||[];
       const assignedRider=fmAssignedRiderDisplay(group)==="—"?"":fmAssignedRiderDisplay(group);
-      if(group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true){
+      if(group.taskOnly===true||group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true){
         const task=fmLatestTask(group)||group.tasks?.[0]||{};
         const pointId=fmPickupPointId(task)||group.pickupPointId||"";
         const taskNumber=fmValue(task,["Pickup Task Number","Task Number","Pickup Task No","Task ID","task_id","pickup_task_number"]);
@@ -7193,7 +7194,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           assignedRider,         // Assigned Rider from SPX Tasks
           group.isTaskOnlyOnhold ? "TRUE" : "", // Printed AWB? checked for Onhold task rows
           group.isTaskOnlyOnhold ? "Pouch - M" : "", // Packaging Material for Onhold task rows
-          "",                    // 5PM STATUS stays blank for task-only rows
+          (group.isTaskOnlyInbounded===true||group.isTaskOnlyOnhold===true) ? "" : sheetPickupStatus(taskStatus), // Preserve other standalone task statuses
           "",                    // 7PM STATUS
           "",                    // 9PM STATUS
           "",                    // EOD Status
