@@ -1055,31 +1055,90 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       }).format(new Date());
       const startText = date + " 00:00:00";
       const endText = date + " 23:59:59";
+      const dialogSelector = '[role="dialog"],[aria-modal="true"],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal,[class*="dialog"],[class*="modal"],[class*="Dialog"],[class*="Modal"]';
+      const getVueChain = element => {
+        const queue = [element?.__vue__, element?.__vueParentComponent].filter(Boolean);
+        const seen = new Set();
+        const chain = [];
+        while (queue.length && chain.length < 24) {
+          const current = queue.shift();
+          if (!current || (typeof current !== "object" && typeof current !== "function") || seen.has(current)) continue;
+          seen.add(current);
+          chain.push(current);
+          const parent = current.$parent || current.parent || current.$?.parent || current.proxy?.$parent;
+          if (parent && !seen.has(parent)) queue.push(parent);
+        }
+        return chain;
+      };
+      const getCandidate = (rawVm, dialogText) => {
+        const proxy = rawVm?.proxy || rawVm;
+        const setupState = rawVm?.setupState || {};
+        const ctx = rawVm?.ctx || {};
+        const propsList = [
+          rawVm?.$options?.propsData, rawVm?.$props, rawVm?.props,
+          rawVm?.vnode?.props, rawVm?.$?.vnode?.props, proxy?.$props
+        ].filter(value => value && typeof value === "object");
+        const form = proxy?.form || rawVm?.form || setupState.form || ctx.form ||
+          proxy?.$data?.form || rawVm?.data?.form ||
+          propsList.map(props => props.form).find(value => value && typeof value === "object");
+        const exportFunction = proxy?.exportFunction || rawVm?.exportFunction ||
+          setupState.exportFunction || ctx.exportFunction ||
+          propsList.map(props => props.exportFunction).find(value => typeof value === "function");
+        const confirm = proxy?.confirm || rawVm?.confirm || setupState.confirm || ctx.confirm;
+        if (!form || typeof form !== "object" || typeof exportFunction !== "function" || typeof confirm !== "function") return null;
+        const actualForm = form.__v_isRef && form.value && typeof form.value === "object" ? form.value : form;
+        const keys = Object.keys(actualForm);
+        const createdKey = keys.find(key => {
+          const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+          return (normalized.includes("create") || normalized.includes("ctime")) &&
+            (normalized.includes("time") || normalized.includes("date") || normalized.endsWith("at"));
+        });
+        const context = String(
+          propsList.map(props => props.contextName || props.context_name || "").find(Boolean) ||
+          proxy?.contextName || rawVm?.contextName || rawVm?.type?.name || rawVm?.$options?.name || ""
+        );
+        if (!createdKey && !/assignment|task/i.test(context + " " + dialogText)) return null;
+        const callbackOwners = [proxy, rawVm, setupState, ctx, ...propsList]
+          .filter((owner, index, all) => owner && typeof owner === "object" &&
+            owner.exportFunction === exportFunction && all.indexOf(owner) === index);
+        return {
+          vm: proxy, rawVm, form: actualForm, createdKey, context,
+          originalExportFunction: exportFunction, confirm, callbackOwners
+        };
+      };
       const findExportComponent = () => {
-        const buttons = [...document.querySelectorAll("button")]
-          .filter(visible)
-          .filter(button => /^(confirm|export|ok|submit|matukoy)$/i.test(String(button.innerText || button.textContent || "").trim()));
-        for (const button of buttons) {
-          let vm = button.__vue__;
-          let depth = 0;
-          while (vm && depth++ < 12) {
-            const props = vm.$options?.propsData || {};
-            const form = vm.form || vm.$data?.form || vm.$props?.form;
-            const exportFunction = vm.exportFunction || props.exportFunction;
-            if (typeof vm.confirm === "function" && typeof exportFunction === "function" && form && typeof form === "object") {
-              const keys = Object.keys(form);
-              const createdKey = keys.find(key => {
-                const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-                return (normalized.includes("create") || normalized.includes("ctime")) &&
-                  (normalized.includes("time") || normalized.includes("date") || normalized.endsWith("at"));
-              });
-              const context = String(props.contextName || vm.contextName || "");
-              if (createdKey || /assignment|task/i.test(context)) return { vm, props, form, createdKey, context };
-            }
-            vm = vm.$parent;
+        const roots = [...document.querySelectorAll(dialogSelector)].filter(visible);
+        const targets = new Set();
+        for (const root of roots) {
+          targets.add(root);
+          for (const child of root.querySelectorAll("*")) {
+            if (visible(child)) targets.add(child);
           }
         }
-        return null;
+        for (const element of document.querySelectorAll('button,[role="button"],input,form')) {
+          if (visible(element)) targets.add(element);
+        }
+        const matches = [];
+        const seenComponents = new Set();
+        for (const element of targets) {
+          const dialogRoot = element.closest(dialogSelector) || element;
+          const dialogText = String(dialogRoot.innerText || dialogRoot.textContent || "").slice(0, 3000);
+          for (const rawVm of getVueChain(element)) {
+            if (seenComponents.has(rawVm)) continue;
+            seenComponents.add(rawVm);
+            const candidate = getCandidate(rawVm, dialogText);
+            if (!candidate) continue;
+            const score =
+              (/assignment/i.test(candidate.context) ? 8 : 0) +
+              (/task/i.test(candidate.context) ? 5 : 0) +
+              (/assignment/i.test(dialogText) ? 4 : 0) +
+              (/task/i.test(dialogText) ? 2 : 0) +
+              (candidate.createdKey ? 3 : 0);
+            matches.push({ candidate, score });
+          }
+        }
+        matches.sort((a, b) => b.score - a.score);
+        return matches[0]?.candidate || null;
       };
       let found = findExportComponent();
       if (!found) {
@@ -1105,7 +1164,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       }
       if (!found) throw new Error("SPX Assignment Task Export dialog opened, but its Created Date form could not be identified.");
       const { vm: exportVm, form, createdKey, context } = found;
-      if (!createdKey) throw new Error("SPX Assignment Task export form has no Created Date field. Detected fields: " + Object.keys(form).join(", "));
+      if (!createdKey) throw new Error("SPX Assignment Task export dialog was found, but its Created Date field is not mapped. Detected form fields: " + Object.keys(form).join(", "));
       const existing = form[createdKey];
       const buildDateValue = (text, sample) => {
         if (sample instanceof Date) return new Date(text.replace(" ", "T"));
@@ -1136,10 +1195,13 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       } else form[createdKey] = [startText, endText];
       try { exportVm.$forceUpdate?.(); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 100));
-      const originalExportFunction = exportVm.exportFunction;
-      if (typeof originalExportFunction !== "function") throw new Error("SPX Assignment Task export callback is unavailable.");
+      const originalExportFunction = found.originalExportFunction || exportVm.exportFunction;
+      const confirmExport = found.confirm || exportVm.confirm;
+      if (typeof originalExportFunction !== "function" || typeof confirmExport !== "function") {
+        throw new Error("SPX Assignment Task export callback or Confirm method is unavailable.");
+      }
       let apiResult = null;
-      exportVm.exportFunction = async function(params) {
+      const wrappedExportFunction = async function(params) {
         const response = await originalExportFunction.call(this, params);
         const body = response?.data ?? response ?? null;
         try { apiResult = JSON.parse(JSON.stringify(body)); }
@@ -1160,8 +1222,21 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         } catch (_) {}
         return response;
       };
-      try { await exportVm.confirm(); }
-      finally { exportVm.exportFunction = originalExportFunction; }
+      let patchedOwner = null;
+      for (const owner of (found.callbackOwners || [exportVm])) {
+        try {
+          owner.exportFunction = wrappedExportFunction;
+          if (owner.exportFunction === wrappedExportFunction) {
+            patchedOwner = owner;
+            break;
+          }
+        } catch (_) {}
+      }
+      if (!patchedOwner) {
+        throw new Error("SPX Assignment Task export callback could not be hooked from its dialog component.");
+      }
+      try { await confirmExport.call(exportVm); }
+      finally { try { patchedOwner.exportFunction = originalExportFunction; } catch (_) {} }
       const taskId = getTaskIdFromPageResponse(apiResult);
       const data = apiResult?.data || apiResult || {};
       const finalResult = {
