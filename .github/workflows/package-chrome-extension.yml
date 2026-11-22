@@ -1,0 +1,81 @@
+name: Package Chrome SPX Bridge
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "extension/**"
+      - ".github/workflows/package-chrome-extension.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Validate package
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path("extension")
+          manifest = json.loads((root / "manifest.json").read_text())
+          assert manifest["manifest_version"] == 3
+          for name in manifest["background"].get("service_worker", []):
+              assert (root / name).is_file(), name
+          for script in manifest["content_scripts"]:
+              for name in script["js"]:
+                  assert (root / name).is_file(), name
+          for resource in manifest.get("web_accessible_resources", []):
+              for name in resource["resources"]:
+                  assert (root / name).is_file(), name
+          for name in manifest["icons"].values():
+              assert (root / name).is_file(), name
+          print("Chrome manifest and packaged files validated.")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write("PACKAGE_VERSION=" + manifest["version"] + "\n")
+          PY
+      - name: Create ZIP
+        shell: bash
+        run: |
+          cd extension
+          zip -X -qr "$GITHUB_WORKSPACE/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" .
+          cd "$GITHUB_WORKSPACE"
+          sha256sum "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" > "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
+      - name: Publish ZIP in repository
+        shell: bash
+        run: |
+          mkdir -p downloads
+          cp "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" downloads/
+          cp "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256" downloads/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish Chrome SPX Bridge ${PACKAGE_VERSION} package"
+            for attempt in 1 2 3; do
+              git fetch origin "${GITHUB_REF_NAME}"
+              git rebase "origin/${GITHUB_REF_NAME}"
+              if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "Could not publish Chrome package after 3 push attempts."
+                exit 1
+              fi
+              sleep 2
+            done
+          fi
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPX-BRIDGE-BADOC-HUB-CHROME-${{ env.PACKAGE_VERSION }}
+          path: |
+            SPX-BRIDGE-BADOC-HUB-CHROME-*.zip
+            SPX-BRIDGE-BADOC-HUB-CHROME-*.sha256
+          if-no-files-found: error
+          retention-days: 30
