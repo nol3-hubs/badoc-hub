@@ -2919,6 +2919,73 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
         return Array.isArray(value)?value:[];
       }
 
+      // Fallback reader for the exact locally saved SPX Pickup exports used by
+      // the Pickup menu. Reports must not depend on a Pickup-page DOM element.
+      const reportPickupDateFormatter=new Intl.DateTimeFormat("en-CA",{
+        timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"
+      });
+      const reportPickupNorm=value=>String(value??"").normalize("NFKC").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+      function reportPickupValue(row,aliases,pattern){
+        const keys=Object.keys(row||{});
+        const normalized=new Map(keys.map(key=>[reportPickupNorm(key),key]));
+        for(const alias of aliases){
+          const key=normalized.get(reportPickupNorm(alias));
+          if(key)return String(row[key]??"").trim();
+        }
+        if(pattern){
+          const key=keys.find(name=>pattern.test(reportPickupNorm(name)));
+          if(key)return String(row[key]??"").trim();
+        }
+        return "";
+      }
+      function reportPickupDateKey(value){
+        const raw=String(value??"").trim();
+        if(!raw)return "";
+        const direct=raw.match(/^(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})/);
+        if(direct)return `${direct[1]}-${String(direct[2]).padStart(2,"0")}-${String(direct[3]).padStart(2,"0")}`;
+        const slash=raw.match(/^(\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})/);
+        if(slash)return `${slash[3]}-${String(slash[1]).padStart(2,"0")}-${String(slash[2]).padStart(2,"0")}`;
+        let date=null;
+        if(/^\\d+(\\.\\d+)?$/.test(raw)){
+          const number=Number(raw);
+          if(number>100000000000)date=new Date(number);
+          else if(number>1000000000)date=new Date(number*1000);
+          else if(number>20000&&number<80000)date=new Date(Date.UTC(1899,11,30)+number*86400000);
+        }else{
+          date=new Date(raw.includes("T")?raw:raw.replace(/\\s+/,"T"));
+        }
+        return date&&!Number.isNaN(date.getTime())?reportPickupDateFormatter.format(date):"";
+      }
+      function reportStoredPickupRows(kind){
+        const storageKey=kind==="orders"
+          ?"badoc_first_mile_orders_csv_local_v1"
+          :"badoc_first_mile_tasks_csv_local_v1";
+        let record=null;
+        try{record=JSON.parse(localStorage.getItem(storageKey)||"null");}catch(_){}
+        if(!record?.csvText||typeof parseCsvText!=="function")return [];
+        const rows=parseCsvText(record.csvText);
+        const today=typeof getBadocManilaDayBounds==="function"
+          ?getBadocManilaDayBounds().date
+          :reportPickupDateFormatter.format(new Date());
+        return rows.filter(row=>{
+          const rawDate=kind==="orders"
+            ?reportPickupValue(row,["ETA","Estimated Time of Arrival","Estimated Arrival Time","Pickup ETA","Pickup Estimated Time","eta_date","eta_time","estimated_arrival_time"],/^eta(date|time)?$/i)
+            :reportPickupValue(row,["Create Time","Task Create Time","Created Time","create_time","ctime"],/^createtime$|^taskcreatetime$|^ctime$/i);
+          return reportPickupDateKey(rawDate)===today;
+        });
+      }
+      async function copyStoredPickupExport(kind,button,label){
+        const rows=reportStoredPickupRows(kind);
+        if(!rows.length){
+          setStatus(button,kind==="orders"
+            ?"No Pickup Orders with ETA today are saved on this device. Sync Pickup Orders + Tasks in the Pickup menu first."
+            :"No Pickup Tasks created today are saved on this device. Sync Pickup Orders + Tasks in the Pickup menu first.","warn");
+          return false;
+        }
+        await copyText(button,rowsToTsv(rows),"Copied "+rows.length.toLocaleString()+" row(s) from the saved Pickup export: "+label+".");
+        return true;
+      }
+
       // Keep LM HUB INVENTORY aligned with the actual Planning Board dataset.
       // getParcelCountRows() merges the uploaded Parcel Count records with the
       // latest Forward/Return status snapshots and applies Planning Board rules.
@@ -3003,12 +3070,13 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
             await copyLmHubInventory(button);
           }else if(key==="fm-inventory"||key==="pickup-task-management"){
             const pickupCopySource=window.__badocCopyPickupRawExportRows;
-            if(typeof pickupCopySource!=="function"){
-              setStatus(button,"Pickup menu copy source is unavailable. Refresh the dashboard and try again.","error");
-            }else{
-              const kind=key==="fm-inventory"?"orders":"tasks";
-              const label=key==="fm-inventory"?"FM Hub Inventory":"Pickup Task Management";
+            const kind=key==="fm-inventory"?"orders":"tasks";
+            const label=key==="fm-inventory"?"FM Hub Inventory":"Pickup Task Management";
+            if(typeof pickupCopySource==="function"){
               await pickupCopySource(kind,button,label);
+            }else{
+              // Read the same saved CSV and use the Pickup menu's date rule and TSV format.
+              await copyStoredPickupExport(kind,button,label);
             }
           }else if(key==="assignment-task"||key==="batch-search-result"||key==="hourly"){
             const sources={
@@ -3020,12 +3088,17 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
             const payload=rows.length?rowsToTsv(rows):tableToTsv(table);
             const count=rows.length||Math.max(0,table?table.querySelectorAll("tbody tr").length:0);
             const label=key==="assignment-task"?"assignment task":key==="batch-search-result"?"batch search result":"hourly";
-            await copyText(button,payload,count?"Copied "+count.toLocaleString()+" "+label+" row(s).":"");
+            if(!payload||!count){
+              const sourceLabel=key==="assignment-task"?"Assignment Task":key==="batch-search-result"?"Batch Search Result":"Hourly";
+              setStatus(button,sourceLabel+" data source is not connected to this Reports build yet. No matching rows or report table are registered.","warn");
+            }else{
+              await copyText(button,payload,"Copied "+count.toLocaleString()+" "+label+" row(s).");
+            }
           }else if(key==="pickup"){
             const existing=document.getElementById("copyFirstMileForSheet");
             if(existing&&!existing.disabled){
               existing.click();
-              setStatus(button,"Pickup Copy for Sheet action started using the existing Pickup results.","success");
+              setStatus(button,"Pickup Copy for Sheet action started. Check the Pickup page for its final copy result.","info");
             }else setStatus(button,"No Pickup rows are loaded. Sync Pickup Orders + Tasks first.","warn");
           }else if(key==="performance"){
             if(typeof renderRiderPerformance==="function")renderRiderPerformance();
@@ -6921,7 +6994,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     }
     return copied;
   }
-  // Let the Reports tab reuse this exact Pickup menu export implementation.
+  // Let Reports call the raw Pickup export copier regardless of which page is active.
   window.__badocCopyPickupRawExportRows=fmCopyRawExportRows;
   $("copyFMHubInventory")?.addEventListener("click",event=>fmCopyRawExportRows("orders",event.currentTarget,"FM Hub Inventory"));
   $("copyPickupTaskManagement")?.addEventListener("click",event=>fmCopyRawExportRows("tasks",event.currentTarget,"Pickup Task Management"));
