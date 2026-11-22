@@ -2228,6 +2228,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
     <div class="nav-group-label">MONITORING & DATA</div>
     <button data-page="podPoohChecker" title="POD/POOH Checker"><span class="ico">◎</span> POD/POOH Checker</button>
     <button data-page="dailyHistory" title="EOD Data"><span class="ico">◷</span> EOD Data</button>
+    <button data-page="reports" title="Reports"><span class="ico">▤</span> Reports</button>
 
     <div class="nav-group-label">PERFORMANCE</div>
     <button data-page="ridersData" title="Riders Data"><span class="ico">♙</span> Riders Data</button>
@@ -2783,6 +2784,16 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
       <div class="dh2-chips" id="dh2Chips" aria-label="Recent days"></div>
     </div>
     <div id="dailyHistoryDashboard" class="dh2-body"><div class="dh2-skel"><i></i><i></i><i></i><i></i></div></div>
+  </div>
+</section>
+<section id="reports" class="page">
+  <div class="card" style="padding:20px;min-height:180px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span aria-hidden="true" style="font-size:22px;line-height:1">▤</span>
+      <h2 style="margin:0">Reports</h2>
+    </div>
+    <p style="margin:0;color:var(--muted)">This is the Reports workspace. Report types and filters can be added here.</p>
+    <div class="empty" style="margin-top:18px">No reports available yet.</div>
   </div>
 </section>
 <section id="kpi" class="page">
@@ -7204,7 +7215,7 @@ function showPage(p){
  document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
  const page=$(p);if(page)page.classList.add("active");
  document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x.dataset.page===p));
- const titles={homeDashboard:"Dashboard",dashboard:"Planning Board",actualScannedByRiders:"Actual Scanned by Riders",volumeForecastBoard:"Volume Forecast",kpi:"KPI",records:"Parcel Records",linehaul:"Linehaul Task",receivedChecking:"Dispatch",podPoohChecker:"POD/POOH Checker",misrouted:"Misrouted Parcels",dailyRiderPerformance:"Rider Performance",ridersData:"Riders Data",dailyHistory:"EOD Data",instructions:"Instructions",firstMile:"Pickup",settings:"Settings"};
+ const titles={homeDashboard:"Dashboard",dashboard:"Planning Board",actualScannedByRiders:"Actual Scanned by Riders",volumeForecastBoard:"Volume Forecast",kpi:"KPI",records:"Parcel Records",linehaul:"Linehaul Task",receivedChecking:"Dispatch",podPoohChecker:"POD/POOH Checker",misrouted:"Misrouted Parcels",dailyRiderPerformance:"Rider Performance",ridersData:"Riders Data",dailyHistory:"EOD Data",reports:"Reports",instructions:"Instructions",firstMile:"Pickup",settings:"Settings"};
  $("pageTitle").textContent=titles[p]||p.replace(/^\w/,c=>c.toUpperCase()).replace("Towns","Town Management");
  document.body.classList.toggle("pickup-page-active",p==="firstMile");
  if(p==="firstMile")window.__badocRenderFirstMileCombined?.();
