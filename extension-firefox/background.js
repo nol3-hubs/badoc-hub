@@ -1033,7 +1033,10 @@ async function invokeSpxNativeExport(tabId) {
 async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
   const requestId = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
   const resultStorageKey = "badoc_assignment_task_export_" + requestId;
-  const results = await extApi.scripting.executeScript({
+  let results = null;
+  let injectionError = null;
+  try {
+    results = await extApi.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
     args: [selectedDate, requestId, resultStorageKey],
@@ -1195,6 +1198,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         return failure;
       }
     }
+  });
   } catch (error) { injectionError = error; }
   let result = null;
   const injection = Array.isArray(results)
