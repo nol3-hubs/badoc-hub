@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v121">
+<meta name="badoc-app-version" content="v122">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2830,7 +2830,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           <button type="button" class="reports-copy-btn" data-report-copy="fm-inventory">⧉ FM HUB INVENTORY</button>
           <button type="button" class="reports-copy-btn" data-report-copy="pickup-task-management">⧉ PICKUP TASK MANAGEMENT</button>
         </div>
-        <div class="reports-source-note">LM HUB INVENTORY copies Planning Board parcel rows filtered to Delivering, Delivered, and OnHold with Current Station = Badoc Hub. FM HUB INVENTORY and PICKUP TASK MANAGEMENT use the existing current-day First Mile exports.</div>
+        <div class="reports-source-note">LM HUB INVENTORY copies filtered Planning Board parcel rows. FM HUB INVENTORY and PICKUP TASK MANAGEMENT use the same Pickup menu copy source, row filters, and TSV formatting.</div>
       </div>
       <div class="reports-group">
         <h4>Hourly AT</h4>
@@ -3002,10 +3002,12 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           if(key==="lm-inventory"){
             await copyLmHubInventory(button);
           }else if(key==="fm-inventory"||key==="pickup-task-management"){
-            if(typeof fmTodayExportRows!=="function"){setStatus(button,"First Mile export data is not available on this page.","warn");}
-            else{
-              const rows=fmTodayExportRows(key==="fm-inventory"?"orders":"tasks");
-              await copyText(button,rowsToTsv(rows),"Copied "+rows.length.toLocaleString()+" row(s) from today's "+(key==="fm-inventory"?"Pickup Orders":"Pickup Tasks")+" export.");
+            if(typeof fmCopyRawExportRows!=="function"){
+              setStatus(button,"Pickup menu copy source is not available on this page.","warn");
+            }else{
+              const kind=key==="fm-inventory"?"orders":"tasks";
+              const label=key==="fm-inventory"?"FM Hub Inventory":"Pickup Task Management";
+              await fmCopyRawExportRows(kind,button,label);
             }
           }else if(key==="assignment-task"||key==="batch-search-result"||key==="hourly"){
             const sources={
@@ -6870,7 +6872,21 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
   }
   async function fmCopyRawExportRows(kind,button,baseLabel){
     const rows=fmTodayExportRows(kind);
-    if(!rows.length){fmUpdateRawCopyButtons();return;}
+    const reportPanel=button?.closest?.("[data-report-panel]");
+    const reportStatus=reportPanel?.querySelector("[data-report-copy-status]");
+    if(!rows.length){
+      fmUpdateRawCopyButtons();
+      if(reportStatus){
+        reportStatus.textContent=kind==="orders"
+          ?"No Pickup Orders with ETA today are loaded. Sync Pickup Orders + Tasks in the Pickup menu first."
+          :"No Pickup Tasks created today are loaded. Sync Pickup Orders + Tasks in the Pickup menu first.";
+        reportStatus.dataset.state="warn";
+      }
+      return false;
+    }
+    // This is the same raw Pickup Orders / Pickup Tasks dataset, today's row
+    // filter, column discovery, cell cleanup, and TSV serialization used by
+    // the two copy buttons in the Pickup menu.
     const headers=[...new Set(rows.flatMap(row=>Object.keys(row||{})))];
     const clean=value=>{
       if(value===null||value===undefined)return "";
@@ -6892,11 +6908,17 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       try{copied=document.execCommand("copy");}catch(_){copied=false;}
       area.remove();
     }
-    if(button){
-      const count=rows.length;
+    if(reportStatus){
+      const label=baseLabel|| (kind==="orders"?"FM Hub Inventory":"Pickup Task Management");
+      reportStatus.textContent=copied
+        ?`Copied ${rows.length.toLocaleString()} row(s) from the Pickup menu: ${label}.`
+        :"Copy failed. Check browser clipboard permissions.";
+      reportStatus.dataset.state=copied?"success":"error";
+    }else if(button){
       button.textContent=copied?`Copied ${lines.length} rows${skippedPreviousDayCanceled? ` · skipped ${skippedPreviousDayCanceled} canceled from yesterday` : ""}`:"Copy failed";
       setTimeout(()=>{if(button.isConnected)fmUpdateRawCopyButtons();},2200);
     }
+    return copied;
   }
   $("copyFMHubInventory")?.addEventListener("click",event=>fmCopyRawExportRows("orders",event.currentTarget,"FM Hub Inventory"));
   $("copyPickupTaskManagement")?.addEventListener("click",event=>fmCopyRawExportRows("tasks",event.currentTarget,"Pickup Task Management"));
