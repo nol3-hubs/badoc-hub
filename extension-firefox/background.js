@@ -1033,6 +1033,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
     world: "MAIN",
     args: [selectedDate],
     func: async dateValue => {
+      try {
       const visible = el => {
         if (!el) return false;
         const rect = el.getBoundingClientRect();
@@ -1144,7 +1145,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       finally { exportVm.exportFunction = originalExportFunction; }
       const taskId = getTaskIdFromPageResponse(apiResult);
       const data = apiResult?.data || apiResult || {};
-      return { taskId, apiResult, directUrl: String(data.download_url || data.url || "").trim(), createdDate: date, context };
+      return { __badocAssignmentTask: true, ok: true, taskId, apiResult, directUrl: String(data.download_url || data.url || "").trim(), createdDate: date, context };
       function getTaskIdFromPageResponse(value, depth = 0) {
         if (!value || depth > 5) return 0;
         if (Array.isArray(value)) { for (const item of value) { const id = getTaskIdFromPageResponse(item, depth + 1); if (id) return id; } return 0; }
@@ -1157,10 +1158,36 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         }
         return 0;
       }
+      } catch(error) {
+        return {
+          __badocAssignmentTask: true,
+          ok: false,
+          error: String(error?.message || error),
+          stack: String(error?.stack || "").slice(0, 1200),
+          route: String(location.href || "")
+        };
+      }
     }
   });
-  const result = results?.[0]?.result;
-  if (!result) throw new Error("SPX Assignment Task export returned no result.");
+  const injection = Array.isArray(results)
+    ? (results.find(item => item && item.frameId === 0) || results[0])
+    : null;
+  if (!injection) {
+    throw new Error("SPX page injection produced no frame result. Confirm the authenticated Assignment Task tab is open, then reload it and retry.");
+  }
+  if (injection.error) {
+    throw new Error("SPX page injection failed: " + String(injection.error.message || injection.error));
+  }
+  const result = injection.result;
+  if (!result) {
+    throw new Error("SPX page injection returned an empty result (frame " + String(injection.frameId ?? "unknown") + "). Reload the SPX Assignment Task tab and retry.");
+  }
+  if (result.__badocAssignmentTask && result.ok === false) {
+    throw new Error("SPX Assignment Task page: " + result.error + (result.route ? " · " + result.route : ""));
+  }
+  if (!result.__badocAssignmentTask || result.ok !== true) {
+    throw new Error("SPX page returned an unexpected Assignment Task response.");
+  }
   return result;
 }
 
