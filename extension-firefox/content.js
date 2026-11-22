@@ -174,6 +174,7 @@
       "BADOC_START_ASSIGNED_ONHOLD_TODAY",
       "BADOC_START_RECEIVED_CHECKING_INBOUND_SYNC",
       "BADOC_START_PARCEL_SECONDARY_SYNC",
+      "BADOC_START_ASSIGNMENT_TASK_EXPORT",
       "BADOC_LOOKUP_PICKUP_INFO",
       "BADOC_ABORT_SYNC"
     ]);
@@ -183,6 +184,7 @@
         data.type === "BADOC_START_PARCEL_SECONDARY_SYNC" ? "parcel-secondary" :
         data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
         data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
+        data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT" ? "assignment-task" :
         data.type === "BADOC_START_RIDER_SYNC" ? "rider" : "parcel-inbound";
       emit("BADOC_SPX_ERROR", {
         message: "Badoc Hub Extesion v1 is not connected. Reload the extension and refresh BADOC HUB.",
@@ -193,6 +195,7 @@
     try {
       const payload = { type: data.type };
       if (data.type === "BADOC_LOOKUP_PICKUP_INFO") { payload.reqId=String(data.reqId||""); payload.orderId=String(data.orderId||"").trim(); }
+      if (data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT" && data.selectedDate !== undefined) payload.selectedDate=String(data.selectedDate||"");
       if (data.type === "BADOC_START_RIDER_SYNC") {
         payload.hubId = Number(data.hubId || 0) || 0;
         payload.hubName = String(data.hubName || "").trim();
