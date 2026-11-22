@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v121">
+<meta name="badoc-app-version" content="v120">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2590,7 +2590,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
         </details>
       </article>
     </div>
-    <div class="hint first-mile-local-note">Pickup Orders appear when ETA is today. All Badoc Hub Pickup Tasks created today also appear. Standalone tasks can show a verified Pickup Order ID when Task Number + Pickup Point ID matches, or when Pickup Point ID + seller + Assigned/Create Time within 60 seconds uniquely identifies one order.</div>
+    <div class="hint first-mile-local-note">Pickup Orders appear when ETA is today. All Badoc Hub Pickup Tasks created today also appear, even without a matching order. Safely matched tasks stay on the order row; unmatched tasks appear separately with their original status and rider.</div>
   </div>
 </section>
 
@@ -6334,13 +6334,6 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       return direct[1]+"-"+String(direct[2]).padStart(2,"0")+"-"+String(direct[3]).padStart(2,"0")+
         " "+String(direct[4]).padStart(2,"0")+":"+direct[5]+":"+(direct[6]||"00");
     }
-    const monthFirst=raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-    if(monthFirst){
-      const month=Number(monthFirst[1]),day=Number(monthFirst[2]),hour=Number(monthFirst[4]);
-      if(month<1||month>12||day<1||day>31||hour<0||hour>23)return "";
-      return monthFirst[3]+"-"+String(month).padStart(2,"0")+"-"+String(day).padStart(2,"0")+
-        " "+String(hour).padStart(2,"0")+":"+monthFirst[5]+":"+(monthFirst[6]||"00");
-    }
     const parsed=Date.parse(raw.replace(/\//g,"-"));
     return Number.isFinite(parsed)?new Date(parsed).toISOString().slice(0,19):"";
   }
@@ -6646,37 +6639,6 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
   }
   $("copyFMHubInventory")?.addEventListener("click",event=>fmCopyRawExportRows("orders",event.currentTarget,"FM Hub Inventory"));
   $("copyPickupTaskManagement")?.addEventListener("click",event=>fmCopyRawExportRows("tasks",event.currentTarget,"Pickup Task Management"));
-  function fmPickupTaskSellerName(task){
-    return fmSellerName(task)||fmPickupPointName(task);
-  }
-  function fmFindUniqueOrderForTask(task,orders){
-    const rows=Array.isArray(orders)?orders:[];
-    const pointKey=fmNorm(fmPickupPointId(task));
-    if(!pointKey)return null;
-
-    const taskNumber=fmPickupTaskNumber(task);
-    if(fmHasPickupTaskNumber(taskNumber)){
-      const sameNumber=rows.filter(order=>fmNorm(fmPickupTaskNumber(order))===fmNorm(taskNumber));
-      if(sameNumber.length){
-        const samePoint=sameNumber.filter(order=>fmNorm(fmPickupPointId(order))===pointKey);
-        return samePoint.length===1?samePoint[0]:null;
-      }
-    }
-
-    const sellerKey=fmNorm(fmPickupTaskSellerName(task));
-    const taskTimeMs=fmDateTimeMs(fmValue(task,["Create Time","Task Create Time","Created Time","create_time","ctime"],/^createtime$|^taskcreatetime$|^ctime$/i));
-    if(!sellerKey||!Number.isFinite(taskTimeMs))return null;
-
-    const candidates=rows.filter(order=>{
-      if(fmNorm(fmPickupPointId(order))!==pointKey)return false;
-      if(fmNorm(fmSellerName(order))!==sellerKey)return false;
-      if(fmIsCancelledPickupOrder(order))return false;
-      const assignedTimeMs=fmDateTimeMs(fmPickupOrderAssignedTime(order));
-      return Number.isFinite(assignedTimeMs)&&Math.abs(assignedTimeMs-taskTimeMs)<=60000;
-    });
-    return candidates.length===1?candidates[0]:null;
-  }
-
   function renderFirstMileCombined(){
     const ordersData=getStoredFirstMile("orders");
     const tasksData=getStoredFirstMile("tasks");
@@ -6748,13 +6710,10 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
           if(timeMatches.length)candidates=timeMatches;
         }
       }else if(pointKey&&Number.isFinite(assignedTimeMs)){
-        // Safe fallback only when the order has no Task Number. Require the
-        // same seller and allow task Create Time within 60 seconds of Assigned Time.
-        const orderSellerKey=fmNorm(fmSellerName(order));
+        // Safe fallback only when the order has no Task Number.
         candidates=(tasksByPickupPoint.get(pointKey)||[]).filter(task=>{
-          const taskSellerKey=fmNorm(fmPickupTaskSellerName(task));
           const taskTimeMs=fmDateTimeMs(fmValue(task,["Create Time","Task Create Time","Created Time","create_time","ctime"],/^createtime$|^taskcreatetime$|^ctime$/i));
-          return !!orderSellerKey&&taskSellerKey===orderSellerKey&&Number.isFinite(taskTimeMs)&&Math.abs(taskTimeMs-assignedTimeMs)<=60000;
+          return Number.isFinite(taskTimeMs)&&Math.abs(taskTimeMs-assignedTimeMs)<=2000;
         });
       }
 
@@ -6801,41 +6760,17 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
       });
     });
 
-    const uniqueTodayTaskRows=[];
+    const taskOnlyRows=[];
     const seenTodayTaskKeys=new Set();
     todayTaskRows.forEach(task=>{
       const key=taskRowKey(task);
-      if(seenTodayTaskKeys.has(key))return;
+      if(matchedTaskObjects.has(task)||matchedTaskKeys.has(key)||seenTodayTaskKeys.has(key))return;
       seenTodayTaskKeys.add(key);
-      uniqueTodayTaskRows.push(task);
-    });
-
-    // Match standalone tasks against the FULL stored orders export, not only
-    // ETA-today rows. This supports tasks created today for orders whose ETA
-    // is in an earlier export date, while only attaching a uniquely verified ID.
-    const taskOrderMatch=new Map();
-    const taskOrderMatchCounts=new Map();
-    uniqueTodayTaskRows.forEach(task=>{
-      if(matchedTaskObjects.has(task)||matchedTaskKeys.has(taskRowKey(task)))return;
-      const order=fmFindUniqueOrderForTask(task,allOrderRows);
-      if(order){
-        taskOrderMatch.set(task,order);
-        taskOrderMatchCounts.set(order,(taskOrderMatchCounts.get(order)||0)+1);
-      }
-    });
-
-    const taskOnlyRows=[];
-    uniqueTodayTaskRows.forEach(task=>{
-      const key=taskRowKey(task);
-      if(matchedTaskObjects.has(task)||matchedTaskKeys.has(key))return;
-      const candidateOrder=taskOrderMatch.get(task)||null;
-      const matchedOrder=candidateOrder&&taskOrderMatchCounts.get(candidateOrder)===1?candidateOrder:null;
       const statusKey=fmNorm(fmTaskStatusRaw(task));
       taskOnlyRows.push({
         pickupPointId:fmPickupPointId(task)||"",
-        orders:matchedOrder?[matchedOrder]:[],
-        eligibleOrders:matchedOrder?[matchedOrder]:[],
-        matchedOrder:matchedOrder,
+        orders:[],
+        eligibleOrders:[],
         tasks:[task],
         taskOnly:true,
         isTaskOnlyInbounded:statusKey==="inbounded",
@@ -7253,7 +7188,7 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
         const cells=[
           sheetDate,             // Date (Asia/Manila)
           pointId,               // Pickup Point ID
-          fmOrderId(orders[0]||{}), // Verified Pickup Order ID when a unique match exists
+          "",                    // No verified pickup Order ID in SPX Tasks export
           useDefaultPackaging ? "Non-bulky" : "", // Bulky type
           "",                    // total_sc_weight
           "",                    // sc_max_item_max_dimension
