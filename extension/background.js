@@ -1442,11 +1442,89 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         );
       }
 
-      // SPX did not react to extension-generated clicks in the live page.
-      // Wait for a real user gesture rather than repeating a synthetic click.
+      // Capture the actual SPX export response as a fallback when SPX's Vue
+      // component internals are not exposed to the extension. This keeps the
+      // workflow automatic even when the operator submits the native dialog.
+      const originalPageFetch = window.fetch;
+      const originalXhrOpen = XMLHttpRequest.prototype.open;
+      const originalXhrSend = XMLHttpRequest.prototype.send;
+      const xhrRequestMeta = new WeakMap();
+      const captureExportTaskResponse = (rawBody, requestUrl) => {
+        const urlText = String(requestUrl || "");
+        if (!/export/i.test(urlText) || /(list|history|signed|download)/i.test(urlText)) return;
+        let payload = rawBody;
+        if (typeof payload === "string") {
+          try { payload = JSON.parse(payload); } catch (_) { return; }
+        }
+        if (!payload || typeof payload !== "object") return;
+        if (payload.retcode != null && Number(payload.retcode) !== 0) return;
+        const taskId = getTaskIdFromPageResponse(payload);
+        if (!taskId) return;
+        const data = payload.data && typeof payload.data === "object" ? payload.data : payload;
+        const result = {
+          __badocAssignmentTask: true,
+          ok: true,
+          stage: "network-capture",
+          taskId,
+          apiResult: payload,
+          directUrl: String(data.download_url || data.url || payload.download_url || "").trim(),
+          createdDate: date,
+          context: "assignment-task"
+        };
+        try { sessionStorage.setItem(exportResultStorageKey, JSON.stringify(result)); } catch (_) {}
+      };
+      const wrappedXhrOpen = function(method, url, ...args) {
+        xhrRequestMeta.set(this, { method: String(method || "GET"), url: String(url || "") });
+        return originalXhrOpen.call(this, method, url, ...args);
+      };
+      const wrappedXhrSend = function(...args) {
+        this.addEventListener("load", function() {
+          try {
+            const meta = xhrRequestMeta.get(this);
+            if (!meta) return;
+            const body = this.responseType === "json" ? this.response : this.responseText;
+            captureExportTaskResponse(body, meta.url);
+          } catch (_) {}
+        }, { once: true });
+        return originalXhrSend.apply(this, args);
+      };
+      const wrappedPageFetch = async function(input, init) {
+        const response = await originalPageFetch.apply(this, arguments);
+        try {
+          const requestUrl = typeof input === "string" ? input : input?.url;
+          if (/export/i.test(String(requestUrl || "")) && !/(list|history|signed|download)/i.test(String(requestUrl || ""))) {
+            response.clone().text().then(body => captureExportTaskResponse(body, requestUrl)).catch(() => {});
+          }
+        } catch (_) {}
+        return response;
+      };
+      try {
+        XMLHttpRequest.prototype.open = wrappedXhrOpen;
+        XMLHttpRequest.prototype.send = wrappedXhrSend;
+        if (typeof originalPageFetch === "function") window.fetch = wrappedPageFetch;
+      } catch (_) {}
+      const restorePageNetworkCapture = () => {
+        try { if (XMLHttpRequest.prototype.open === wrappedXhrOpen) XMLHttpRequest.prototype.open = originalXhrOpen; } catch (_) {}
+        try { if (XMLHttpRequest.prototype.send === wrappedXhrSend) XMLHttpRequest.prototype.send = originalXhrSend; } catch (_) {}
+        try { if (window.fetch === wrappedPageFetch) window.fetch = originalPageFetch; } catch (_) {}
+      };
+
+      // SPX may not expose its Vue dialog instance. Keep watching for a user
+      // submission and use the export API response to recover the task ID.
       const dialogDeadline = Date.now() + 60000;
       let menuPromptShown = false;
+      let networkCapture = null;
       while (!found && Date.now() < dialogDeadline) {
+        try {
+          const rawCapture = sessionStorage.getItem(exportResultStorageKey);
+          if (rawCapture) {
+            const parsedCapture = JSON.parse(rawCapture);
+            if (parsedCapture?.__badocAssignmentTask && parsedCapture.ok === true) {
+              networkCapture = parsedCapture;
+              break;
+            }
+          }
+        } catch (_) {}
         found = findExportComponent();
         if (found) break;
         const menuItem = isTopFrame ? findVisibleExportMenuItem() : null;
@@ -1460,9 +1538,14 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         await new Promise(resolve => setTimeout(resolve, 180));
       }
 
+      restorePageNetworkCapture();
       if (exportButton) {
         exportButton.style.outline = previousOutline;
         exportButton.style.outlineOffset = previousOutlineOffset;
+      }
+      if (networkCapture) {
+        if (hint) hint.remove();
+        return networkCapture;
       }
       if (found && hint) hint.remove();
 
@@ -1720,8 +1803,8 @@ async function runAssignmentTaskExportJob(job) {
         message: "SPX accepted Assignment Task export " + taskId + ". Waiting for the CSV…"
       });
       const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
-      const completed = await waitForCompletion(taskId, waitStartSec, job);
-      const signedUrl = await getSignedDownloadUrl(taskId, String(completed?.source || "fms"));
+      const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
+      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source);
       csv = await downloadCsv(signedUrl);
     } else {
       throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");
