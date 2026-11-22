@@ -5881,7 +5881,6 @@ function renderRiders(){
   if(window.__badocTownGridRosterSignature!==activeRosterSignature){
     window.__badocTownGridRosterSignature=activeRosterSignature;
     BADOC_TOWN_GRID_RENDER_CACHE.clear();
-    if(typeof render==="function"&&document.getElementById("badocGrid"))render();
   }
   window.__badocRenderDashboardRiderSummary?.();
   if(document.getElementById("actualScannedByRiders")?.classList.contains("active"))window.__badocRenderActualScannedByRiders?.();
@@ -10346,6 +10345,7 @@ window.DASHBOARD_V2_READY = true;
       const input=document.getElementById("ridersCsvFile");if(input)input.value="";
       if(typeof initRidersData==="function")initRidersData();
       if(typeof renderRiders==="function")renderRiders();
+      if(typeof render==="function")render();
       let lastErr=null;
       for(let attempt=0;attempt<3;attempt++){
         try{
@@ -10376,6 +10376,9 @@ window.DASHBOARD_V2_READY = true;
         ridersData=parsed;
         initRidersData();
         renderRiders();
+        // The dashboard is fully initialized by the time a rider upload occurs.
+        // Refresh town cards here, not during the initial renderRiders() call.
+        if(typeof render==="function")render();
         const version=Date.now();
         await put(P.riders,new Blob([JSON.stringify(ridersData)],{type:"application/json"}),"application/json");
         await setState({settings_version:version});
