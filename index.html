@@ -2787,53 +2787,79 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
   </div>
 </section>
 <section id="reports" class="page">
-  <div class="card reports-workspace" style="padding:20px;min-height:220px">
+  <div class="card reports-workspace" style="padding:20px;min-height:260px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <span aria-hidden="true" style="font-size:22px;line-height:1">▤</span>
       <h2 style="margin:0">Reports</h2>
     </div>
-    <p style="margin:0;color:var(--muted)">Select a report category.</p>
-
+    <p style="margin:0;color:var(--muted)">Select a report category, then copy its data.</p>
     <style id="badoc-reports-tabs-style">
       #reports .reports-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 14px;padding:0 0 12px;border-bottom:1px solid var(--line,#334155)}
       #reports .reports-tab{appearance:none;border:1px solid var(--line,#334155);border-radius:9px;background:var(--panel,#111827);color:var(--muted,#94a3b8);padding:10px 14px;min-height:40px;font:700 12px/1.2 inherit;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}
       #reports .reports-tab:hover{border-color:var(--blue,#38bdf8);color:var(--text,#f8fafc)}
       #reports .reports-tab[aria-selected="true"]{background:var(--blue,#1683ff);border-color:var(--blue,#1683ff);color:#fff}
       #reports .reports-tab:focus-visible{outline:2px solid var(--blue,#38bdf8);outline-offset:2px}
-      #reports .reports-panel{padding:16px;border:1px solid var(--line,#334155);border-radius:10px;background:var(--panel,#111827);min-height:112px}
+      #reports .reports-panel{padding:16px;border:1px solid var(--line,#334155);border-radius:10px;background:var(--panel,#111827);min-height:145px}
       #reports .reports-panel h3{margin:0 0 6px;font-size:15px}
       #reports .reports-panel p{margin:0;color:var(--muted,#94a3b8);font-size:12px}
+      #reports .reports-group{margin-top:16px}
+      #reports .reports-group:first-child{margin-top:0}
+      #reports .reports-group h4{margin:0 0 9px;font-size:13px;font-weight:800;letter-spacing:.02em}
+      #reports .reports-copy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:9px}
+      #reports .reports-copy-btn{display:flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:10px 12px;border:1px solid var(--line,#334155);border-radius:9px;background:var(--panel2,#172334);color:var(--text,#f8fafc);font-size:11px;font-weight:800;line-height:1.25;text-align:center;cursor:pointer}
+      #reports .reports-copy-btn:hover:not(:disabled){border-color:var(--blue,#38bdf8);color:var(--blue,#38bdf8)}
+      #reports .reports-copy-btn:disabled{opacity:.55;cursor:not-allowed}
+      #reports .reports-copy-status{min-height:18px;margin-top:12px;color:var(--muted,#94a3b8);font-size:11px}
+      #reports .reports-source-note{margin-top:5px;color:var(--muted,#94a3b8);font-size:10px}
+      @media(max-width:600px){#reports .reports-tabs{gap:6px}#reports .reports-tab{flex:1 1 calc(50% - 6px);padding:9px 8px}#reports .reports-copy-grid{grid-template-columns:1fr}}
     </style>
 
     <div class="reports-tabs" role="tablist" aria-label="Report categories">
-      <button type="button" class="reports-tab" id="report-tab-mnl3" role="tab" aria-selected="true" aria-controls="report-panel-mnl3" tabindex="0" data-report-tab="mnl3">NOL3 Dashboard</button>
+      <button type="button" class="reports-tab" id="report-tab-nol3" role="tab" aria-selected="true" aria-controls="report-panel-nol3" tabindex="0" data-report-tab="nol3">NOL3 Dashboard</button>
       <button type="button" class="reports-tab" id="report-tab-hourly" role="tab" aria-selected="false" aria-controls="report-panel-hourly" tabindex="-1" data-report-tab="hourly">Hourly</button>
       <button type="button" class="reports-tab" id="report-tab-pickup" role="tab" aria-selected="false" aria-controls="report-panel-pickup" tabindex="-1" data-report-tab="pickup">Pickup</button>
       <button type="button" class="reports-tab" id="report-tab-performance" role="tab" aria-selected="false" aria-controls="report-panel-performance" tabindex="-1" data-report-tab="performance">Performance</button>
       <button type="button" class="reports-tab" id="report-tab-consolidated" role="tab" aria-selected="false" aria-controls="report-panel-consolidated" tabindex="-1" data-report-tab="consolidated">Consolidated</button>
     </div>
 
-    <div id="report-panel-mnl3" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-mnl3" data-report-panel="mnl3">
-      <h3>NOL3 Dashboard</h3>
-      <p>This report section is ready for its content.</p>
+    <div id="report-panel-nol3" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-nol3" data-report-panel="nol3">
+      <div class="reports-group">
+        <h4>Inventory</h4>
+        <div class="reports-copy-grid">
+          <button type="button" class="reports-copy-btn" data-report-copy="lm-inventory">⧉ LM HUB INVENTORY</button>
+          <button type="button" class="reports-copy-btn" data-report-copy="fm-inventory">⧉ FM HUB INVENTORY</button>
+          <button type="button" class="reports-copy-btn" data-report-copy="pickup-task-management">⧉ PICKUP TASK MANAGEMENT</button>
+        </div>
+        <div class="reports-source-note">LM HUB INVENTORY copies the OID list currently loaded in POD/POOH Checker. FM HUB INVENTORY and PICKUP TASK MANAGEMENT use the existing current-day First Mile exports.</div>
+      </div>
+      <div class="reports-group">
+        <h4>Hourly AT</h4>
+        <div class="reports-copy-grid">
+          <button type="button" class="reports-copy-btn" data-report-copy="assignment-task">⧉ Assignment Task</button>
+          <button type="button" class="reports-copy-btn" data-report-copy="batch-search-result">⧉ Batch Search Result</button>
+        </div>
+      </div>
+      <div class="reports-copy-status" data-report-copy-status aria-live="polite"></div>
     </div>
+
     <div id="report-panel-hourly" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-hourly" data-report-panel="hourly" hidden>
-      <h3>Hourly</h3>
-      <p>This report section is ready for its content.</p>
+      <div class="reports-group"><h3>Hourly</h3><div class="reports-copy-grid" style="margin-top:12px"><button type="button" class="reports-copy-btn" data-report-copy="hourly">⧉ Hourly</button></div></div>
+      <div class="reports-copy-status" data-report-copy-status aria-live="polite"></div>
     </div>
     <div id="report-panel-pickup" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-pickup" data-report-panel="pickup" hidden>
-      <h3>Pickup</h3>
-      <p>This report section is ready for its content.</p>
+      <div class="reports-group"><h3>Pickup</h3><div class="reports-copy-grid" style="margin-top:12px"><button type="button" class="reports-copy-btn" data-report-copy="pickup">⧉ Pickup</button></div></div>
+      <div class="reports-copy-status" data-report-copy-status aria-live="polite"></div>
     </div>
     <div id="report-panel-performance" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-performance" data-report-panel="performance" hidden>
-      <h3>Performance</h3>
-      <p>This report section is ready for its content.</p>
+      <div class="reports-group"><h3>Performance</h3><div class="reports-copy-grid" style="margin-top:12px"><button type="button" class="reports-copy-btn" data-report-copy="performance">⧉ Performance</button></div></div>
+      <div class="reports-copy-status" data-report-copy-status aria-live="polite"></div>
     </div>
     <div id="report-panel-consolidated" class="reports-panel" role="tabpanel" aria-labelledby="report-tab-consolidated" data-report-panel="consolidated" hidden>
-      <h3>Consolidated</h3>
-      <p>This report section is ready for its content.</p>
+      <div class="reports-group"><h3>Consolidated</h3><div class="reports-copy-grid" style="margin-top:12px"><button type="button" class="reports-copy-btn" data-report-copy="consolidated">⧉ Consolidated</button></div></div>
+      <div class="reports-copy-status" data-report-copy-status aria-live="polite"></div>
     </div>
   </div>
+
   <script id="badoc-reports-tabs-runtime">
     (function(){
       const root=document.getElementById("reports");
@@ -2852,9 +2878,97 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
         panels.forEach(panel=>{panel.hidden=panel.dataset.reportPanel!==key;});
         if(moveFocus)tab.focus();
       }
-      root.addEventListener("click",event=>{
+      function setStatus(button,message,kind){
+        const panel=button.closest("[data-report-panel]");
+        const status=panel&&panel.querySelector("[data-report-copy-status]");
+        if(status){status.textContent=message;status.dataset.state=kind||"info";}
+      }
+      function cleanCell(value){
+        if(value===null||value===undefined)return "";
+        const result=typeof value==="object"?JSON.stringify(value):String(value);
+        return result.replaceAll(String.fromCharCode(9)," ").replaceAll(String.fromCharCode(13)," ").replaceAll(String.fromCharCode(10)," ");
+      }
+      function rowsToTsv(rows){
+        if(!Array.isArray(rows)||!rows.length)return "";
+        const headers=[...new Set(rows.flatMap(row=>Object.keys(row||{})))].filter(key=>key!=="_area");
+        if(!headers.length)return "";
+        const tab=String.fromCharCode(9),lineBreak=String.fromCharCode(13,10);
+        return [headers.map(cleanCell).join(tab),...rows.map(row=>headers.map(header=>cleanCell(row&&row[header])).join(tab))].join(lineBreak);
+      }
+      function tableToTsv(table){
+        if(!table)return "";
+        const tab=String.fromCharCode(9),lineBreak=String.fromCharCode(13,10);
+        return Array.from(table.querySelectorAll("tr")).map(row=>Array.from(row.querySelectorAll("th,td")).map(cell=>cleanCell(cell.innerText||cell.textContent)).join(tab)).filter(row=>row.trim()).join(lineBreak);
+      }
+      async function copyText(button,payload,successMessage){
+        if(!payload){setStatus(button,"No source data is loaded for this copy action yet.","warn");return;}
+        let copied=false;
+        try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(payload);copied=true;}}catch(_){}
+        if(!copied){
+          const area=document.createElement("textarea");
+          area.value=payload;area.setAttribute("readonly","");
+          area.style.position="fixed";area.style.left="-9999px";area.style.top="0";
+          document.body.appendChild(area);area.select();
+          try{copied=document.execCommand("copy");}catch(_){copied=false;}
+          area.remove();
+        }
+        setStatus(button,copied?successMessage:"Copy failed. Check browser clipboard permissions.",copied?"success":"error");
+      }
+      function optionalRows(globalName){
+        const value=window[globalName];
+        return Array.isArray(value)?value:[];
+      }
+      root.addEventListener("click",async event=>{
         const tab=event.target.closest("[data-report-tab]");
-        if(tab&&root.contains(tab))activate(tab.dataset.reportTab,false);
+        if(tab&&root.contains(tab)){activate(tab.dataset.reportTab,false);return;}
+        const button=event.target.closest("[data-report-copy]");
+        if(!button||!root.contains(button))return;
+        const key=button.dataset.reportCopy;
+        button.disabled=true;
+        try{
+          if(key==="lm-inventory"){
+            const oidText=String(document.getElementById("oids")&&document.getElementById("oids").value||"").trim();
+            const count=oidText?oidText.split(String.fromCharCode(10)).map(value=>value.trim()).filter(Boolean).length:0;
+            await copyText(button,oidText,count?"Copied "+count.toLocaleString()+" loaded OID(s) from POD/POOH Checker.":"");
+          }else if(key==="fm-inventory"||key==="pickup-task-management"){
+            if(typeof fmTodayExportRows!=="function"){setStatus(button,"First Mile export data is not available on this page.","warn");}
+            else{
+              const rows=fmTodayExportRows(key==="fm-inventory"?"orders":"tasks");
+              await copyText(button,rowsToTsv(rows),"Copied "+rows.length.toLocaleString()+" row(s) from today's "+(key==="fm-inventory"?"Pickup Orders":"Pickup Tasks")+" export.");
+            }
+          }else if(key==="assignment-task"||key==="batch-search-result"||key==="hourly"){
+            const sources={
+              "assignment-task":["__badocAssignmentTaskRows","#assignmentTaskTable"],
+              "batch-search-result":["__badocBatchSearchResultRows","#batchSearchResultTable"],
+              "hourly":["__badocHourlyRows","#hourlyReportTable"]
+            };
+            const source=sources[key],rows=optionalRows(source[0]),table=document.querySelector(source[1]);
+            const payload=rows.length?rowsToTsv(rows):tableToTsv(table);
+            const count=rows.length||Math.max(0,table?table.querySelectorAll("tbody tr").length:0);
+            const label=key==="assignment-task"?"assignment task":key==="batch-search-result"?"batch search result":"hourly";
+            await copyText(button,payload,count?"Copied "+count.toLocaleString()+" "+label+" row(s).":"");
+          }else if(key==="pickup"){
+            const existing=document.getElementById("copyFirstMileForSheet");
+            if(existing&&!existing.disabled){
+              existing.click();
+              setStatus(button,"Pickup Copy for Sheet action started using the existing Pickup results.","success");
+            }else setStatus(button,"No Pickup rows are loaded. Sync Pickup Orders + Tasks first.","warn");
+          }else if(key==="performance"){
+            if(typeof renderRiderPerformance==="function")renderRiderPerformance();
+            const table=document.querySelector("#dailyRiderPerformance .performance-table");
+            const payload=tableToTsv(table);
+            const count=table?table.querySelectorAll("tbody tr").length:0;
+            await copyText(button,payload,count?"Copied "+count.toLocaleString()+" rider performance row(s).":"");
+          }else if(key==="consolidated"){
+            const result=typeof mergeAllBatches==="function"?mergeAllBatches():null;
+            const rows=Array.isArray(result&&result.rows)?result.rows:[];
+            await copyText(button,rowsToTsv(rows),rows.length?"Copied "+rows.length.toLocaleString()+" consolidated parcel row(s).":"");
+          }
+        }catch(error){
+          setStatus(button,"Copy failed: "+String(error&&error.message||error),"error");
+        }finally{
+          button.disabled=false;
+        }
       });
       root.addEventListener("keydown",event=>{
         const current=event.target.closest("[data-report-tab]");
