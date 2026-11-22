@@ -2090,7 +2090,7 @@ extApi.runtime.onConnect.addListener(port => {
     if (type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
       const selectedDate = String(message?.selectedDate || "").trim();
       const job = reserveActiveJob("assignment-task", port, {
-        selectedDate: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? selectedDate : phDateString(),
+        selectedDate: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? selectedDate : new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),
         startedAt: Date.now()
       });
       if (!job) {
