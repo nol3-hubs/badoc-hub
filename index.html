@@ -6814,8 +6814,9 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     if(meta)meta.textContent="Showing "+filtered.length.toLocaleString()+" of "+firstMileCombinedRows.length.toLocaleString()+" rows: "+eligibleOrderGroups.length.toLocaleString()+" orders with ETA today and "+taskOnlyRows.length.toLocaleString()+" standalone tasks created today (Philippine time). Matched tasks stay on their order row; unmatched tasks appear separately regardless of status. Hidden "+excludedCancelledWithoutDisabled.toLocaleString()+" cancelled orders without a matched Disabled task.";
 
     const copyBtn=$("copyFirstMileForSheet");
-    const hasSheetRows=filtered.some(group=>!group.taskOnly||group.isTaskOnlyInbounded||group.isTaskOnlyOnhold);
-    if(copyBtn){copyBtn.disabled=!hasSheetRows;copyBtn.textContent=hasSheetRows?"Copy for Sheet ("+filtered.length+")":"Copy for Sheet";}
+    const sheetRowCount=filtered.filter(group=>!group.taskOnly||group.isTaskOnlyInbounded||group.isTaskOnlyOnhold).length;
+    const hasSheetRows=sheetRowCount>0;
+    if(copyBtn){copyBtn.disabled=!hasSheetRows;copyBtn.textContent=hasSheetRows?"Copy for Sheet ("+sheetRowCount+")":"Copy for Sheet";}
 
     const columns=[
       ["Record Type",g=>g.taskOnly?"Pickup Task":"Pickup Order"],
