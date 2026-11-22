@@ -25,8 +25,8 @@ jobs:
           root = Path("extension")
           manifest = json.loads((root / "manifest.json").read_text())
           assert manifest["manifest_version"] == 3
-          for name in manifest["background"].get("service_worker", []):
-              assert (root / name).is_file(), name
+          service_worker = manifest["background"].get("service_worker")
+          assert service_worker and (root / service_worker).is_file(), service_worker
           for script in manifest["content_scripts"]:
               for name in script["js"]:
                   assert (root / name).is_file(), name
