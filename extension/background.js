@@ -436,26 +436,45 @@ async function listTasks(startSec, source = "", page = 1, omitStartTime = false,
   return known[0] || [];
 }
 
-function getExportMediaId(value, depth = 0) {
-  if (value == null || depth > 8) return "";
+function getExportMediaId(value, depth = 0, seen = new Set()) {
+  if (value == null || depth > 18) return "";
+  if (typeof value === "string") {
+    const text = value.trim();
+    if ((text.startsWith("{") && text.endsWith("}")) || (text.startsWith("[") && text.endsWith("]"))) {
+      try { return getExportMediaId(JSON.parse(text), depth + 1, seen); } catch {}
+    }
+    return "";
+  }
   if (Array.isArray(value)) {
+    if (seen.has(value)) return "";
+    seen.add(value);
     for (const item of value) {
-      const found = getExportMediaId(item, depth + 1);
+      const found = getExportMediaId(item, depth + 1, seen);
       if (found) return found;
     }
     return "";
   }
   if (typeof value !== "object") return "";
+  if (seen.has(value)) return "";
+  seen.add(value);
   for (const key of ["media_id", "mediaId", "mediaID"]) {
     const raw = value[key];
-    if (raw != null && String(raw).trim()) return String(raw).trim();
+    if (raw != null && (typeof raw !== "object" || Array.isArray(raw)) && String(raw).trim()) return String(raw).trim();
+  }
+  for (const key of ["media", "media_info", "mediaInfo", "media_file", "mediaFile", "export_file", "exportFile", "file_info", "fileInfo", "attachment"]) {
+    const child = value[key];
+    if (!child || typeof child !== "object") continue;
+    for (const idKey of ["media_id", "mediaId", "mediaID", "file_id", "fileId", "id"]) {
+      const raw = child[idKey];
+      if (raw != null && String(raw).trim()) return String(raw).trim();
+    }
   }
   const entries = Object.entries(value).sort(([a], [b]) => {
     const score = key => /media|file|attachment|data|result|task/i.test(key) ? 0 : 1;
     return score(a) - score(b);
   });
   for (const [, child] of entries) {
-    const found = getExportMediaId(child, depth + 1);
+    const found = getExportMediaId(child, depth + 1, seen);
     if (found) return found;
   }
   return "";
@@ -670,6 +689,7 @@ function extractAssignedParcelOids(csvText) {
 async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
   const deadline = Date.now() + 4 * 60 * 1000, sources = ["fms", "fm", ""];
   let lastStatus = null, lastQueue = null, lastMessageAt = 0, lastWideScanAt = 0, lastTaskPreview = "", lookupErrors = [];
+  let fullTaskLookupAttempted = false;
   const locate = results => {
     for (const result of results) {
       if (result.status !== "fulfilled") continue;
@@ -713,7 +733,51 @@ async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
       const status=Number(raw), statusText=String(raw).trim().toLowerCase(), queue=String(task?.queue_position||"");
       const complete=status===2||/^(complete|completed|success|succeeded|finished)$/.test(statusText);
       const failed=status===3||/^(failed|failure|error|cancelled|canceled)$/.test(statusText)||!!task?.failed_reason;
-      if(complete)return {task,source:located.source};
+      if(complete) {
+        let completedTask = task;
+        let mediaId = getExportMediaId(task);
+        // A task_ids-filtered SPX response can be a compact summary. Re-query
+        // without task_ids to retrieve the full completed record and file metadata.
+        if (!mediaId && !fullTaskLookupAttempted) {
+          fullTaskLookupAttempted = true;
+          const detailSources = [...new Set([located.source, ...sources])];
+          let bestDetail = null;
+          for (const detailSource of detailSources) {
+            let rows = [];
+            try {
+              rows = await listTasks(0, detailSource, 1, true, 0);
+            } catch (error) {
+              lookupErrors.push("full " + (detailSource || "default") + " task lookup: " + (error?.message || String(error)));
+              continue;
+            }
+            let detailed = rows.find(item => getExportTaskId(item) === Number(taskId)) || null;
+            if (detailed) {
+              if (!bestDetail) bestDetail = { task: detailed, source: detailSource };
+              mediaId = getExportMediaId(detailed);
+              if (mediaId) return { task: { ...task, ...detailed }, source: detailSource, mediaId };
+            }
+            for (let page = 2; !detailed && rows.length >= 100 && page <= 5; page++) {
+              try {
+                rows = await listTasks(0, detailSource, page, true, 0);
+                detailed = rows.find(item => getExportTaskId(item) === Number(taskId)) || null;
+              } catch (error) {
+                lookupErrors.push("full " + (detailSource || "default") + " task page " + page + ": " + (error?.message || String(error)));
+                break;
+              }
+              if (detailed) {
+                if (!bestDetail) bestDetail = { task: detailed, source: detailSource };
+                mediaId = getExportMediaId(detailed);
+                if (mediaId) return { task: { ...task, ...detailed }, source: detailSource, mediaId };
+              }
+            }
+          }
+          if (bestDetail) {
+            completedTask = { ...task, ...bestDetail.task };
+            mediaId = getExportMediaId(completedTask);
+          }
+        }
+        return { task: completedTask, source: located.source, mediaId };
+      }
       if(failed)throw new Error(task?.failed_reason||(label+" SPX export task "+taskId+" failed ("+(statusText||status)+")."));
       const elapsed=Math.floor((Date.now()-job.startedAt)/1000);
       message=label+" export task "+taskId+" is processing"+(queue?" · queue "+queue:"")+" · "+(located.source||"default")+" queue · elapsed "+String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0")+"…";
@@ -1969,17 +2033,19 @@ async function runAssignmentTaskExportJob(job) {
       });
       const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
       const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
-      const mediaId = getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
-      // SPX's signed-download endpoint accepts task_id without media_id on
-      // the same authenticated export queue. Do not block a succeeded task
-      // just because its list record omits media_id; keep passing media_id
-      // when SPX provides one, otherwise use the task-only fallback.
+      const mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+      if (!mediaId) {
+        const taskFields = Object.keys(completedInfo.task || {}).slice(0, 24).join(", ") || "none";
+        throw new Error(
+          "SPX completed Assignment Task " + taskId + ", but neither its filtered nor full task-list record exposed media_id. " +
+          "Queue: " + (completedInfo.source || "default") + ". Task fields: " + taskFields +
+          ". The signed-download request was not sent because SPX requires media_id (code 40902)."
+        );
+      }
       sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-        message: mediaId
-          ? "Assignment Task " + taskId + " completed. Requesting the signed CSV download…"
-          : "Assignment Task " + taskId + " completed. Requesting its signed CSV download using the task ID…"
+        message: "Assignment Task " + taskId + " completed. Media ID recovered; requesting the signed CSV download…"
       });
-      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId || "");
+      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId);
       csv = await downloadCsv(signedUrl);
     } else {
       throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");

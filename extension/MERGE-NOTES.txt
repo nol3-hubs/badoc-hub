@@ -1,3 +1,11 @@
+UPDATE — 2026-11-23 · Assignment Task media-ID recovery (Chrome v1.5.17)
+- Confirmed SPX signed-download API returns code 40902 when media_id is omitted; the task-ID-only fallback has been removed for Assignment Task reports.
+- The workflow now performs an additional unfiltered lookup of the completed export task across FMS, FM, and default queues before requesting the signed URL. It prefers the full task row over the task_ids-filtered summary.
+- Expanded media ID extraction to parse JSON-encoded task metadata, deeper nested structures, and known media/file-info containers.
+- If SPX still does not expose media_id, the workflow stops before the signed-download request and reports the exact task fields/queue for diagnosis rather than sending an invalid request.
+- Chrome extension bumped to v1.5.17, dashboard to v135, PWA cache to v171; built-in extension installer is regenerated from extension/.
+- Static syntax and package validation are automated; live authenticated SPX export/download needs confirmation.
+
 UPDATE — 2026-11-23 · Assignment Task signed-download fallback (Chrome v1.5.16)
 - Removed the Assignment Task-only hard stop that refused to request a CSV when a completed SPX task row omitted media_id.
 - The workflow now calls the existing authenticated signed-download endpoint using task_id and the discovered queue source; media_id is still supplied when SPX includes it.
