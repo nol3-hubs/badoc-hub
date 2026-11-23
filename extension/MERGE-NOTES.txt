@@ -257,3 +257,12 @@ UPDATE — 2026-11-23 · Hourly AT export stays in Badoc Hub (Chrome v1.5.20)
 - The workflow does not create an SPX tab. Badoc Hub remains the foreground tab while the export runs in the existing SPX tab.
 - Bumped the Chrome extension to v1.5.20 and synchronized the dashboard's embedded Bridge Installer package, required-version check, app version (v138), and PWA cache marker.
 - Static source/package checks passed. A live authenticated SPX export is still required to confirm behavior in the user's browser session.
+
+
+UPDATE — 2026-11-23 · Assignment Task deep-link automation (Chrome v1.5.21)
+- Reuse an already-open Assignment Task route without activating it.
+- If the route is not open, open https://spx.shopee.ph/#/assignment-task-new/list in an inactive temporary tab using the current signed-in browser session; Badoc Hub remains foreground.
+- Automatically click the Assignment Task toolbar Export button, select the exact Export menu option, apply the requested Created Date range, and submit the SPX export form.
+- Close the temporary tab after SPX returns the export task response, or during error cleanup. Continue CSV retrieval through the existing export task/media recovery flow.
+- Updated Chrome extension to v1.5.21, dashboard app shell to v139, embedded Bridge Installer, and PWA cache marker.
+- Static source/package validation is required; live authenticated SPX behavior still needs browser confirmation.
