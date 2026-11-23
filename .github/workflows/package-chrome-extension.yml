@@ -114,7 +114,7 @@ jobs:
               raise SystemExit(f"Expected one KPI simple-metric mapping in index.html; found {kpi_count}.")
           updated = updated.replace(kpi_marker, kpi_replacement, 1)
 
-index_path.write_text(updated, encoding="utf-8")
+          index_path.write_text(updated, encoding="utf-8")
           print(f"Embedded {len(files)} Chrome extension files and synchronized required version {chrome_version} in index.html.")
 
       - name: Publish ZIP in repository
