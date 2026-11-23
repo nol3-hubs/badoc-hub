@@ -1,5 +1,9 @@
 importScripts("xlsx.js");
 const SPX_ORIGIN = "https://spx.shopee.ph";
+const ASSIGNMENT_TASK_EXPORT_PATH = "/spx_delivery/admin/assignment/assignment_task/export";
+const ASSIGNMENT_TASK_EXPORT_BIZ_NAME = "delivery_mgt";
+const ASSIGNMENT_TASK_EXPORT_NAME = "feeder_assignment_task";
+const ASSIGNMENT_TASK_STATION_ID = 3061;
 const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
@@ -2111,71 +2115,161 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
   return result;
 }
 
+function assignmentTaskDateRange(selectedDate) {
+  let date = String(selectedDate || "").trim();
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) date = phDateString();
+  const parsed = new Date(date + "T00:00:00Z");
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    date = phDateString();
+  }
+  // SPX ctime uses Unix seconds aligned to Asia/Manila midnight.
+  const dayStartMs = Date.parse(date + "T00:00:00Z") - 8 * 60 * 60 * 1000;
+  const startSec = Math.floor(dayStartMs / 1000);
+  const endSec = startSec + 24 * 60 * 60 - 1;
+  return {
+    date,
+    startSec,
+    endSec,
+    formatCondition: "Created Date= " + date + " 00:00:00," + date + " 23:59:59"
+  };
+}
+
+function assignmentTaskRowMatches(task, range, submittedAtSec) {
+  if (!task || typeof task !== "object") return false;
+  if (String(task.biz_name || "") !== ASSIGNMENT_TASK_EXPORT_BIZ_NAME) return false;
+  if (String(task.export_name || "") !== ASSIGNMENT_TASK_EXPORT_NAME) return false;
+  if (Number(task.station_id || 0) && Number(task.station_id) !== ASSIGNMENT_TASK_STATION_ID) return false;
+  const condition = parseTaskCondition(task);
+  const conditionStart = Number(condition?.gte?.ctime || 0);
+  const conditionEnd = Number(condition?.lte?.ctime || 0);
+  const exactDateRange = conditionStart === range.startSec && conditionEnd === range.endSec;
+  const createdAt = Number(task.ctime || 0);
+  const freshTask = createdAt >= submittedAtSec - 120 && createdAt <= Math.floor(Date.now() / 1000) + 60;
+  return exactDateRange || freshTask;
+}
+
+function findAssignmentTaskIdInResponse(json, range, submittedAtSec) {
+  const directTaskId = Number(
+    json?.data?.task_id || json?.task_id ||
+    json?.data?.task?.task_id || json?.data?.export_task_id || 0
+  );
+  if (Number.isFinite(directTaskId) && directTaskId > 0) return directTaskId;
+
+  const possibleLists = [
+    json?.data?.task_list, json?.data?.tasks, json?.data?.list,
+    json?.task_list, json?.tasks, json?.list
+  ].filter(Array.isArray);
+  for (const rows of possibleLists) {
+    const match = rows
+      .filter(task => assignmentTaskRowMatches(task, range, submittedAtSec))
+      .sort((a, b) => Number(b?.ctime || 0) - Number(a?.ctime || 0))[0];
+    const taskId = Number(match?.task_id || match?.taskId || 0);
+    if (taskId > 0) return taskId;
+  }
+  return 0;
+}
+
+async function findSubmittedAssignmentTaskId(range, submittedAtSec, job) {
+  const sources = ["fms", "fm", ""];
+  const startTime = Math.max(0, submittedAtSec - 120);
+  const deadline = Date.now() + 45000;
+  let lastErrors = [];
+  while (Date.now() < deadline) {
+    if (job.cancelled) throw new Error("Assignment Task export cancelled.");
+    const lookups = await Promise.allSettled(
+      sources.map(source => listTasks(startTime, source, 1, false, 0))
+    );
+    for (let i = 0; i < lookups.length; i++) {
+      const lookup = lookups[i];
+      if (lookup.status !== "fulfilled") {
+        lastErrors.push((sources[i] || "default") + ": " + (lookup.reason?.message || String(lookup.reason)));
+        continue;
+      }
+      const match = (lookup.value || [])
+        .filter(task => assignmentTaskRowMatches(task, range, submittedAtSec))
+        .sort((a, b) => Number(b?.ctime || 0) - Number(a?.ctime || 0))[0];
+      const taskId = Number(match?.task_id || match?.taskId || 0);
+      if (taskId > 0) return taskId;
+    }
+    await sleep(1800);
+  }
+  const detail = lastErrors.length ? " Task-list lookup errors: " + [...new Set(lastErrors)].slice(0, 3).join("; ") + "." : "";
+  throw new Error("SPX received the Assignment Task export request but did not expose its new feeder_assignment_task ID in the response or task list." + detail);
+}
+
+async function submitAssignmentTaskExport(job) {
+  const range = assignmentTaskDateRange(job.selectedDate);
+  const submittedAtSec = Math.floor(Date.now() / 1000);
+  const query = fmQuery({
+    ctime: String(range.startSec) + "," + String(range.endSec),
+    format_condition: range.formatCondition
+  });
+  const url = SPX_ORIGIN + ASSIGNMENT_TASK_EXPORT_PATH + "?" + query;
+
+  sendToPort(job.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+    message: "Submitting Assignment Task export directly to SPX for " + range.date + " without opening an SPX tab…"
+  });
+  const response = await extensionFetchText(url, {
+    method: "GET",
+    headers: await getLinehaulRequestHeaders()
+  });
+  const json = parseJsonResponse("SPX Assignment Task export", response);
+  if (!response.ok || Number(json?.retcode) !== 0) {
+    throw new Error("SPX Assignment Task export request failed: " +
+      (json?.message || "SPX export failed (HTTP " + response.status + ")."));
+  }
+
+  let taskId = findAssignmentTaskIdInResponse(json, range, submittedAtSec);
+  if (!taskId) {
+    sendToPort(job.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+      message: "SPX accepted the Created Date export request. Locating its new feeder_assignment_task in the export task list…"
+    });
+    taskId = await findSubmittedAssignmentTaskId(range, submittedAtSec, job);
+  }
+
+  sendToPort(job.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+    message: "SPX created Assignment Task export " + taskId + ". Waiting for the CSV…"
+  });
+  const data = json?.data || json || {};
+  return {
+    taskId,
+    range,
+    apiResult: json,
+    directUrl: String(data.download_url || data.url || "").trim()
+  };
+}
+
 async function runAssignmentTaskExportJob(job) {
   const port = job.ownerPort;
-  let temporaryTabId = null;
   try {
     job.startedAt = Date.now();
-    const tabs = await chrome.tabs.query({ url: SPX_ORIGIN + "/*" });
-    let tab = tabs
-      .filter(item => !item.discarded)
-      .find(item => /assignment-task-new/i.test(String(item.url || "")));
-
-    // Use the direct SPX route in an inactive temporary tab only when the
-    // Assignment Task page is not already open. This reuses the signed-in
-    // browser session and never switches the user away from Badoc Hub.
-    if (!tab?.id) {
-      const assignmentTaskUrl = SPX_ORIGIN + "/#/assignment-task-new/list";
-      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-        message: "Opening the SPX Assignment Task page in the background. Badoc Hub will stay in front."
-      });
-      tab = await chrome.tabs.create({ url: assignmentTaskUrl, active: false });
-      temporaryTabId = tab?.id || null;
-      if (!temporaryTabId) throw new Error("Chrome could not create the temporary background SPX page.");
-      const pageDeadline = Date.now() + 90000;
-      let ready = false;
-      while (Date.now() < pageDeadline) {
-        if (job.cancelled) throw new Error("Assignment Task export cancelled.");
-        tab = await chrome.tabs.get(temporaryTabId);
-        const currentUrl = String(tab.url || "");
-        if (/login|passport|signin/i.test(currentUrl) && !/assignment-task-new/i.test(currentUrl)) {
-          throw new Error("SPX opened a sign-in page instead of Assignment Task. Sign in to SPX, then retry.");
-        }
-        if (tab.status === "complete" && /assignment-task-new/i.test(currentUrl)) {
-          ready = true;
-          break;
-        }
-        await sleep(350);
-      }
-      if (!ready) throw new Error("SPX Assignment Task page did not finish loading within 90 seconds.");
-      await sleep(1200); // allow the SPX SPA to mount its toolbar and components
-    }
-
-    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-      message: "Starting the SPX Assignment Task export in the background for " + job.selectedDate + "."
-    });
-    const result = await invokeSpxAssignmentTaskExport(tab.id, job.selectedDate);
-    if (temporaryTabId) {
-      try { await chrome.tabs.remove(temporaryTabId); } catch (_) {}
-      temporaryTabId = null;
-    }
+    const submitted = await submitAssignmentTaskExport(job);
     let csv = null;
-    let taskId = Number(result.taskId || getExportTaskId(result.apiResult) || 0);
-    if (result.directUrl) {
-      csv = await downloadCsv(result.directUrl);
+    const taskId = Number(submitted.taskId || 0);
+
+    if (submitted.directUrl) {
+      csv = await downloadCsv(submitted.directUrl);
     } else if (taskId) {
-      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-        message: "SPX accepted Assignment Task export " + taskId + ". Waiting for the CSV…"
-      });
       const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
       let completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
+      const completedTask = completedInfo.task || {};
+      if (completedTask.biz_name && String(completedTask.biz_name) !== ASSIGNMENT_TASK_EXPORT_BIZ_NAME) {
+        throw new Error("SPX returned a different export type for Assignment Task " + taskId + ".");
+      }
+      if (completedTask.export_name && String(completedTask.export_name) !== ASSIGNMENT_TASK_EXPORT_NAME) {
+        throw new Error("SPX returned a different export name for Assignment Task " + taskId + ".");
+      }
+      if (Number(completedTask.station_id || 0) && Number(completedTask.station_id) !== ASSIGNMENT_TASK_STATION_ID) {
+        throw new Error("SPX returned an Assignment Task export from a different station.");
+      }
+
       let directFileError = "";
-      if (completedInfo.task?.file_name) {
+      if (completedTask.file_name) {
         sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-          message: "Assignment Task " + taskId + " succeeded. Trying the authenticated CSV file path returned by SPX…"
+          message: "Assignment Task " + taskId + " succeeded. Downloading its authenticated CSV file path…"
         });
         try {
-          csv = await downloadAssignmentTaskFile(completedInfo.task, taskId);
+          csv = await downloadAssignmentTaskFile(completedTask, taskId);
         } catch (error) {
           directFileError = error?.message || String(error);
           console.warn("SPX direct Assignment Task file download failed; checking media_id fallback:", directFileError);
@@ -2183,13 +2277,13 @@ async function runAssignmentTaskExportJob(job) {
       }
 
       if (!csv) {
-        let mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+        let mediaId = completedInfo.mediaId || getExportMediaId(completedTask) || getExportMediaId(submitted.apiResult);
         if (!mediaId) {
           completedInfo = await waitForAssignmentTaskMediaId(taskId, completedInfo, job, "Assignment Task");
-          mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+          mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(submitted.apiResult);
         }
         if (!mediaId) {
-          const task = completedInfo.task || {};
+          const task = completedInfo.task || completedTask;
           const taskFields = Object.keys(task).slice(0, 24).join(", ") || "none";
           const diagnosticKeys = ["media_id", "is_mms_gray", "file_name", "export_source", "export_name", "biz_name", "export_status", "queue_position"];
           const diagnosticValues = diagnosticKeys.map(key => {
@@ -2201,7 +2295,7 @@ async function runAssignmentTaskExportJob(job) {
             ? " Metadata lookup errors: " + [...new Set(completedInfo.lookupErrors)].slice(0, 3).join("; ") + "."
             : "";
           throw new Error(
-            "SPX completed Assignment Task " + taskId + ", but its direct file path could not be downloaded and media_id remained unavailable after " +
+            "SPX completed Assignment Task " + taskId + ", but file_name and media_id remained unavailable after " +
             Math.round(ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS / 1000) + " seconds of post-completion full-record checks. " +
             "Queue: " + (completedInfo.source || "default") + ". Task fields: " + taskFields +
             ". Key values: " + diagnosticValues +
@@ -2216,13 +2310,14 @@ async function runAssignmentTaskExportJob(job) {
         csv = await downloadCsv(signedUrl);
       }
     } else {
-      throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");
+      throw new Error("SPX did not return a usable Assignment Task task ID or download URL.");
     }
-    const rowCount = Math.max(0, String(csv.text || "").split(/\r?\n/).filter(Boolean).length - 1);
+
+    const rowCount = Math.max(0, String(csv.text || "").split(/\\r?\\n/).filter(Boolean).length - 1);
     if (!rowCount) throw new Error("SPX Assignment Task export completed but contained no data rows.");
     sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_CSV", {
       taskId: taskId || "direct",
-      selectedDate: job.selectedDate,
+      selectedDate: submitted.range.date,
       fileName: csv.fileName || "assignment_task.csv",
       csvText: csv.text,
       rowCount
@@ -2234,12 +2329,11 @@ async function runAssignmentTaskExportJob(job) {
       selectedDate: job.selectedDate
     });
   } finally {
-    if (temporaryTabId) {
-      try { await chrome.tabs.remove(temporaryTabId); } catch (_) {}
-    }
     releaseActiveJob(job);
   }
 }
+
+function setsEqual
 
 function setsEqual(a, b) {
   const aa = new Set((a || []).map(String));
