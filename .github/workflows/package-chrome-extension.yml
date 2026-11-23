@@ -209,6 +209,13 @@ jobs:
                   raise SystemExit(f"Expected one KPI threshold-coloring block in index.html; found {color_count}.")
               updated = updated.replace(color_marker, color_replacement, 1)
 
+          # A negative compliance/fraud score is also a non-zero exception and must be red.
+          old_red_rule = 'else if(actualNum>=0.1) card.classList.add("kpi-status-below-b");'
+          new_red_rule = 'else if(actualNum>=0.1 || actualNum<0) card.classList.add("kpi-status-below-b");'
+          if old_red_rule in updated:
+              updated = updated.replace(old_red_rule, new_red_rule)
+          elif new_red_rule not in updated:
+              raise SystemExit("Could not find the zero-good KPI red threshold rule in index.html.")
           index_path.write_text(updated, encoding="utf-8")
           print(f"Embedded {len(files)} Chrome files and synchronized required version {chrome_version}.")
           PY
