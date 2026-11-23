@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v142">
+<meta name="badoc-app-version" content="v143">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2951,6 +2951,61 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           setStatus(button,message||"SPX Assignment Task export failed.","error");
         }
       }
+
+      let batchSearchReportButton=null;
+      let batchSearchExportPending=false;
+      let batchSearchReportWatchdog=null;
+      function clearBatchSearchReportWatchdog(){
+        if(batchSearchReportWatchdog)clearTimeout(batchSearchReportWatchdog);
+        batchSearchReportWatchdog=null;
+      }
+      function armBatchSearchReportWatchdog(timeoutMs,message){
+        clearBatchSearchReportWatchdog();
+        batchSearchReportWatchdog=setTimeout(()=>{
+          batchSearchReportWatchdog=null;
+          if(batchSearchExportPending)finishBatchSearchReportError(message);
+        },timeoutMs);
+      }
+      function finishBatchSearchReportError(message){
+        clearBatchSearchReportWatchdog();
+        batchSearchExportPending=false;
+        const button=batchSearchReportButton;
+        batchSearchReportButton=null;
+        if(button){
+          button.disabled=false;
+          button.textContent="⧉ Batch Search Result";
+          setStatus(button,message||"SPX Batch Search Result export failed.","error");
+        }
+      }
+      function extractAssignmentTaskSpXTrackingNumbers(rows){
+        if(!Array.isArray(rows)||!rows.length)throw new Error("Run Assignment Task first and wait for its CSV to load.");
+        const first=rows.find(row=>row&&typeof row==="object")||{};
+        const headers=Object.keys(first);
+        const normalize=value=>String(value??"").normalize("NFKC").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+        const aliases=new Set(["SPX Tracking Number","SPX TN","SPX Tracking No","Tracking Number","Tracking No"].map(normalize));
+        let key=headers.find(header=>aliases.has(normalize(header)));
+        if(!key){
+          const fuzzy=headers.filter(header=>{
+            const name=normalize(header);
+            return name.includes("spx")&&(name.includes("trackingnumber")||name.endsWith("tn")||name.endsWith("trackingno"));
+          });
+          if(fuzzy.length===1)key=fuzzy[0];
+        }
+        if(!key){
+          throw new Error("The Assignment Task CSV has no recognizable SPX Tracking Number column. Available columns: "+headers.join(", "));
+        }
+        const unique=new Map();
+        let invalid=0;
+        rows.forEach(row=>{
+          const value=String(row?.[key]??"").trim().replace(/\s+/g,"").toUpperCase();
+          if(!value)return;
+          if(!/^[A-Z0-9_-]{6,60}$/.test(value)){invalid++;return;}
+          if(!unique.has(value))unique.set(value,value);
+        });
+        if(!unique.size)throw new Error("No usable SPX Tracking Numbers were found in the Assignment Task CSV column "+key+".");
+        return {numbers:[...unique.values()],column:key,invalid};
+      }
+
       window.addEventListener("message",event=>{
         if(event.source!==window)return;
         const data=event.data||{};
@@ -2959,11 +3014,63 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           finishAssignmentTaskReportError("Badoc Hub Extension disconnected during the Assignment Task export. Reload the extension in chrome://extensions, refresh Badoc Hub, and retry.");
           return;
         }
+        if(data.type==="BADOC_BRIDGE_DISCONNECTED"&&batchSearchExportPending){
+          finishBatchSearchReportError("Badoc Hub Extension disconnected during SPX Batch Search. Reload the extension in chrome://extensions, refresh Badoc Hub, and retry.");
+          return;
+        }
         if(data.type==="BADOC_SPX_COMMAND_FORWARDED"&&data.kind==="assignment-task"){
           if(assignmentTaskReportButton){
             armAssignmentTaskReportWatchdog(15000,"The extension page bridge forwarded the Assignment Task command, but the background service worker did not acknowledge it within 15 seconds. Open chrome://extensions → Badoc Hub Extension → Service worker → Inspect, check for errors, then reload the extension and retry.");
             setStatus(assignmentTaskReportButton,data.message||"Assignment Task command forwarded. Waiting for the extension background worker…","info");
           }
+          return;
+        }
+        if(data.type==="BADOC_SPX_COMMAND_FORWARDED"&&data.kind==="batch-search-result"){
+          if(batchSearchReportButton){
+            armBatchSearchReportWatchdog(15000,"The Batch Search command reached the extension page bridge, but the background service worker did not acknowledge it within 15 seconds. Reload Badoc Hub Extension v1.5.24 and refresh Badoc Hub.");
+            setStatus(batchSearchReportButton,data.message||"Batch Search command forwarded. Waiting for the extension background worker…","info");
+          }
+          return;
+        }
+        if(data.type==="BADOC_SPX_BATCH_SEARCH_PROGRESS"){
+          if(batchSearchReportButton){
+            armBatchSearchReportWatchdog(8*60*1000,"SPX Batch Search stopped reporting progress for 8 minutes. Check the Order Tracking tab and extension service worker, then retry.");
+            setStatus(batchSearchReportButton,data.message||"Running SPX Batch Search and export…","info");
+          }
+          return;
+        }
+        if(data.type==="BADOC_SPX_BATCH_SEARCH_CSV"){
+          clearBatchSearchReportWatchdog();
+          try{
+            const rows=typeof parseCsvText==="function"?parseCsvText(String(data.csvText||"")):[];
+            if(!rows.length)throw new Error("SPX returned an empty Batch-Search Results file.");
+            window.__badocBatchSearchResultRows=rows;
+            window.__badocBatchSearchResultMeta={
+              selectedDate:String(data.selectedDate||assignmentTaskReportDate()),
+              sourceTaskId:String(data.sourceTaskId||""),
+              inputCount:Number(data.inputCount||0),
+              chunkCount:Number(data.chunkCount||1),
+              rowCount:Number(data.rowCount||rows.length),
+              fileName:String(data.fileName||"batch_search_result.csv"),
+              savedAt:Date.now()
+            };
+            batchSearchExportPending=false;
+            const button=batchSearchReportButton;
+            batchSearchReportButton=null;
+            if(button){
+              button.disabled=false;
+              button.textContent="⧉ Batch Search Result ("+rows.length.toLocaleString()+")";
+              setStatus(button,"Loaded "+rows.length.toLocaleString()+" Batch Search result row(s) from "+window.__badocBatchSearchResultMeta.inputCount.toLocaleString()+" SPX Tracking Number(s). Click again to copy.","success");
+            }
+          }catch(error){finishBatchSearchReportError(error?.message||String(error));}
+          return;
+        }
+        if(data.type==="BADOC_SPX_BATCH_SEARCH_ERROR"){
+          finishBatchSearchReportError(data.message||"SPX Batch Search Result export failed.");
+          return;
+        }
+        if(data.type==="BADOC_SPX_ERROR"&&data.kind==="batch-search-result"){
+          finishBatchSearchReportError(data.message||"SPX Batch Search Result export failed.");
           return;
         }
         if(data.type==="BADOC_SPX_ASSIGNMENT_TASK_PROGRESS"){
@@ -3195,20 +3302,56 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
                 postBadocSpxMessage("BADOC_START_ASSIGNMENT_TASK_EXPORT",{selectedDate:today});
               }
             }
-          }else if(key==="batch-search-result"||key==="hourly"){
-            const sources={
-              "batch-search-result":["__badocBatchSearchResultRows","#batchSearchResultTable"],
-              "hourly":["__badocHourlyRows","#hourlyReportTable"]
-            };
-            const source=sources[key],rows=optionalRows(source[0]),table=document.querySelector(source[1]);
+          }else if(key==="batch-search-result"){
+            const resultRows=optionalRows("__badocBatchSearchResultRows");
+            const resultMeta=window.__badocBatchSearchResultMeta||{};
+            const today=assignmentTaskReportDate();
+            if(resultRows.length&&resultMeta.selectedDate===today){
+              await copyText(button,rowsToTsv(resultRows),"Copied "+resultRows.length.toLocaleString()+" Batch Search result row(s) to the clipboard.");
+            }else if(batchSearchExportPending){
+              setStatus(button,"SPX Batch Search is already running. Wait for the export result.","warn");
+            }else{
+              const assignmentRows=optionalRows("__badocAssignmentTaskRows");
+              const assignmentMeta=window.__badocAssignmentTaskMeta||{};
+              if(!assignmentRows.length||assignmentMeta.selectedDate!==today){
+                setStatus(button,"Run Assignment Task first and wait for today's CSV to load. Batch Search uses its SPX Tracking Number column.","warn");
+                return;
+              }
+              const extracted=extractAssignmentTaskSpXTrackingNumbers(assignmentRows);
+              const ensureBridge=window.__badocEnsureSpxBridge;
+              if(typeof ensureBridge!=="function"){
+                setStatus(button,"The Badoc Hub extension check is unavailable. Refresh Badoc Hub and retry.","error");
+                return;
+              }
+              setStatus(button,"Checking Badoc Hub Extension v1.5.24 and preparing "+extracted.numbers.length.toLocaleString()+" SPX Tracking Number(s)…","info");
+              const bridgeReady=await ensureBridge();
+              if(!bridgeReady){
+                setStatus(button,"Badoc Hub Extension v1.5.24 or later is required. Install or reload the extension, then refresh Badoc Hub.","error");
+                return;
+              }
+              batchSearchExportPending=true;
+              batchSearchReportButton=button;
+              button.textContent="Searching SPX…";
+              setStatus(button,"Using "+extracted.numbers.length.toLocaleString()+" unique SPX Tracking Number(s) from Assignment Task column "+extracted.column+". SPX supports 3,000 per search; larger lists will run in chunks.","info");
+              armBatchSearchReportWatchdog(15000,"The Batch Search command was not forwarded to the extension within 15 seconds. Reload the extension and refresh Badoc Hub.");
+              if(typeof postBadocSpxMessage!=="function"){
+                finishBatchSearchReportError("SPX bridge is not available on this dashboard page.");
+              }else{
+                postBadocSpxMessage("BADOC_START_BATCH_SEARCH_EXPORT",{
+                  selectedDate:today,
+                  sourceTaskId:String(assignmentMeta.taskId||""),
+                  trackingNumbers:extracted.numbers
+                });
+              }
+            }
+          }else if(key==="hourly"){
+            const rows=optionalRows("__badocHourlyRows"),table=document.querySelector("#hourlyReportTable");
             const payload=rows.length?rowsToTsv(rows):tableToTsv(table);
             const count=rows.length||Math.max(0,table?table.querySelectorAll("tbody tr").length:0);
-            const label=key==="batch-search-result"?"batch search result":"hourly";
             if(!payload||!count){
-              const sourceLabel=key==="batch-search-result"?"Batch Search Result":"Hourly";
-              setStatus(button,sourceLabel+" data source is not connected to this Reports build yet. No matching rows or report table are registered.","warn");
+              setStatus(button,"Hourly data source is not connected to this Reports build yet. No matching rows or report table are registered.","warn");
             }else{
-              await copyText(button,payload,"Copied "+count.toLocaleString()+" "+label+" row(s).");
+              await copyText(button,payload,"Copied "+count.toLocaleString()+" hourly row(s).");
             }
           }else if(key==="pickup"){
             const existing=document.getElementById("copyFirstMileForSheet");
@@ -3230,7 +3373,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
         }catch(error){
           setStatus(button,"Copy failed: "+String(error&&error.message||error),"error");
         }finally{
-          if(key==="assignment-task"&&assignmentTaskExportPending){
+          if((key==="assignment-task"&&assignmentTaskExportPending)||(key==="batch-search-result"&&batchSearchExportPending)){
             button.disabled=true;
           }else{
             button.disabled=false;
@@ -15151,7 +15294,7 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
 (function(){
 const BRIDGE_VERSION="1";
   const BRIDGE_CHECK_TIMEOUT=5000;
-  const REQUIRED_CHROME_VERSION="1.5.23";
+  const REQUIRED_CHROME_VERSION="1.5.24";
   const REQUIRED_FIREFOX_VERSION="69.5.15";
   let installedPackageVersion="";
   const isFirefox=/Firefox\//i.test(navigator.userAgent);

@@ -4,7 +4,7 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 
 ## Current Chrome extension package
 
-- Chrome extension: **v1.5.23**, bundled in the dashboard's built-in Bridge Installer.
+- Chrome extension: **v1.5.24**, bundled in the dashboard's built-in Bridge Installer.
 - Open Badoc Hub's Bridge Installer and choose **Download ZIP File** to generate the current package from the synchronized `extension/` sources.
 
 To install the package, extract the ZIP, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select the extracted extension folder.
@@ -14,7 +14,7 @@ To install the package, extract the ZIP, open `chrome://extensions`, enable Deve
 - Assignment Task export uses the native SPX GET endpoint directly from the extension background. It does not open, activate, or navigate an SPX tab.
 
 ## Included
-- BADOC Hub dashboard v142
+- BADOC Hub dashboard v143
 - Chrome extension v1.5.22, including authenticated direct-file download for Assignment Task exports that run from an inactive background SPX route while Badoc Hub stays in the foreground
 - Firefox extension v69.5.10
 - First Mile XLSX-to-CSV support
