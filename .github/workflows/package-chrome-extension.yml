@@ -104,22 +104,7 @@ jobs:
 
 
 
-          # Promote the Hub Compliance Score from Weight only when Actual is blank.
-          # This leaves a genuine Actual untouched and prevents -2.500% being mislabeled as Weight.
-          card_marker = '        const v=getMetricValue(rows,block.data,block.metricHeader,name);'
-          card_replacement = '''        const v=getMetricValue(rows,block.data,block.metricHeader,name);
-                  if(name==="Hub Compliance Score"){
-                    const actualText=String(v.actual??"").trim();
-                    const weightText=String(v.weight??"").trim();
-                    if((!actualText || actualText==="—") && weightText){
-                      v.actual=v.weight;
-                      v.weight="";
-                    }
-                  }'''
-          card_count = updated.count(card_marker)
-          if card_count != 1:
-              raise SystemExit(f"Expected one KPI card value-rendering point in index.html; found {card_count}.")
-          updated = updated.replace(card_marker, card_replacement, 1)
+
 
           index_path.write_text(updated, encoding="utf-8")
           print(f"Embedded {len(files)} Chrome extension files and synchronized required version {chrome_version} in index.html.")
@@ -178,6 +163,23 @@ jobs:
           )
           if settings_count != 1:
               raise SystemExit(f"Expected one Settings-page Chrome version label; found {settings_count}.")
+          # Promote the Hub Compliance Score from Weight only when Actual is blank.
+          # This leaves a genuine Actual untouched and prevents -2.500% being mislabeled as Weight.
+          card_marker = '        const v=getMetricValue(rows,block.data,block.metricHeader,name);'
+          card_replacement = '''        const v=getMetricValue(rows,block.data,block.metricHeader,name);
+                  if(name==="Hub Compliance Score"){
+                    const actualText=String(v.actual??"").trim();
+                    const weightText=String(v.weight??"").trim();
+                    if((!actualText || actualText==="—") && weightText){
+                      v.actual=v.weight;
+                      v.weight="";
+                    }
+                  }'''
+          card_count = updated.count(card_marker)
+          if card_count != 1:
+              raise SystemExit(f"Expected one KPI card value-rendering point in index.html; found {card_count}.")
+          updated = updated.replace(card_marker, card_replacement, 1)
+
           index_path.write_text(updated, encoding="utf-8")
           print(f"Embedded {len(files)} Chrome files and synchronized required version {chrome_version}.")
           PY
