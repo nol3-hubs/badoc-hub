@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v143">
+<meta name="badoc-app-version" content="v144">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2982,12 +2982,12 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
         const first=rows.find(row=>row&&typeof row==="object")||{};
         const headers=Object.keys(first);
         const normalize=value=>String(value??"").normalize("NFKC").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
-        const aliases=new Set(["SPX Tracking Number","SPX TN","SPX Tracking No","Tracking Number","Tracking No"].map(normalize));
+        const aliases=new Set(["SPX Tracking Number","SPX tracking num","SPX TN","SPX Tracking No","Tracking Number","Tracking No"].map(normalize));
         let key=headers.find(header=>aliases.has(normalize(header)));
         if(!key){
           const fuzzy=headers.filter(header=>{
             const name=normalize(header);
-            return name.includes("spx")&&(name.includes("trackingnumber")||name.endsWith("tn")||name.endsWith("trackingno"));
+            return name.includes("spx")&&(name.includes("trackingnumber")||name.includes("trackingnum")||name.endsWith("tn")||name.endsWith("trackingno"));
           });
           if(fuzzy.length===1)key=fuzzy[0];
         }

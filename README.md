@@ -9,13 +9,11 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 
 To install the package, extract the ZIP, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select the extracted extension folder.
 
-- Assignment Task export opens the SPX deep link in a temporary inactive tab only when needed, automatically triggers Export, and closes the temporary tab after SPX accepts the job.
-
 - Assignment Task export uses the native SPX GET endpoint directly from the extension background. It does not open, activate, or navigate an SPX tab.
 
 ## Included
-- BADOC Hub dashboard v143
-- Chrome extension v1.5.22, including authenticated direct-file download for Assignment Task exports that run from an inactive background SPX route while Badoc Hub stays in the foreground
+- BADOC Hub dashboard v144
+- Chrome extension v1.5.24, including direct Assignment Task export and Batch Search Result automation
 - Firefox extension v69.5.10
 - First Mile XLSX-to-CSV support
 - On-demand Pickup Info lookup from the signed-in SPX tab, including pickup attempts, geofence, remarks, photos, and seller signature
