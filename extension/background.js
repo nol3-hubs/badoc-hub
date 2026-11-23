@@ -1683,15 +1683,19 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       ) || null;
 
       if (!found && isTopFrame) {
-        exportButton = queryDeep(document, 'button,[role="button"]')
-          .filter(button => visible(button) && String(button.innerText || button.textContent || "").replace(/\s+/g, " ").trim() === "Export")
-          .sort((a,b) => {
-            const score = el => (el.matches?.("button.ssc-customhook-group-btn") ? 20 : 0) +
-              (el.closest?.(".btns-container.btns-container-left.btns-container-wrapper") ? 10 : 0);
-            return score(b) - score(a);
-          })[0] || null;
+        const toolbarDeadline = Date.now() + 45000;
+        while (!exportButton && Date.now() < toolbarDeadline) {
+          exportButton = queryDeep(document, 'button,[role="button"]')
+            .filter(button => visible(button) && String(button.innerText || button.textContent || "").replace(/\s+/g, " ").trim() === "Export")
+            .sort((a,b) => {
+              const score = el => (el.matches?.("button.ssc-customhook-group-btn") ? 20 : 0) +
+                (el.closest?.(".btns-container.btns-container-left.btns-container-wrapper") ? 10 : 0);
+              return score(b) - score(a);
+            })[0] || null;
+          if (!exportButton) await new Promise(resolve => setTimeout(resolve, 300));
+        }
         if (!exportButton) {
-          throw new Error("SPX Assignment Task Export control was not found on the Delivery Assignment → List page.");
+          throw new Error("SPX Assignment Task page loaded, but its toolbar Export control was not found. Confirm SPX sign-in and retry.");
         }
         previousOutline = exportButton.style.outline;
         previousOutlineOffset = exportButton.style.outlineOffset;
@@ -1699,9 +1703,15 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         exportButton.style.outlineOffset = "3px";
         try { exportButton.scrollIntoView({ block: "center", inline: "nearest" }); } catch (_) {}
         updateManualHint(
-          "Badoc Hub is waiting for SPX Export",
-          "Click the highlighted Export button in the SPX toolbar. If a dropdown appears, click its Export option. Badoc Hub will detect the form and continue with " + date + "."
+          "Starting SPX Export automatically",
+          "Badoc Hub opened the Assignment Task route and is selecting Export for " + date + ". No manual tab switching is required."
         );
+        try {
+          exportButton.click();
+          exportActivationMethod = "automated toolbar click";
+        } catch (clickError) {
+          throw new Error("SPX blocked the automatic toolbar Export click: " + String(clickError?.message || clickError));
+        }
       }
 
       // Capture the actual SPX export response as a fallback when SPX's Vue
@@ -1871,7 +1881,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
             domExportSubmitted ? "SPX Export was submitted; waiting for task response" : "SPX Export form was not detected",
             domExportSubmitted
               ? "The Created Date form was submitted (" + domExportDetails.start + " to " + domExportDetails.end + "). SPX has not returned an export task response yet."
-              : "The 60-second wait ended. Click Export in SPX, then retry Assignment Task in Badoc Hub."
+              : "The 60-second wait ended without an SPX Export form. The automatic Export click did not open the form; retry after confirming the SPX session is signed in."
           );
           setTimeout(() => hint?.remove(), 15000);
         }
@@ -1891,7 +1901,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
           );
         }
         throw new Error(
-          "Timed out waiting for the SPX Export form. The SPX tab was focused; click the highlighted Export button and select Export in its menu if shown, then retry. " +
+          "Timed out waiting for the SPX Export form after the extension automatically opened the Assignment Task Export menu. SPX may have changed its page controls or blocked the scripted click. " +
           "Visible buttons: " + visibleButtons + " | visible inputs: " + visibleInputs
         );
       }
@@ -2103,20 +2113,52 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
 
 async function runAssignmentTaskExportJob(job) {
   const port = job.ownerPort;
+  let temporaryTabId = null;
   try {
     job.startedAt = Date.now();
     const tabs = await chrome.tabs.query({ url: SPX_ORIGIN + "/*" });
-    const tab = tabs.find(item => String(item.url || "").includes("/#/assignment-task-new/list")) ||
-      tabs.find(item => String(item.url || "").includes("assignment-task-new"));
+    let tab = tabs
+      .filter(item => !item.discarded)
+      .find(item => /assignment-task-new/i.test(String(item.url || "")));
+
+    // Use the direct SPX route in an inactive temporary tab only when the
+    // Assignment Task page is not already open. This reuses the signed-in
+    // browser session and never switches the user away from Badoc Hub.
     if (!tab?.id) {
-      throw new Error("Open the authenticated SPX Delivery Assignment → List page, then retry Assignment Task in Reports.");
+      const assignmentTaskUrl = SPX_ORIGIN + "/#/assignment-task-new/list";
+      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        message: "Opening the SPX Assignment Task page in the background. Badoc Hub will stay in front."
+      });
+      tab = await chrome.tabs.create({ url: assignmentTaskUrl, active: false });
+      temporaryTabId = tab?.id || null;
+      if (!temporaryTabId) throw new Error("Chrome could not create the temporary background SPX page.");
+      const pageDeadline = Date.now() + 90000;
+      let ready = false;
+      while (Date.now() < pageDeadline) {
+        if (job.cancelled) throw new Error("Assignment Task export cancelled.");
+        tab = await chrome.tabs.get(temporaryTabId);
+        const currentUrl = String(tab.url || "");
+        if (/login|passport|signin/i.test(currentUrl) && !/assignment-task-new/i.test(currentUrl)) {
+          throw new Error("SPX opened a sign-in page instead of Assignment Task. Sign in to SPX, then retry.");
+        }
+        if (tab.status === "complete" && /assignment-task-new/i.test(currentUrl)) {
+          ready = true;
+          break;
+        }
+        await sleep(350);
+      }
+      if (!ready) throw new Error("SPX Assignment Task page did not finish loading within 90 seconds.");
+      await sleep(1200); // allow the SPX SPA to mount its toolbar and components
     }
-    // Keep Badoc Hub in the foreground. The export can be injected into the
-    // already-open SPX Assignment Task page without activating or opening a tab.
+
     sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-      message: "Using the already-open SPX Assignment Task page in the background. You can stay on Badoc Hub while the export runs."
+      message: "Starting the SPX Assignment Task export in the background for " + job.selectedDate + "."
     });
     const result = await invokeSpxAssignmentTaskExport(tab.id, job.selectedDate);
+    if (temporaryTabId) {
+      try { await chrome.tabs.remove(temporaryTabId); } catch (_) {}
+      temporaryTabId = null;
+    }
     let csv = null;
     let taskId = Number(result.taskId || getExportTaskId(result.apiResult) || 0);
     if (result.directUrl) {
@@ -2192,6 +2234,9 @@ async function runAssignmentTaskExportJob(job) {
       selectedDate: job.selectedDate
     });
   } finally {
+    if (temporaryTabId) {
+      try { await chrome.tabs.remove(temporaryTabId); } catch (_) {}
+    }
     releaseActiveJob(job);
   }
 }
