@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v141">
+<meta name="badoc-app-version" content="v142">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -2959,6 +2959,13 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
           finishAssignmentTaskReportError("Badoc Hub Extension disconnected during the Assignment Task export. Reload the extension in chrome://extensions, refresh Badoc Hub, and retry.");
           return;
         }
+        if(data.type==="BADOC_SPX_COMMAND_FORWARDED"&&data.kind==="assignment-task"){
+          if(assignmentTaskReportButton){
+            armAssignmentTaskReportWatchdog(15000,"The extension page bridge forwarded the Assignment Task command, but the background service worker did not acknowledge it within 15 seconds. Open chrome://extensions → Badoc Hub Extension → Service worker → Inspect, check for errors, then reload the extension and retry.");
+            setStatus(assignmentTaskReportButton,data.message||"Assignment Task command forwarded. Waiting for the extension background worker…","info");
+          }
+          return;
+        }
         if(data.type==="BADOC_SPX_ASSIGNMENT_TASK_PROGRESS"){
           if(assignmentTaskReportButton){
             armAssignmentTaskReportWatchdog(6*60*1000,"Assignment Task export stopped reporting progress for 6 minutes. Check the Badoc Hub Extension service worker in chrome://extensions, reload the extension, refresh Badoc Hub, and retry.");
@@ -3171,10 +3178,10 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
                 setStatus(button,"The Badoc Hub extension check is unavailable on this page. Refresh Badoc Hub and retry.","error");
                 return;
               }
-              setStatus(button,"Checking Badoc Hub Extension v1.5.22 and preparing the direct SPX export…","info");
+              setStatus(button,"Checking Badoc Hub Extension v1.5.23 and preparing the direct SPX export…","info");
               const bridgeReady=await ensureBridge();
               if(!bridgeReady){
-                setStatus(button,"Badoc Hub Extension v1.5.22 or later is required. Install or reload the extension, then refresh Badoc Hub and retry.","error");
+                setStatus(button,"Badoc Hub Extension v1.5.23 or later is required. Install or reload the extension, then refresh Badoc Hub and retry.","error");
                 return;
               }
               assignmentTaskExportPending=true;
@@ -3184,7 +3191,7 @@ html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hi
               if(typeof postBadocSpxMessage!=="function"){
                 finishAssignmentTaskReportError("SPX bridge is not available on this dashboard page.");
               }else{
-                armAssignmentTaskReportWatchdog(15000,"The extension was connected but did not acknowledge the Assignment Task request within 15 seconds. Reload Badoc Hub Extension in chrome://extensions, refresh this page, and retry.");
+                armAssignmentTaskReportWatchdog(15000,"The Assignment Task command was not forwarded by the extension page bridge within 15 seconds. Check that Badoc Hub Extension v1.5.23 is enabled, then reload the extension and refresh Badoc Hub.");
                 postBadocSpxMessage("BADOC_START_ASSIGNMENT_TASK_EXPORT",{selectedDate:today});
               }
             }
@@ -15144,7 +15151,7 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
 (function(){
 const BRIDGE_VERSION="1";
   const BRIDGE_CHECK_TIMEOUT=5000;
-  const REQUIRED_CHROME_VERSION="1.5.22";
+  const REQUIRED_CHROME_VERSION="1.5.23";
   const REQUIRED_FIREFOX_VERSION="69.5.15";
   let installedPackageVersion="";
   const isFirefox=/Firefox\//i.test(navigator.userAgent);

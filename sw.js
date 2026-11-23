@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-app-v177-20261123-bridge1522-index141-hourlyat-fix';
+const CACHE_NAME = 'badoc-hub-pwa-app-v178-20261123-bridge1523-index142-hourlyat-ack-fix';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
