@@ -12,7 +12,7 @@ const RIDER_EXPORT_BIZ_NAME = "driver";
 
 
 const POLL_MS = 3000;
-const ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS = 30 * 1000;
+const ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS = 30 * 1000; // allow SPX time to attach export media metadata after success
 const ASSIGNMENT_TASK_MEDIA_ID_POLL_MS = 4000;
 const LINEHAUL_POLL_MS = 2000;
 const MAX_WAIT_MS = 25 * 60 * 1000;
