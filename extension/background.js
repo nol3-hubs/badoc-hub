@@ -1405,6 +1405,77 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         const matches = [...matchesByComponent.values()].sort((a, b) => b.score - a.score);
         return matches[0]?.candidate || null;
       };
+      // Fallback for SPX Assignment Task dialogs whose Vue internals are not exposed
+      // to the page bridge. Identify the visible Export dialog by its Created Date label.
+      const findAssignmentExportDialog = () => {
+        const roots = queryDeep(document, dialogSelector).filter(visible);
+        const matches = [];
+        for (const root of roots) {
+          const text = String(root.innerText || root.textContent || "").replace(/\s+/g, " ").trim();
+          if (!/created\s*date|create\s*date/i.test(text) || !/\bexport\b/i.test(text)) continue;
+          const inputs = queryDeep(root, 'input:not([type="hidden"])')
+            .filter(input => visible(input))
+            .filter(input => !["checkbox","radio","button","submit","reset","file"].includes(String(input.type || "").toLowerCase()));
+          const buttons = queryDeep(root, 'button,[role="button"],.el-button')
+            .filter(button => visible(button));
+          if (!inputs.length || !buttons.length) continue;
+          const primaryCount = buttons.filter(button => /primary/i.test(String(button.className || ""))).length;
+          const score = (inputs.length >= 2 ? 8 : 0) + primaryCount * 4 +
+            (root.matches?.(".el-dialog,.ant-modal,.ivu-modal,[role=dialog]") ? 3 : 0);
+          matches.push({ root, inputs, buttons, text, score });
+        }
+        return matches.sort((a,b) => b.score - a.score)[0] || null;
+      };
+      const setNativeInputValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+        const wasReadOnly = input.readOnly;
+        try { input.readOnly = false; } catch (_) {}
+        if (descriptor?.set) descriptor.set.call(input, value);
+        else input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Enter" }));
+        input.blur();
+        if (wasReadOnly) {
+          try { input.readOnly = true; } catch (_) {}
+        }
+      };
+      const submitAssignmentExportDialog = dialog => {
+        const dateInputs = dialog.inputs.filter(input => {
+          const meta = [
+            input.placeholder, input.getAttribute("aria-label"), input.className,
+            input.parentElement?.className, input.closest?.(".el-date-editor")?.className,
+            input.value
+          ].join(" ");
+          return /date|time|range/i.test(meta) || /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(String(input.value || "").trim());
+        });
+        const inputs = (dateInputs.length >= 2 ? dateInputs : dialog.inputs).slice(0, 2);
+        if (!inputs.length) throw new Error("SPX Export dialog was found, but its Created Date input was not accessible.");
+        if (inputs.length >= 2) {
+          setNativeInputValue(inputs[0], startText);
+          setNativeInputValue(inputs[1], endText);
+        } else {
+          setNativeInputValue(inputs[0], startText + " - " + endText);
+        }
+        const isCancel = button => /cancel|kanselahin|batal|close|tutup/i.test(
+          String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
+        );
+        const actionButtons = dialog.buttons.filter(button => !isCancel(button));
+        const actionButton =
+          actionButtons.find(button => /confirm|matukoy|export|generate|download|submit|apply|ok|确定|確認/i.test(
+            String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
+          )) ||
+          actionButtons.find(button => /primary/i.test(String(button.className || ""))) ||
+          actionButtons[actionButtons.length - 1];
+        if (!actionButton) throw new Error("SPX Export dialog was found, but its Confirm/Export action was not available.");
+        const disabled = actionButton.disabled === true || actionButton.getAttribute?.("aria-disabled") === "true";
+        if (disabled) throw new Error("SPX Export Confirm button is disabled after setting the Created Date range.");
+        const buttonLabel = String(actionButton.innerText || actionButton.textContent || actionButton.getAttribute("aria-label") || "").trim();
+        actionButton.click();
+        return { start: startText, end: endText, button: buttonLabel };
+      };
+      let domExportSubmitted = false;
+      let domExportDetails = null;
       let found = findExportComponent();
       let exportActivationMethod = "manual trusted click";
       let exportButton = null;
@@ -1558,6 +1629,20 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         } catch (_) {}
         found = findExportComponent();
         if (found) break;
+        if (!domExportSubmitted) {
+          const exportDialog = findAssignmentExportDialog();
+          if (exportDialog) {
+            domExportDetails = submitAssignmentExportDialog(exportDialog);
+            domExportSubmitted = true;
+            updateManualHint(
+              "Submitting SPX Export",
+              "Badoc Hub detected the Created Date form, set " + date + " from 00:00:00 to 23:59:59, and selected " +
+              (domExportDetails.button || "the Export action") + ". Waiting for SPX to return the export task…"
+            );
+            await new Promise(resolve => setTimeout(resolve, 220));
+            continue;
+          }
+        }
         const menuItem = isTopFrame ? findVisibleExportMenuItem() : null;
         if (menuItem && !menuAutoClickAttempted) {
           menuAutoClickAttempted = true;
@@ -1621,10 +1706,12 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       if (!found) {
         if (hint) {
           updateManualHint(
-            "SPX Export was not opened",
-            "The 60-second wait ended. Click Export in SPX, then retry Assignment Task in Badoc Hub."
+            domExportSubmitted ? "SPX Export was submitted; waiting for task response" : "SPX Export form was not detected",
+            domExportSubmitted
+              ? "The Created Date form was submitted (" + domExportDetails.start + " to " + domExportDetails.end + "). SPX has not returned an export task response yet."
+              : "The 60-second wait ended. Click Export in SPX, then retry Assignment Task in Badoc Hub."
           );
-          setTimeout(() => hint?.remove(), 12000);
+          setTimeout(() => hint?.remove(), 15000);
         }
         const visibleButtons = queryDeep(document, 'button,[role="button"]').filter(visible).map(button =>
           String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
@@ -1632,6 +1719,15 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         const visibleInputs = queryDeep(document, "input,[role='textbox']").filter(visible).map(input =>
           input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.type || "input"
         ).slice(0, 10).join(", ");
+        if (domExportSubmitted) {
+          throw new Error(
+            "SPX Assignment Task Export form was detected and submitted for " + date +
+            ", but SPX did not return an export task response within 60 seconds. " +
+            "Created Date: " + domExportDetails.start + " to " + domExportDetails.end +
+            " | Confirm button: " + domExportDetails.button +
+            " | Visible buttons: " + visibleButtons + " | visible inputs: " + visibleInputs
+          );
+        }
         throw new Error(
           "Timed out waiting for the SPX Export form. The SPX tab was focused; click the highlighted Export button and select Export in its menu if shown, then retry. " +
           "Visible buttons: " + visibleButtons + " | visible inputs: " + visibleInputs

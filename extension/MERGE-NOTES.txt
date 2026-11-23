@@ -1,3 +1,11 @@
+UPDATE — 2026-11-23 · SPX Assignment Task Export dialog fallback (Chrome v1.5.15)
+- Kept dropdown selection restricted to the exact Export option; Export History remains excluded.
+- Added a DOM-based fallback for SPX builds whose Assignment Task dialog does not expose the Vue form/export callback required by the prior detector.
+- The fallback identifies the visible Export dialog by its Created Date label, sets the selected Philippine date from 00:00:00 through 23:59:59, and submits the dialog's primary Confirm/Export action, including localized action labels such as Matukoy.
+- The SPX fetch/XHR task response is captured and passed through the existing task discovery and CSV download pipeline.
+- Chrome extension version is 1.5.15; dashboard version is v133; PWA cache is v169. The built-in installer is regenerated from extension/.
+- Static syntax/package validation is required; authenticated live SPX export still needs confirmation.
+
 UPDATE — 2026-11-23 · Dashboard and Chrome extension v1.5.14
 - Updated the embedded dashboard extension installer to Chrome v1.5.14 and now require v1.5.14 during the extension handshake. Chrome v1.5.13 is no longer reported as current.
 - Updated the dashboard app version to v132, the Settings required-version label, and the operation modal extension-version label.
