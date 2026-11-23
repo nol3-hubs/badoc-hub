@@ -3376,7 +3376,7 @@ async function openBatchSearchOrderTrackingTab(ownerPort, job) {
 
 async function closeBatchSearchOrderTrackingTab(job) {
   const tabId = job?.spxTabId;
-  if (!Number.isInteger(tabId) || tabId <= 0) return;
+  if (!Number.isInteger(tabId)) return;
   job.spxTabId = null;
   try {
     await chrome.tabs.remove(tabId);
