@@ -112,75 +112,62 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           published=0
           for attempt in 1 2 3; do
-            # Always rebuild the generated HTML on top of the latest branch head.
-            # Rebasing a pre-generated index.html conflicts whenever another
-            # package workflow has already embedded a newer extension version.
+            # Start from the latest main branch and regenerate the embedded bridge there.
             git fetch origin "${GITHUB_REF_NAME}"
             git reset --hard "origin/${GITHUB_REF_NAME}"
-
             mkdir -p downloads
             cp -f "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" downloads/
             cp -f "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256" downloads/
-
             python3 - <<'PY'
-            import base64
-            import json
-            import re
-            from pathlib import Path
+import base64
+import json
+import re
+from pathlib import Path
 
-            root = Path("extension")
-            files = {
-                path.relative_to(root).as_posix(): base64.b64encode(path.read_bytes()).decode("ascii")
-                for path in sorted(root.rglob("*"))
-                if path.is_file()
-            }
-            index_path = Path("index.html")
-            html = index_path.read_text(encoding="utf-8")
-            assignment = "window.BADOC_BRIDGE_FILES=" + json.dumps(files, separators=(",", ":")) + ";"
-            pattern = re.compile(r"window\\.BADOC_BRIDGE_FILES\\s*=\\s*\\{.*?\\}\\s*;", re.DOTALL)
-            updated, count = pattern.subn(lambda _match: assignment, html, count=1)
-            if count != 1:
-                raise SystemExit(f"Expected one embedded bridge file map in index.html; found {count}.")
+root = Path("extension")
+files = {
+    path.relative_to(root).as_posix(): base64.b64encode(path.read_bytes()).decode("ascii")
+    for path in sorted(root.rglob("*"))
+    if path.is_file()
+}
+index_path = Path("index.html")
+html = index_path.read_text(encoding="utf-8")
+assignment = "window.BADOC_BRIDGE_FILES=" + json.dumps(files, separators=(",", ":")) + ";"
+pattern = re.compile(r"window\.BADOC_BRIDGE_FILES\s*=\s*\{.*?\}\s*;", re.DOTALL)
+updated, count = pattern.subn(lambda _match: assignment, html, count=1)
+if count != 1:
+    raise SystemExit(f"Expected one embedded bridge file map in index.html; found {count}.")
 
-            manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-            chrome_version = manifest["version"]
-            required_pattern = re.compile(r'(const\\s+REQUIRED_CHROME_VERSION\\s*=\\s*["\\'])[^"\\']+(["\\'];)')
-            updated, required_count = required_pattern.subn(
-                lambda match: match.group(1) + chrome_version + match.group(2),
-                updated,
-                count=1
-            )
-            if required_count != 1:
-                raise SystemExit(
-                    "Expected one REQUIRED_CHROME_VERSION declaration in index.html; "
-                    f"found {required_count}."
-                )
+manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+chrome_version = manifest["version"]
+required_pattern = re.compile(r'(const\s+REQUIRED_CHROME_VERSION\s*=\s*["\'])[^"\']+(["\'];)')
+updated, required_count = required_pattern.subn(
+    lambda match: match.group(1) + chrome_version + match.group(2),
+    updated,
+    count=1
+)
+if required_count != 1:
+    raise SystemExit(f"Expected one REQUIRED_CHROME_VERSION declaration; found {required_count}.")
 
-            settings_pattern = re.compile(
-                r'(const\\s+required\\s*=\\s*firefox\\s*\\?\\s*["\\']Firefox\\s+[^"\\']+["\\']\\s*:\\s*["\\']Chrome\\s+)[^"\\']+(["\\'];)'
-            )
-            updated, settings_count = settings_pattern.subn(
-                lambda match: match.group(1) + chrome_version + match.group(2),
-                updated,
-                count=1
-            )
-            if settings_count != 1:
-                raise SystemExit(
-                    "Expected one Settings-page Chrome required-version label in index.html; "
-                    f"found {settings_count}."
-                )
-
-            index_path.write_text(updated, encoding="utf-8")
-            print(f"Embedded {len(files)} Chrome files and synchronized required version {chrome_version}.")
-            PY
-
+settings_pattern = re.compile(
+    r'(const\s+required\s*=\s*firefox\s*\?\s*["\']Firefox\s+[^"\']+["\']\s*:\s*["\']Chrome\s+)[^"\']+(["\'];)'
+)
+updated, settings_count = settings_pattern.subn(
+    lambda match: match.group(1) + chrome_version + match.group(2),
+    updated,
+    count=1
+)
+if settings_count != 1:
+    raise SystemExit(f"Expected one Settings-page Chrome version label; found {settings_count}.")
+index_path.write_text(updated, encoding="utf-8")
+print(f"Embedded {len(files)} Chrome files and synchronized required version {chrome_version}.")
+          PY
             git add index.html "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
             if git diff --cached --quiet; then
               echo "Chrome package files are already current."
               published=1
               break
             fi
-
             git commit -m "Publish Chrome SPX Bridge ${PACKAGE_VERSION} package"
             if git push origin "HEAD:${GITHUB_REF_NAME}"; then
               published=1
