@@ -797,6 +797,42 @@ async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
   throw new Error(label+" task "+taskId+" was accepted by SPX but did not become downloadable within 4 minutes."+diagnostic+errors+" Open the SPX export task monitor to confirm its state.");
 }
 
+
+async function downloadAssignmentTaskFile(task, taskId) {
+  const rawPath = String(task?.file_name || "").trim().replace(/^\/+/, "");
+  if (!rawPath) throw new Error("SPX completed the Assignment Task but did not return file_name.");
+
+  // Only allow the known SPX Assignment Task export artifact path and require
+  // its embedded task ID to match the task returned by our own export request.
+  const match = rawPath.match(/^downloads\/export\/live\/ph\/(\d{4})\/(\d{2})\/(\d{2})\/delivery\/assignment_task\/(\d+)\/([A-Za-z0-9._-]+\.csv)$/i);
+  if (!match || Number(match[4]) !== Number(taskId)) {
+    throw new Error("SPX Assignment Task file_name is not a recognized task-specific CSV path for task " + taskId + ".");
+  }
+
+  const url = new URL(rawPath, SPX_ORIGIN + "/");
+  if (url.origin !== SPX_ORIGIN || url.username || url.password || url.search || url.hash) {
+    throw new Error("SPX Assignment Task file_name resolved to an unsafe download URL.");
+  }
+
+  const response = await extensionFetchText(url.toString(), {
+    headers: {
+      "Accept": "text/csv,text/plain,application/octet-stream,*/*",
+      "Referer": SPX_ORIGIN + "/"
+    }
+  });
+  const text = String(response?.text || "").replace(/^\uFEFF/, "");
+  if (!response.ok) throw new Error("SPX direct Assignment Task file download failed (HTTP " + response.status + ").");
+  if (!text.trim()) throw new Error("SPX returned an empty direct Assignment Task file.");
+  if (/^(?:<!doctype|<html|\{|\[)/i.test(text.trim().slice(0, 300))) {
+    throw new Error("SPX direct Assignment Task file path returned HTML or JSON instead of CSV.");
+  }
+  return {
+    text,
+    fileName: match[5],
+    url: url.toString()
+  };
+}
+
 async function waitForAssignmentTaskMediaId(taskId, completedInfo, job, label = "Assignment Task") {
   let bestTask = { ...(completedInfo?.task || {}) };
   let bestSource = completedInfo?.source || "fms";
@@ -2095,36 +2131,52 @@ async function runAssignmentTaskExportJob(job) {
       });
       const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
       let completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
-      let mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
-      if (!mediaId) {
-        completedInfo = await waitForAssignmentTaskMediaId(taskId, completedInfo, job, "Assignment Task");
-        mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+      let directFileError = "";
+      if (completedInfo.task?.file_name) {
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+          message: "Assignment Task " + taskId + " succeeded. Trying the authenticated CSV file path returned by SPX…"
+        });
+        try {
+          csv = await downloadAssignmentTaskFile(completedInfo.task, taskId);
+        } catch (error) {
+          directFileError = error?.message || String(error);
+          console.warn("SPX direct Assignment Task file download failed; checking media_id fallback:", directFileError);
+        }
       }
-      if (!mediaId) {
-        const task = completedInfo.task || {};
-        const taskFields = Object.keys(task).slice(0, 24).join(", ") || "none";
-        const diagnosticKeys = ["media_id", "is_mms_gray", "file_name", "export_source", "export_name", "biz_name", "export_status", "queue_position"];
-        const diagnosticValues = diagnosticKeys.map(key => {
-          const value = task[key];
-          const rendered = value === undefined ? "missing" : value === null || value === "" ? "empty" : JSON.stringify(value);
-          return key + "=" + rendered;
-        }).join(", ");
-        const lookupDetail = completedInfo.lookupErrors?.length
-          ? " Metadata lookup errors: " + [...new Set(completedInfo.lookupErrors)].slice(0, 3).join("; ") + "."
-          : "";
-        throw new Error(
-          "SPX completed Assignment Task " + taskId + ", but media_id remained unavailable after " +
-          Math.round(ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS / 1000) + " seconds of post-completion full-record checks. " +
-          "Queue: " + (completedInfo.source || "default") + ". Task fields: " + taskFields +
-          ". Key values: " + diagnosticValues +
-          ". The signed-download request was not sent because SPX requires media_id (code 40902)." + lookupDetail
-        );
+
+      if (!csv) {
+        let mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+        if (!mediaId) {
+          completedInfo = await waitForAssignmentTaskMediaId(taskId, completedInfo, job, "Assignment Task");
+          mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+        }
+        if (!mediaId) {
+          const task = completedInfo.task || {};
+          const taskFields = Object.keys(task).slice(0, 24).join(", ") || "none";
+          const diagnosticKeys = ["media_id", "is_mms_gray", "file_name", "export_source", "export_name", "biz_name", "export_status", "queue_position"];
+          const diagnosticValues = diagnosticKeys.map(key => {
+            const value = task[key];
+            const rendered = value === undefined ? "missing" : value === null || value === "" ? "empty" : JSON.stringify(value);
+            return key + "=" + rendered;
+          }).join(", ");
+          const lookupDetail = completedInfo.lookupErrors?.length
+            ? " Metadata lookup errors: " + [...new Set(completedInfo.lookupErrors)].slice(0, 3).join("; ") + "."
+            : "";
+          throw new Error(
+            "SPX completed Assignment Task " + taskId + ", but its direct file path could not be downloaded and media_id remained unavailable after " +
+            Math.round(ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS / 1000) + " seconds of post-completion full-record checks. " +
+            "Queue: " + (completedInfo.source || "default") + ". Task fields: " + taskFields +
+            ". Key values: " + diagnosticValues +
+            (directFileError ? ". Direct file download: " + directFileError : "") +
+            ". The signed-download request was not sent because SPX requires media_id (code 40902)." + lookupDetail
+          );
+        }
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+          message: "Assignment Task " + taskId + " completed. Media ID recovered; requesting the signed CSV download…"
+        });
+        const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId);
+        csv = await downloadCsv(signedUrl);
       }
-      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-        message: "Assignment Task " + taskId + " completed. Media ID recovered; requesting the signed CSV download…"
-      });
-      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId);
-      csv = await downloadCsv(signedUrl);
     } else {
       throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");
     }
