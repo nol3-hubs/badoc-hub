@@ -1,3 +1,11 @@
+UPDATE — 2026-11-23 · Assignment Task signed-download fallback (Chrome v1.5.16)
+- Removed the Assignment Task-only hard stop that refused to request a CSV when a completed SPX task row omitted media_id.
+- The workflow now calls the existing authenticated signed-download endpoint using task_id and the discovered queue source; media_id is still supplied when SPX includes it.
+- This matches the task-ID-only signed-download method already used by other Badoc Hub export jobs.
+- Retained SPX Succeeded-task verification, queue/source fallback, signed URL validation, and CSV row checks.
+- Chrome extension bumped to v1.5.16, dashboard to v134, and PWA cache to v170. The embedded Chrome installer is regenerated from extension/.
+- Static validation passed only after package build; a live authenticated SPX download must still confirm SPX's response.
+
 UPDATE — 2026-11-23 · SPX Assignment Task Export dialog fallback (Chrome v1.5.15)
 - Kept dropdown selection restricted to the exact Export option; Export History remains excluded.
 - Added a DOM-based fallback for SPX builds whose Assignment Task dialog does not expose the Vue form/export callback required by the prior detector.

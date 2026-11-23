@@ -1970,10 +1970,16 @@ async function runAssignmentTaskExportJob(job) {
       const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
       const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
       const mediaId = getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
-      if (!mediaId) {
-        throw new Error("SPX completed the Assignment Task export, but no media_id was found in its task record or export response. The CSV download request was not sent.");
-      }
-      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId);
+      // SPX's signed-download endpoint accepts task_id without media_id on
+      // the same authenticated export queue. Do not block a succeeded task
+      // just because its list record omits media_id; keep passing media_id
+      // when SPX provides one, otherwise use the task-only fallback.
+      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        message: mediaId
+          ? "Assignment Task " + taskId + " completed. Requesting the signed CSV download…"
+          : "Assignment Task " + taskId + " completed. Requesting its signed CSV download using the task ID…"
+      });
+      const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId || "");
       csv = await downloadCsv(signedUrl);
     } else {
       throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");
