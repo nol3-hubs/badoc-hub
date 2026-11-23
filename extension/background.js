@@ -12,6 +12,8 @@ const RIDER_EXPORT_BIZ_NAME = "driver";
 
 
 const POLL_MS = 3000;
+const ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS = 30 * 1000;
+const ASSIGNMENT_TASK_MEDIA_ID_POLL_MS = 4000;
 const LINEHAUL_POLL_MS = 2000;
 const MAX_WAIT_MS = 25 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 30000;
@@ -793,6 +795,66 @@ async function waitForAssignedTodayExportTask(taskId, startSec, job, label) {
   const diagnostic=lastStatus!==null?" Last task status: "+String(lastStatus)+(lastQueue?", queue "+lastQueue:"")+".":" The task ID was not found in returned task rows."+(lastTaskPreview?" Recent task rows: "+lastTaskPreview+".":"");
   const errors=lookupErrors.length?" Lookup errors: "+[...new Set(lookupErrors)].slice(0,3).join("; ")+".":"";
   throw new Error(label+" task "+taskId+" was accepted by SPX but did not become downloadable within 4 minutes."+diagnostic+errors+" Open the SPX export task monitor to confirm its state.");
+}
+
+async function waitForAssignmentTaskMediaId(taskId, completedInfo, job, label = "Assignment Task") {
+  let bestTask = { ...(completedInfo?.task || {}) };
+  let bestSource = completedInfo?.source || "fms";
+  let mediaId = completedInfo?.mediaId || getExportMediaId(bestTask);
+  if (mediaId) return { task: bestTask, source: bestSource, mediaId, lookupErrors: [] };
+
+  const sources = [...new Set([bestSource, "fms", "fm", ""])];
+  const startedAt = Date.now();
+  const deadline = startedAt + ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS;
+  let lastProgressAt = 0;
+  const lookupErrors = [];
+
+  while (Date.now() < deadline) {
+    if (job?.cancelled) throw new Error(label + " media-ID lookup cancelled.");
+
+    // SPX can mark an export Succeeded before the media/file metadata is
+    // visible in list_for_portal. Re-read the full, unfiltered task rows
+    // instead of treating the first completed snapshot as final.
+    for (const source of sources) {
+      let rows = [];
+      try {
+        rows = await listTasks(0, source, 1, true, 0);
+      } catch (error) {
+        lookupErrors.push((source || "default") + ": " + (error?.message || String(error)));
+        continue;
+      }
+
+      let detailed = rows.find(item => getExportTaskId(item) === Number(taskId)) || null;
+      for (let page = 2; !detailed && rows.length >= 100 && page <= 5; page++) {
+        try {
+          rows = await listTasks(0, source, page, true, 0);
+          detailed = rows.find(item => getExportTaskId(item) === Number(taskId)) || null;
+        } catch (error) {
+          lookupErrors.push((source || "default") + " page " + page + ": " + (error?.message || String(error)));
+          break;
+        }
+      }
+
+      if (!detailed) continue;
+      bestTask = { ...bestTask, ...detailed };
+      bestSource = source;
+      mediaId = getExportMediaId(detailed) || getExportMediaId(bestTask);
+      if (mediaId) return { task: bestTask, source: bestSource, mediaId, lookupErrors };
+    }
+
+    const now = Date.now();
+    if (now - lastProgressAt >= 8000) {
+      const elapsed = Math.floor((now - startedAt) / 1000);
+      sendToPort(job?.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        message: "SPX marked Assignment Task " + taskId + " as Succeeded. Waiting for its file media_id to appear in the full task record… (" + elapsed + "s)"
+      });
+      lastProgressAt = now;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining > 0) await sleep(Math.min(ASSIGNMENT_TASK_MEDIA_ID_POLL_MS, remaining));
+  }
+
+  return { task: bestTask, source: bestSource, mediaId: "", lookupErrors };
 }
 
 async function runAssignedTodayExportSource({ endpoint, label, range, job, isForward = false, includeCreatedDate = true }) {
@@ -2032,14 +2094,30 @@ async function runAssignmentTaskExportJob(job) {
         message: "SPX accepted Assignment Task export " + taskId + ". Waiting for the CSV…"
       });
       const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
-      const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
-      const mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+      let completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
+      let mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
       if (!mediaId) {
-        const taskFields = Object.keys(completedInfo.task || {}).slice(0, 24).join(", ") || "none";
+        completedInfo = await waitForAssignmentTaskMediaId(taskId, completedInfo, job, "Assignment Task");
+        mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(result.apiResult);
+      }
+      if (!mediaId) {
+        const task = completedInfo.task || {};
+        const taskFields = Object.keys(task).slice(0, 24).join(", ") || "none";
+        const diagnosticKeys = ["media_id", "is_mms_gray", "file_name", "export_source", "export_name", "biz_name", "export_status", "queue_position"];
+        const diagnosticValues = diagnosticKeys.map(key => {
+          const value = task[key];
+          const rendered = value === undefined ? "missing" : value === null || value === "" ? "empty" : JSON.stringify(value);
+          return key + "=" + rendered;
+        }).join(", ");
+        const lookupDetail = completedInfo.lookupErrors?.length
+          ? " Metadata lookup errors: " + [...new Set(completedInfo.lookupErrors)].slice(0, 3).join("; ") + "."
+          : "";
         throw new Error(
-          "SPX completed Assignment Task " + taskId + ", but neither its filtered nor full task-list record exposed media_id. " +
+          "SPX completed Assignment Task " + taskId + ", but media_id remained unavailable after " +
+          Math.round(ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS / 1000) + " seconds of post-completion full-record checks. " +
           "Queue: " + (completedInfo.source || "default") + ". Task fields: " + taskFields +
-          ". The signed-download request was not sent because SPX requires media_id (code 40902)."
+          ". Key values: " + diagnosticValues +
+          ". The signed-download request was not sent because SPX requires media_id (code 40902)." + lookupDetail
         );
       }
       sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
