@@ -8425,14 +8425,7 @@ async function loadLiveKPI(){
       names.forEach(name=>{
         const v=getMetricValue(rows,block.data,block.metricHeader,name);
         // BADOC_HUB_COMPLIANCE_SCORE_WEIGHT_FALLBACK_V1
-        if(name==="Hub Compliance Score"){
-          const actualText=String(v.actual??"").trim();
-          const weightText=String(v.weight??"").trim();
-          if((!actualText || actualText==="—") && weightText){
-            v.actual=v.weight;
-            v.weight="";
-          }
-        }
+
         if(name==="Hub Compliance Score"){
           const actualText=String(v.actual??"").trim();
           const weightText=String(v.weight??"").trim();
