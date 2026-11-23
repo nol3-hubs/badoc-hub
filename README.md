@@ -14,7 +14,7 @@ To install the package, extract the ZIP, open `chrome://extensions`, enable Deve
 - Assignment Task export uses the native SPX GET endpoint directly from the extension background. It does not open, activate, or navigate an SPX tab.
 
 ## Included
-- BADOC Hub dashboard v140
+- BADOC Hub dashboard v141
 - Chrome extension v1.5.22, including authenticated direct-file download for Assignment Task exports that run from an inactive background SPX route while Badoc Hub stays in the foreground
 - Firefox extension v69.5.10
 - First Mile XLSX-to-CSV support
