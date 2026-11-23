@@ -3568,9 +3568,9 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
       const findSearchResultCount = () => {
         const text = String(document.body?.innerText || "");
         const patterns = [
-          /(?:all\\s+)?([\\d,]+)\\s+(?:orders?|records?)\\s+(?:have\\s+been\\s+found|found)/i,
-          /total\\s*[:：]?\\s*([\\d,]+)\\s*(?:orders?|records?)/i,
-          /([\\d,]+)\\s+results?/i
+          /(?:all\s+)?([\d,]+)\s+(?:orders?|records?)\s+(?:have\s+been\s+found|found)/i,
+          /total\s*[:：]?\s*([\d,]+)\s*(?:orders?|records?)/i,
+          /([\d,]+)\s+results?/i
         ];
         for (const pattern of patterns) {
           const match = text.match(pattern);
@@ -3913,7 +3913,7 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
 
   if (result.searchCompleted) {
     const searched = Number(result.inputCount) || trackingNumbers.length;
-    const found = Number.isFinite(Number(result.searchResultCount)) ? Number(result.searchResultCount) : null;
+    const found = result.searchResultCount == null || !Number.isFinite(Number(result.searchResultCount)) ? null : Number(result.searchResultCount);
     sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
       phase: "batch-search-search-complete",
       chunkIndex,
