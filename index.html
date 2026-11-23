@@ -8432,6 +8432,14 @@ async function loadLiveKPI(){
             v.weight="";
           }
         }
+        if(name==="Hub Compliance Score"){
+          const actualText=String(v.actual??"").trim();
+          const weightText=String(v.weight??"").trim();
+          if((!actualText || actualText==="—") && weightText){
+            v.actual=v.weight;
+            v.weight="";
+          }
+        }
         const card=document.createElement("div");
         card.className="kpi-metric v3-kpi-card";
         const simple=["Loss Rate","FM No Successful Pickup","FM Partial Pickup","LM POD Tier Performance","LM Onhold Validation","Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points","Hub BSC Additional Points"].includes(name);
@@ -8454,7 +8462,11 @@ async function loadLiveKPI(){
         const bNum=numeric(v.targetB), aNum=numeric(v.targetA);
         const lowerIsBetter=["4WH MTD Headcount","Loss Rate","FM No Successful Pickup","FM Partial Pickup"].includes(name);
         const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;
-        if(actualNum!==null){
+        const zeroGoodThresholdMetrics=["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points"];
+        if(actualNum!==null && zeroGoodThresholdMetrics.includes(name)){
+          if(actualNum===0) card.classList.add("kpi-status-a");
+          else if(actualNum>=0.1) card.classList.add("kpi-status-below-b");
+        }else if(actualNum!==null){
           if(aNum!==null || bNum!==null){
             if(aNum!==null && meets(actualNum,aNum)) card.classList.add("kpi-status-a");
             else if(bNum!==null && meets(actualNum,bNum)) card.classList.add("kpi-status-b");
