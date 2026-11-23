@@ -3590,7 +3590,7 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         // an alert role/class. The phrase must still match the exact
         // confirmation shown below the Batch Search controls.
         const bodyText = String(document.body?.innerText || '');
-        const match = bodyText.match(/(?:^|\n)\s*(All\s+[\d,]+\s+orders?\s+have\s+been\s+found\.?)\s*(?:\n|$)/i);
+        const match = bodyText.match(/\b(All\s+[\d,]+\s+orders?\s+have\s+been\s+found\.?)/i);
         if (!match) return null;
         const parsed = match[1].match(confirmationPattern);
         if (!parsed) return null;
