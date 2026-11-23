@@ -2117,7 +2117,7 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
 
 function assignmentTaskDateRange(selectedDate) {
   let date = String(selectedDate || "").trim();
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) date = phDateString();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = phDateString();
   const parsed = new Date(date + "T00:00:00Z");
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
     date = phDateString();
@@ -2145,7 +2145,8 @@ function assignmentTaskRowMatches(task, range, submittedAtSec) {
   const exactDateRange = conditionStart === range.startSec && conditionEnd === range.endSec;
   const createdAt = Number(task.ctime || 0);
   const freshTask = createdAt >= submittedAtSec - 120 && createdAt <= Math.floor(Date.now() / 1000) + 60;
-  return exactDateRange || freshTask;
+  const hasConditionRange = conditionStart > 0 || conditionEnd > 0;
+  return exactDateRange || (!hasConditionRange && freshTask);
 }
 
 function findAssignmentTaskIdInResponse(json, range, submittedAtSec) {
@@ -2313,7 +2314,7 @@ async function runAssignmentTaskExportJob(job) {
       throw new Error("SPX did not return a usable Assignment Task task ID or download URL.");
     }
 
-    const rowCount = Math.max(0, String(csv.text || "").split(/\\r?\\n/).filter(Boolean).length - 1);
+    const rowCount = Math.max(0, String(csv.text || "").split(/\r?\n/).filter(Boolean).length - 1);
     if (!rowCount) throw new Error("SPX Assignment Task export completed but contained no data rows.");
     sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_CSV", {
       taskId: taskId || "direct",
