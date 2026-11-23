@@ -1,3 +1,11 @@
+UPDATE — 2026-11-23 · Assignment Task direct artifact download (Chrome v1.5.19)
+- SPX completed task records expose a usable file_name path for Assignment Task even when media_id is empty.
+- Added a direct authenticated GET of the task-specific file_name path, following the same SPX-origin file download pattern already used by the Rider CSV exporter.
+- The direct path is accepted only when it matches the SPX Assignment Task export directory and embeds the exact task ID returned by the export request; the extension rejects other paths, redirects to other origins, HTML, and JSON responses.
+- If the direct file path is unavailable or does not return a CSV response, the existing strict media_id lookup and signed-download fallback remains available. The extension never invents media_id and never sends the known-invalid task-ID-only request.
+- Chrome extension bumped to v1.5.19, dashboard to v137, and PWA cache to v173. The packaging workflow regenerates the embedded Chrome installer and release ZIP.
+- JavaScript syntax and package metadata are validated; live direct-file access still needs confirmation with the authenticated SPX account.
+
 UPDATE — 2026-11-23 · Assignment Task post-completion media-ID hydration (Chrome v1.5.18)
 - Kept the strict media_id requirement because SPX returns code 40902 when that parameter is omitted.
 - After SPX marks an Assignment Task as Succeeded, the extension now re-reads full unfiltered task rows across the discovered queue, FMS, FM, and default queues for up to 30 seconds to allow delayed media/file metadata to appear.
