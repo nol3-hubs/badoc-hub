@@ -266,3 +266,13 @@ UPDATE — 2026-11-23 · Assignment Task deep-link automation (Chrome v1.5.21)
 - Close the temporary tab after SPX returns the export task response, or during error cleanup. Continue CSV retrieval through the existing export task/media recovery flow.
 - Updated Chrome extension to v1.5.21, dashboard app shell to v139, embedded Bridge Installer, and PWA cache marker.
 - Static source/package validation is required; live authenticated SPX behavior still needs browser confirmation.
+
+
+UPDATE — 2026-11-23 · Assignment Task direct API export (Chrome v1.5.22)
+- Replaced the temporary SPX tab and visible Export-form automation with a direct GET to /spx_delivery/admin/assignment/assignment_task/export.
+- Reproduces the captured Created Date query: ctime=start,end and format_condition=Created Date= YYYY-MM-DD 00:00:00,YYYY-MM-DD 23:59:59 using Philippine-local day boundaries.
+- Uses the extension background fetch and current SPX request headers; no SPX tab is opened, activated, navigated, or required.
+- Reads a returned task_id or matches the new delivery_mgt / feeder_assignment_task record by station and exact Created Date condition in the export task list.
+- Retains task polling, direct Assignment Task CSV file_name download, and media_id signed-download fallback.
+- Updated Chrome extension to v1.5.22, dashboard app shell to v140, embedded installer package, required-version check, and PWA cache marker.
+- Static source/package checks completed; authenticated live export still needs user-browser confirmation.
