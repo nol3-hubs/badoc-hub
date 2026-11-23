@@ -102,7 +102,19 @@ jobs:
                   f"found {settings_count}."
               )
 
-          index_path.write_text(updated, encoding="utf-8")
+          # Badoc Hub KPI sheet places Hub Compliance Score in the third metric slot.
+# Render that value as the card's score, not as its weight.
+kpi_marker = '    if(simpleMetrics.includes(name)){'
+kpi_replacement = '''    if(name==="Hub Compliance Score"){
+      return {actual:data[start+2]??"",target:data[start+1]??"",targetB:"",targetA:"",weight:""};
+    }
+    if(simpleMetrics.includes(name)){'''
+kpi_count = updated.count(kpi_marker)
+if kpi_count != 1:
+    raise SystemExit(f"Expected one KPI simple-metric mapping in index.html; found {kpi_count}.")
+updated = updated.replace(kpi_marker, kpi_replacement, 1)
+
+index_path.write_text(updated, encoding="utf-8")
           print(f"Embedded {len(files)} Chrome extension files and synchronized required version {chrome_version} in index.html.")
 
       - name: Publish ZIP in repository
