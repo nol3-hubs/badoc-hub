@@ -163,27 +163,26 @@ jobs:
           )
           if settings_count != 1:
               raise SystemExit(f"Expected one Settings-page Chrome version label; found {settings_count}.")
-          # Keep the Hub Compliance fallback remap idempotent across package runs.
-          score_remap = "\n".join([
-              '        if(name==="Hub Compliance Score"){',
-              '          const actualText=String(v.actual??"").trim();',
-              '          const weightText=String(v.weight??"").trim();',
-              '          if((!actualText || actualText==="—") && weightText){',
-              '            v.actual=v.weight;',
-              '            v.weight="";',
-              '          }',
-              '        }'
-          ])
-          score_parts = updated.split(score_remap)
-          if len(score_parts) > 1:
-              updated = score_parts[0] + score_remap + "".join(score_parts[1:])
-          else:
+          # Apply the Hub Compliance fallback once. The sentinel prevents duplicate insertion on later package runs.
+          score_sentinel = "BADOC_HUB_COMPLIANCE_SCORE_WEIGHT_FALLBACK_V1"
+          if score_sentinel not in updated:
               card_marker = '        const v=getMetricValue(rows,block.data,block.metricHeader,name);'
+              card_replacement = "\n".join([
+                  '        const v=getMetricValue(rows,block.data,block.metricHeader,name);',
+                  '        // BADOC_HUB_COMPLIANCE_SCORE_WEIGHT_FALLBACK_V1',
+                  '        if(name==="Hub Compliance Score"){',
+                  '          const actualText=String(v.actual??"").trim();',
+                  '          const weightText=String(v.weight??"").trim();',
+                  '          if((!actualText || actualText==="—") && weightText){',
+                  '            v.actual=v.weight;',
+                  '            v.weight="";',
+                  '          }',
+                  '        }'
+              ])
               card_count = updated.count(card_marker)
               if card_count != 1:
                   raise SystemExit(f"Expected one KPI card value-rendering point in index.html; found {card_count}.")
-              updated = updated.replace(card_marker, card_marker + chr(10) + score_remap, 1)
-
+              updated = updated.replace(card_marker, card_replacement, 1)
           # Zero is green; 0.1 and above is red for these three metrics.
           threshold_patch = "\n".join([
               '        const zeroGoodThresholdMetrics=["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points"];',
