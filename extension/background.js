@@ -1541,7 +1541,9 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
       // SPX may not expose its Vue dialog instance. Keep watching for a user
       // submission and use the export API response to recover the task ID.
       const dialogDeadline = Date.now() + 60000;
-      let menuPromptShown = false;
+      let menuAutoClickAttempted = false;
+      let menuAutoClickAt = 0;
+      let menuManualFallbackShown = false;
       let networkCapture = null;
       while (!found && Date.now() < dialogDeadline) {
         try {
@@ -1557,11 +1559,49 @@ async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
         found = findExportComponent();
         if (found) break;
         const menuItem = isTopFrame ? findVisibleExportMenuItem() : null;
-        if (menuItem && !menuPromptShown) {
-          menuPromptShown = true;
+        if (menuItem && !menuAutoClickAttempted) {
+          menuAutoClickAttempted = true;
+          menuAutoClickAt = Date.now();
+          const disabled = menuItem.disabled === true ||
+            menuItem.getAttribute?.("aria-disabled") === "true" ||
+            /\\b(is-disabled|disabled)\\b/i.test(String(menuItem.className || ""));
+          if (disabled) {
+            menuManualFallbackShown = true;
+            updateManualHint(
+              "SPX Export option is disabled",
+              "The Export menu item is disabled in SPX. Check the page state, then select Export manually when it becomes available."
+            );
+          } else {
+            try {
+              menuItem.scrollIntoView({ block: "nearest", inline: "nearest" });
+              // The toolbar button is opened by the operator. Select only the
+              // exact Export menu item (never Export History) to complete the
+              // native SPX dropdown handoff automatically.
+              menuItem.click();
+              updateManualHint(
+                "Opening SPX Export form",
+                "Badoc Hub selected the Export option and is detecting the form. It will apply " + date + " automatically."
+              );
+            } catch (clickError) {
+              menuManualFallbackShown = true;
+              updateManualHint(
+                "Select Export manually",
+                "SPX blocked automatic menu selection. Click the first Export option (not Export History); Badoc Hub will then continue with " + date + "."
+              );
+            }
+          }
+        } else if (
+          menuItem &&
+          menuAutoClickAttempted &&
+          !menuManualFallbackShown &&
+          Date.now() - menuAutoClickAt > 1200
+        ) {
+          // Keep a clear fallback when SPX leaves the dropdown open after a
+          // programmatic click instead of silently waiting for the full timeout.
+          menuManualFallbackShown = true;
           updateManualHint(
-            "SPX Export menu is open",
-            "Select Export in the open SPX menu. Badoc Hub will take over when the export form appears."
+            "SPX Export menu is still open",
+            "The menu did not close after automatic selection. Click the first Export option (not Export History); Badoc Hub will continue when the form appears."
           );
         }
         await new Promise(resolve => setTimeout(resolve, 180));

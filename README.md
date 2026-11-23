@@ -4,8 +4,8 @@ Independent test repository merged from the newer `nol3-hubs/test` project while
 
 ## Current Chrome extension package
 
-- Chrome extension: [Download SPX Bridge 1.5.6](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-CHROME-1.5.6.zip)
-- SHA-256: [View checksum](https://github.com/nol3-hubs/badoc-hub/blob/main/downloads/SPX-BRIDGE-BADOC-HUB-CHROME-1.5.6.sha256)
+- Chrome extension: [Download SPX Bridge 1.5.14](https://github.com/nol3-hubs/badoc-hub/raw/refs/heads/main/downloads/SPX-BRIDGE-BADOC-HUB-CHROME-1.5.14.zip)
+- SHA-256: [View checksum](https://github.com/nol3-hubs/badoc-hub/blob/main/downloads/SPX-BRIDGE-BADOC-HUB-CHROME-1.5.14.sha256)
 
 To install the patched package, extract the ZIP, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select the extracted extension folder.
 
