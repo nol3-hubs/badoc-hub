@@ -2111,14 +2111,10 @@ async function runAssignmentTaskExportJob(job) {
     if (!tab?.id) {
       throw new Error("Open the authenticated SPX Delivery Assignment → List page, then retry Assignment Task in Reports.");
     }
-    try {
-      await chrome.tabs.update(tab.id, { active: true });
-      if (Number.isInteger(tab.windowId)) await chrome.windows.update(tab.windowId, { focused: true });
-    } catch (focusError) {
-      console.warn("Could not focus SPX Assignment Task tab:", focusError);
-    }
+    // Keep Badoc Hub in the foreground. The export can be injected into the
+    // already-open SPX Assignment Task page without activating or opening a tab.
     sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-      message: "SPX tab is active. Click its highlighted Export button (and choose Export in the menu if shown); Badoc Hub will continue automatically."
+      message: "Using the already-open SPX Assignment Task page in the background. You can stay on Badoc Hub while the export runs."
     });
     const result = await invokeSpxAssignmentTaskExport(tab.id, job.selectedDate);
     let csv = null;
