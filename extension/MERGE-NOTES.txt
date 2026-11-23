@@ -1,3 +1,11 @@
+UPDATE — 2026-11-23 · Dashboard and Chrome extension v1.5.14
+- Updated the embedded dashboard extension installer to Chrome v1.5.14 and now require v1.5.14 during the extension handshake. Chrome v1.5.13 is no longer reported as current.
+- Updated the dashboard app version to v132, the Settings required-version label, and the operation modal extension-version label.
+- Bumped the PWA service-worker cache to v168 so existing dashboard sessions replace the previous app shell.
+- Chrome v1.5.14 automatically selects the exact SPX Assignment Task Export dropdown item and explicitly avoids Export History.
+- The Chrome package is embedded in index.html and published as downloads/SPX-BRIDGE-BADOC-HUB-CHROME-1.5.14.zip.
+- Static JavaScript/package checks and GitHub Pages deployment are recorded separately; authenticated live SPX export remains to be confirmed.
+
 BADOC HUB DASHBOARD v78 — Chrome v1.2.5 / Firefox v69.3.7
 First Mile Orders + Tasks integration
 
