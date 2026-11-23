@@ -8432,14 +8432,7 @@ async function loadLiveKPI(){
             v.weight="";
           }
         }
-        if(name==="Hub Compliance Score"){
-          const actualText=String(v.actual??"").trim();
-          const weightText=String(v.weight??"").trim();
-          if((!actualText || actualText==="—") && weightText){
-            v.actual=v.weight;
-            v.weight="";
-          }
-        }
+
         const card=document.createElement("div");
         card.className="kpi-metric v3-kpi-card";
         const simple=["Loss Rate","FM No Successful Pickup","FM Partial Pickup","LM POD Tier Performance","LM Onhold Validation","Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points","Hub BSC Additional Points"].includes(name);
