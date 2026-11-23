@@ -3542,6 +3542,46 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
       if (isDisabled(submitButton)) {
         await waitFor(() => !isDisabled(submitButton), 5000, "SPX kept Submit disabled after the tracking numbers were pasted.");
       }
+      const batchSearchStatusId = "badocBatchSearchStatus";
+      const showBatchSearchStatus = (message, state = "working") => {
+        let status = document.getElementById(batchSearchStatusId);
+        if (!status) {
+          status = document.createElement("div");
+          status.id = batchSearchStatusId;
+          status.setAttribute("role", "status");
+          status.setAttribute("aria-live", "polite");
+          Object.assign(status.style, {
+            position: "fixed", top: "16px", right: "18px", zIndex: "2147483647",
+            maxWidth: "min(560px, calc(100vw - 36px))", padding: "13px 18px",
+            borderRadius: "10px", border: "1px solid #2797d4",
+            background: "#092b40", color: "#ffffff",
+            boxShadow: "0 8px 28px rgba(0,0,0,.28)",
+            font: "600 14px/1.45 Arial,sans-serif", letterSpacing: ".1px"
+          });
+          (document.body || document.documentElement).appendChild(status);
+        }
+        status.textContent = message;
+        status.dataset.state = state;
+        status.style.borderColor = state === "done" ? "#20b879" : state === "error" ? "#e05252" : "#2797d4";
+        status.style.background = state === "done" ? "#073c2b" : state === "error" ? "#4a1717" : "#092b40";
+      };
+      const findSearchResultCount = () => {
+        const text = String(document.body?.innerText || "");
+        const patterns = [
+          /(?:all\\s+)?([\\d,]+)\\s+(?:orders?|records?)\\s+(?:have\\s+been\\s+found|found)/i,
+          /total\\s*[:：]?\\s*([\\d,]+)\\s*(?:orders?|records?)/i,
+          /([\\d,]+)\\s+results?/i
+        ];
+        for (const pattern of patterns) {
+          const match = text.match(pattern);
+          if (match) {
+            const count = Number(String(match[1]).replace(/,/g, ""));
+            if (Number.isFinite(count)) return count;
+          }
+        }
+        return null;
+      };
+      showBatchSearchStatus("SPX is searching " + numbers.length.toLocaleString() + " tracking numbers…", "working");
       submitButton.click();
 
       await waitFor(
@@ -3769,9 +3809,16 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
           await sleep(350);
         }
         if (!exportItem || isDisabled(exportItem)) {
+          showBatchSearchStatus("SPX has not finished searching the tracking numbers yet. Waiting for the Batch-Search Results option…", "working");
           throw new Error("SPX did not enable Export → Export Batch-Search Results after the search. Check that SPX finished searching the pasted numbers.");
         }
 
+        const searchResultCount = findSearchResultCount();
+        const completedMessage = "SPX finished searching all " + numbers.length.toLocaleString() +
+          " tracking numbers" + (searchResultCount === null ? "." : " · " + searchResultCount.toLocaleString() + " result row(s) found.") +
+          " Preparing Batch-Search Results export…";
+        showBatchSearchStatus(completedMessage, "done");
+        
         captureActive = true;
         exportItem.click();
         let ready = false;
@@ -3801,6 +3848,9 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
             taskId: capturedTaskId,
             fileName: capturedFileName || ("batch_search_result_" + chunkNumber + ".xlsx"),
             diagnostics: networkDiagnostics,
+            searchCompleted: true,
+            inputCount: numbers.length,
+            searchResultCount,
             chunkNumber,
             chunkTotal
           };
@@ -3821,6 +3871,9 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
           byteLength: bytes.length,
           blobUrlCaptured: !!capturedBlobUrl,
           diagnostics: networkDiagnostics,
+          searchCompleted: true,
+          inputCount: numbers.length,
+          searchResultCount,
           chunkNumber,
           chunkTotal
         };
@@ -3856,6 +3909,21 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         ).join(" | ")
       : "";
     throw new Error((result.error || "SPX Batch-Search Results export failed.") + diagnosticText);
+  }
+
+  if (result.searchCompleted) {
+    const searched = Number(result.inputCount) || trackingNumbers.length;
+    const found = Number.isFinite(Number(result.searchResultCount)) ? Number(result.searchResultCount) : null;
+    sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+      phase: "batch-search-search-complete",
+      chunkIndex,
+      totalChunks,
+      inputCount: searched,
+      resultCount: found,
+      message: "SPX finished searching " + searched.toLocaleString() + " tracking number(s)" +
+        (found === null ? "." : " and found " + found.toLocaleString() + " result row(s).") +
+        " Preparing the Batch-Search Results export…"
+    });
   }
 
   let buffer = null;
@@ -4005,6 +4073,14 @@ async function runBatchSearchExportJob(job) {
       });
     }
 
+    sendToPort(port, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+      phase: "batch-search-all-searches-complete",
+      inputCount: numbers.length,
+      chunkCount: chunks.length,
+      resultCount: outputRows.length,
+      message: "SPX finished searching all " + numbers.length.toLocaleString() +
+        " tracking numbers. Collected " + outputRows.length.toLocaleString() + " result row(s). Saving the Batch Search Result file…"
+    });
     const csvText = firstMileRowsToCsv([headers || [], ...outputRows]);
     sendToPort(port, "BADOC_SPX_BATCH_SEARCH_CSV", {
       selectedDate: job.selectedDate,
