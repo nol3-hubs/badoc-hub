@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badoc Hub Extension",
-  "version": "1.5.26",
-  "description": "Badoc Hub extension with SPX exports, live Pickup Info, and parallel Sync All job support.",
+  "version": "1.5.27",
+  "description": "Badoc Hub extension with SPX exports, live Pickup Info, temporary Order Tracking tabs for Batch Search, and parallel Sync All job support.",
   "permissions": [
     "cookies",
     "scripting",
