@@ -68,8 +68,38 @@ jobs:
           updated, count = pattern.subn(lambda _match: assignment, html, count=1)
           if count != 1:
               raise SystemExit(f"Expected one embedded bridge file map in index.html; found {count}.")
+          # Keep the dashboard's minimum Chrome package version synchronized
+          # with the exact extension package embedded above.
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          chrome_version = manifest["version"]
+          required_pattern = re.compile(r'(const\s+REQUIRED_CHROME_VERSION\s*=\s*["\'])[^"\']+(["\'];)')
+          updated, required_count = required_pattern.subn(
+              lambda match: match.group(1) + chrome_version + match.group(2),
+              updated,
+              count=1
+          )
+          if required_count != 1:
+              raise SystemExit(
+                  "Expected one REQUIRED_CHROME_VERSION declaration in index.html; "
+                  f"found {required_count}."
+              )
+
+          settings_pattern = re.compile(
+              r'(const\s+required\s*=\s*firefox\s*\?\s*["\']Firefox\s+[^"\']+["\']\s*:\s*["\']Chrome\s+)[^"\']+(["\'];)'
+          )
+          updated, settings_count = settings_pattern.subn(
+              lambda match: match.group(1) + chrome_version + match.group(2),
+              updated,
+              count=1
+          )
+          if settings_count != 1:
+              raise SystemExit(
+                  "Expected one Settings-page Chrome required-version label in index.html; "
+                  f"found {settings_count}."
+              )
+
           index_path.write_text(updated, encoding="utf-8")
-          print(f"Embedded {len(files)} Chrome extension files into index.html.")
+          print(f"Embedded {len(files)} Chrome extension files and synchronized required version {chrome_version} in index.html.")
 
       - name: Publish ZIP in repository
         shell: bash
