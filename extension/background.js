@@ -3278,22 +3278,111 @@ async function runJob(job) {
 
 
 
-async function findBatchSearchOrderTrackingTab(ownerPort) {
-  const all = (await chrome.tabs.query({ url: SPX_ORIGIN + "/*" }))
-    .filter(tab => !tab.discarded && tab.id != null);
-  const preferredWindowId = ownerPort?.sender?.tab?.windowId;
-  const candidates = all.filter(tab => /#\/orderTracking(?:[/?]|$)/i.test(String(tab.url || "")));
-  candidates.sort((a, b) => {
-    const aw = a.windowId === preferredWindowId ? 1 : 0;
-    const bw = b.windowId === preferredWindowId ? 1 : 0;
-    if (aw !== bw) return bw - aw;
-    return (b.lastAccessed || 0) - (a.lastAccessed || 0);
+async function openBatchSearchOrderTrackingTab(ownerPort, job) {
+  sendToPort(ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+    phase: "batch-search-open-tab",
+    message: "Opening a temporary SPX Order Tracking tab using your current signed-in session…"
   });
-  const tab = candidates[0];
-  if (!tab?.id) {
-    throw new Error("Open SPX → Order Management → Order Tracking in a signed-in tab, then retry Batch Search Result.");
+
+  const createOptions = {
+    url: SPX_ORIGIN + "/#/orderTracking",
+    active: true
+  };
+  const sourceWindowId = ownerPort?.sender?.tab?.windowId;
+  if (Number.isInteger(sourceWindowId) && sourceWindowId >= 0) {
+    createOptions.windowId = sourceWindowId;
   }
-  return tab;
+
+  const tab = await chrome.tabs.create(createOptions);
+  if (!Number.isInteger(tab?.id)) {
+    throw new Error("Chrome could not create the temporary SPX Order Tracking tab.");
+  }
+  job.spxTabId = tab.id;
+
+  const deadline = Date.now() + 90000;
+  let lastUrl = String(tab.url || "");
+  let lastStatus = String(tab.status || "loading");
+
+  while (Date.now() < deadline) {
+    if (job.cancelled) throw new Error("Batch Search Result export cancelled.");
+
+    let current;
+    try {
+      current = await chrome.tabs.get(tab.id);
+    } catch (_) {
+      throw new Error("The temporary SPX Order Tracking tab was closed before Batch Search could start.");
+    }
+    lastUrl = String(current.url || lastUrl);
+    lastStatus = String(current.status || lastStatus);
+
+    if (current.status === "complete" && /#\/orderTracking(?:[/?]|$)/i.test(lastUrl)) {
+      try {
+        const probeResults = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: "MAIN",
+          func: () => {
+            const visible = element => {
+              if (!element || !element.isConnected) return false;
+              const rect = element.getBoundingClientRect();
+              if (!rect.width || !rect.height) return false;
+              const style = getComputedStyle(element);
+              return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+            };
+            const labels = [...document.querySelectorAll("button,[role='button']")]
+              .filter(visible)
+              .map(element => String(element.innerText || element.textContent || element.getAttribute("aria-label") || "")
+                .replace(/\\s+/g, " ").trim());
+            const bodyText = String(document.body?.innerText || "").slice(0, 5000);
+            return {
+              route: String(location.hash || ""),
+              readyState: document.readyState,
+              hasBatchSearch: labels.some(label => /^batch\\s*search$/i.test(label)),
+              loginRequired: !!document.querySelector("input[type='password']") ||
+                /session (?:has )?expired|please (?:log in|sign in)|(?:log in|sign in) to continue|login required/i.test(bodyText)
+            };
+          }
+        });
+        const page = probeResults?.[0]?.result;
+        if (page?.loginRequired) {
+          throw new Error("The new SPX tab requires sign-in. Sign in to SPX, then retry Batch Search Result.");
+        }
+        if (page && /orderTracking/i.test(page.route) && page.hasBatchSearch) {
+          sendToPort(ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+            phase: "batch-search-tab-ready",
+            message: "SPX Order Tracking is ready in the new tab. Starting Batch Search…"
+          });
+          return current;
+        }
+      } catch (error) {
+        if (/requires sign-in/i.test(String(error?.message || error))) throw error;
+        // SPX may still be mounting its Vue page or navigating between route states.
+      }
+    } else if (
+      current.status === "complete" &&
+      /(?:#\/(?:login|signin|sign-in)|\/(?:login|signin)(?:[/?#]|$))/i.test(lastUrl)
+    ) {
+      throw new Error("The new SPX tab opened the login page. Sign in to SPX, then retry Batch Search Result.");
+    }
+
+    await sleep(600);
+  }
+
+  throw new Error(
+    "Timed out waiting for the temporary SPX Order Tracking tab to load. " +
+    "Confirm that SPX is signed in, then retry Batch Search Result. Last URL: " + lastUrl +
+    " (status: " + lastStatus + ")."
+  );
+}
+
+async function closeBatchSearchOrderTrackingTab(job) {
+  const tabId = job?.spxTabId;
+  if (!Number.isInteger(tabId) || tabId <= 0) return;
+  job.spxTabId = null;
+  try {
+    await chrome.tabs.remove(tabId);
+  } catch (_) {
+    // The tab may already have been closed manually or by the browser.
+  }
 }
 
 async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, totalChunks, job) {
@@ -3875,8 +3964,7 @@ async function runBatchSearchExportJob(job) {
     if (numbers.length > 30000) {
       throw new Error("Batch Search contains " + numbers.length.toLocaleString() + " tracking numbers. The current safe limit is 30,000 per run.");
     }
-    const tab = await findBatchSearchOrderTrackingTab(port);
-    job.spxTabId = tab.id;
+    const tab = await openBatchSearchOrderTrackingTab(port, job);
     const chunks = [];
     for (let offset = 0; offset < numbers.length; offset += 3000) {
       chunks.push(numbers.slice(offset, offset + 3000));
@@ -3935,6 +4023,7 @@ async function runBatchSearchExportJob(job) {
       message: error?.message || String(error)
     });
   } finally {
+    await closeBatchSearchOrderTrackingTab(job);
     releaseActiveJob(job);
   }
 }
