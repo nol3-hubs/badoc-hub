@@ -2334,8 +2334,6 @@ async function runAssignmentTaskExportJob(job) {
   }
 }
 
-function setsEqual
-
 function setsEqual(a, b) {
   const aa = new Set((a || []).map(String));
   const bb = new Set((b || []).map(String));
@@ -3454,20 +3452,35 @@ chrome.runtime.onConnect.addListener(port => {
 
     if (type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
       const selectedDate = String(message?.selectedDate || "").trim();
-      const job = reserveActiveJob("assignment-task", port, {
-        selectedDate: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? selectedDate : phDateString(),
-        startedAt: Date.now()
-      });
-      if (!job) {
-        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", {
-          message: "Another SPX export is already running. Retry Assignment Task after it finishes."
-        });
-        return;
-      }
+      // Acknowledge immediately on receipt, before reserving the job or starting
+      // any SPX work. This distinguishes bridge delivery from export startup.
       sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-        message: "Extension accepted the Assignment Task export request…"
+        stage: "command-received",
+        selectedDate,
+        message: "Extension background received the Assignment Task command. Preparing the direct SPX export…"
       });
-      void runAssignmentTaskExportJob(job);
+      try {
+        const job = reserveActiveJob("assignment-task", port, {
+          selectedDate: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? selectedDate : phDateString(),
+          startedAt: Date.now()
+        });
+        if (!job) {
+          sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", {
+            message: "Another SPX export is already running. Retry Assignment Task after it finishes."
+          });
+          return;
+        }
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+          stage: "job-accepted",
+          selectedDate: job.selectedDate,
+          message: "Extension accepted the Assignment Task export request…"
+        });
+        void runAssignmentTaskExportJob(job);
+      } catch (error) {
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", {
+          message: "Extension could not start the Assignment Task export: " + (error?.message || String(error))
+        });
+      }
       return;
     }
 

@@ -208,6 +208,13 @@
         }
       }
       port.postMessage(payload);
+      if (data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
+        emit("BADOC_SPX_COMMAND_FORWARDED", {
+          kind: "assignment-task",
+          selectedDate: String(data.selectedDate || ""),
+          message: "Assignment Task command forwarded from the dashboard to the extension background."
+        });
+      }
       if (data.type === "BADOC_START_ASSIGNED_ONHOLD_TODAY") {
         emit("BADOC_SPX_COMMAND_FORWARDED", {
           kind: "assigned-onhold-today",
@@ -226,7 +233,13 @@
         });
       }
     } catch (error) {
-      emit("BADOC_SPX_ERROR", { message: error?.message || String(error) });
+      const errorKind = data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT" ? "assignment-task" :
+        data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" ? "first-mile-orders" :
+        data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC" ? "first-mile-tasks" :
+        data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
+        data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
+        data.type === "BADOC_START_PARCEL_INBOUND_SYNC" ? "parcel-inbound" : undefined;
+      emit("BADOC_SPX_ERROR", { message: error?.message || String(error), ...(errorKind ? { kind: errorKind } : {}) });
     }
   });
 
