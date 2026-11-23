@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v136">
+<meta name="badoc-app-version" content="v137">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -15111,7 +15111,7 @@ html[data-theme="light"] #badocPickupInfoModal .pickup-info-card{
 (function(){
 const BRIDGE_VERSION="1";
   const BRIDGE_CHECK_TIMEOUT=5000;
-  const REQUIRED_CHROME_VERSION="1.5.18";
+  const REQUIRED_CHROME_VERSION="1.5.19";
   const REQUIRED_FIREFOX_VERSION="69.5.15";
   let installedPackageVersion="";
   const isFirefox=/Firefox\//i.test(navigator.userAgent);
@@ -15503,7 +15503,7 @@ const BRIDGE_VERSION="1";
       <div class="badoc-op-icon" id="badocOpIcon" aria-hidden="true">↻</div>
       <div style="min-width:0;flex:1">
         <div class="badoc-op-title" id="badocOpTitle">Working…</div>
-        <div class="badoc-op-subtitle">BADOC HUB · Badoc Hub Extension v1.5.18</div>
+        <div class="badoc-op-subtitle">BADOC HUB · Badoc Hub Extension v1.5.19</div>
       </div>
       <span class="badoc-op-state busy" id="badocOpState">In progress</span>
     </div>
@@ -17957,7 +17957,7 @@ html[data-theme="dark"] #dailyHistory #dh2TabBody article.dh2-rider .dh2-stats>s
   function refreshAppInfo(){
     const version=document.querySelector('meta[name="badoc-app-version"]')?.content||"Unknown";
     const firefox=/Firefox\//i.test(navigator.userAgent||"");
-    const required=firefox?"Firefox 69.5.15":"Chrome 1.5.18";
+    const required=firefox?"Firefox 69.5.15":"Chrome 1.5.19";
     const bridgeText=text("#badocExtensionVersionStatus","");
     let detected="Not detected";try{if(window.__badocSpxBridgeReady?.())detected=bridgeText||"Connected";else if(bridgeText)detected=bridgeText;}catch(e){}
     if($("settingsDashboardVersion"))$("settingsDashboardVersion").textContent=version;
