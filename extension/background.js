@@ -659,7 +659,7 @@ function filterAssignedTodayExportRows(extracted, todayDate, label, rangeCreated
   const kept = [];
   const excluded = { otherStation: 0, otherAssignedDate: 0, otherCreatedDate: 0 };
   for (const row of rows) {
-    const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/\\s+/g, " ");
+    const station = String(row[stationIndex] ?? "").trim().toLowerCase().replace(/\s+/g, " ");
     if (!station.includes("badoc hub")) { excluded.otherStation++; continue; }
     if (assignedTimeIndex >= 0 && philippineDateKey(row[assignedTimeIndex]) !== todayDate) {
       excluded.otherAssignedDate++; continue;
@@ -3336,7 +3336,7 @@ async function openBatchSearchOrderTrackingTab(ownerPort, job) {
             return {
               route: String(location.hash || ""),
               readyState: document.readyState,
-              hasBatchSearch: labels.some(label => /^batch\\s*search$/i.test(label)),
+              hasBatchSearch: labels.some(label => /^batch\s*search$/i.test(label)),
               loginRequired: !!document.querySelector("input[type='password']") ||
                 /session (?:has )?expired|please (?:log in|sign in)|(?:log in|sign in) to continue|login required/i.test(bodyText)
             };
