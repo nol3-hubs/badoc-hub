@@ -3312,6 +3312,8 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
     world: "MAIN",
     args: [trackingNumbers, chunkIndex, totalChunks],
     func: async (numbers, chunkNumber, chunkTotal) => {
+      const diagnostics = [];
+      try {
       const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       const visible = element => {
         if (!element || !element.isConnected) return false;
@@ -3400,37 +3402,189 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
       let capturedBlob = null;
       let capturedBlobUrl = "";
       let capturedFileName = "";
+      let capturedDownloadUrl = "";
+      let capturedTaskId = 0;
+      let captureActive = false;
       const objectUrls = new Map();
+      const pendingCaptureTasks = [];
+      const networkDiagnostics = [];
       const originalCreateObjectURL = URL.createObjectURL;
       const originalAnchorClick = HTMLAnchorElement.prototype.click;
       const originalOpen = window.open;
+      const originalFetch = window.fetch;
+      const originalXhrOpen = XMLHttpRequest.prototype.open;
+      const originalXhrSend = XMLHttpRequest.prototype.send;
+
+      const pathOnly = value => {
+        try { const url = new URL(String(value || ""), location.href); return url.origin + url.pathname; }
+        catch (_) { return String(value || "").slice(0, 240); }
+      };
+      const contentFileName = disposition => {
+        const match = String(disposition || "").match(/filename\*?=(?:UTF-8''|")?([^;"\r\n]+)/i);
+        return match ? String(match[1]).trim().replace(/^"|"$/g, "") : "";
+      };
+      const findExportValues = (root, depth = 0, seen = new Set()) => {
+        const found = { downloadUrl: "", taskId: 0, fileName: "" };
+        if (!root || typeof root !== "object" || depth > 12 || seen.has(root)) return found;
+        seen.add(root);
+        const downloadKeys = new Set(["downloadurl","fileurl","signedurl","downloadlink","filelink","downloadpath","filepath"]);
+        const taskKeys = new Set(["taskid","exporttaskid","exportid"]);
+        for (const [key, value] of Object.entries(root)) {
+          const normalized = String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (typeof value === "string" && downloadKeys.has(normalized) && value.trim()) found.downloadUrl ||= value.trim();
+          if (typeof value === "string" && /^(?:file_)?name$/i.test(normalized) && /\.(?:csv|xlsx?)$/i.test(value.trim())) found.fileName ||= value.trim();
+          if (taskKeys.has(normalized) && Number(value) > 0) found.taskId ||= Number(value);
+        }
+        for (const value of Object.values(root)) {
+          if (value && typeof value === "object") {
+            const nested = findExportValues(value, depth + 1, seen);
+            found.downloadUrl ||= nested.downloadUrl;
+            found.taskId ||= nested.taskId;
+            found.fileName ||= nested.fileName;
+          }
+        }
+        return found;
+      };
+      const rememberNetwork = record => {
+        if (networkDiagnostics.length < 25) networkDiagnostics.push(record);
+      };
+      const rememberJsonOrFile = async (url, response, source) => {
+        const contentType = String(response.headers?.get?.("content-type") || "");
+        const disposition = String(response.headers?.get?.("content-disposition") || "");
+        const lowerUrl = String(url || "").toLowerCase();
+        const likelyEndpoint = /batch|search|export|download|task|spreadsheet|csv/i.test(lowerUrl);
+        const likelyFile = /attachment|filename=/i.test(disposition) ||
+          /text\/csv|application\/(octet-stream|vnd\.|excel|zip)|spreadsheet/i.test(contentType);
+        if (!likelyEndpoint && !likelyFile) return;
+        const record = {
+          source,
+          url: pathOnly(url),
+          status: Number(response.status || 0),
+          contentType: contentType.slice(0, 120),
+          contentDisposition: disposition.slice(0, 180)
+        };
+        try {
+          const clone = response.clone();
+          if (likelyFile) {
+            const blob = await clone.blob();
+            record.byteLength = blob.size;
+            if (blob.size) {
+              capturedBlob = blob;
+              capturedFileName = contentFileName(disposition) || capturedFileName;
+            }
+          } else {
+            const bodyText = (await clone.text()).slice(0, 200000);
+            let json = null;
+            try { json = JSON.parse(bodyText); } catch (_) {}
+            if (json) {
+              const fields = findExportValues(json);
+              if (fields.downloadUrl) {
+                try { capturedDownloadUrl = new URL(fields.downloadUrl, location.href).href; }
+                catch (_) { capturedDownloadUrl = fields.downloadUrl; }
+              }
+              if (fields.taskId) capturedTaskId = fields.taskId;
+              if (fields.fileName) capturedFileName = fields.fileName;
+              record.retcode = json.retcode ?? json.code ?? "";
+              record.message = String(json.message || json.msg || "").slice(0, 220);
+              record.taskId = fields.taskId || 0;
+              record.hasDownloadUrl = !!fields.downloadUrl;
+              record.preview = bodyText.slice(0, 650);
+            } else {
+              record.preview = bodyText.slice(0, 450);
+              if (/^(?:\uFEFF)?[^<{[][\s\S]*[,;\t]/.test(bodyText.trim())) {
+                const blob = new Blob([bodyText], { type: contentType || "text/csv" });
+                if (blob.size) capturedBlob = blob;
+              }
+            }
+          }
+        } catch (error) {
+          record.captureError = String(error?.message || error).slice(0, 200);
+        }
+        rememberNetwork(record);
+      };
+      const enqueueCapture = promise => {
+        pendingCaptureTasks.push(Promise.resolve(promise).catch(error => {
+          rememberNetwork({ source: "capture", error: String(error?.message || error).slice(0, 180) });
+        }));
+      };
 
       try {
         URL.createObjectURL = function(object) {
           const url = originalCreateObjectURL.call(URL, object);
-          if (object instanceof Blob) {
+          if (captureActive && object instanceof Blob && object.size) {
             objectUrls.set(url, object);
             capturedBlob = object;
             capturedBlobUrl = url;
+            if (object.name) capturedFileName = String(object.name);
           }
           return url;
         };
         HTMLAnchorElement.prototype.click = function() {
           const href = String(this.href || this.getAttribute("href") || "");
-          if (this.download || /^blob:|^data:/i.test(href)) {
-            capturedFileName = String(this.download || capturedFileName || "");
+          if (captureActive) {
+            if (this.download) capturedFileName = String(this.download || capturedFileName || "");
             const blob = objectUrls.get(href);
             if (blob) { capturedBlob = blob; capturedBlobUrl = href; }
+            else if (href && !/^javascript:|^about:/i.test(href)) capturedDownloadUrl = href;
           }
           return originalAnchorClick.apply(this, arguments);
         };
         window.open = function(url) {
           const href = String(url || "");
-          if (href && objectUrls.has(href)) {
-            capturedBlob = objectUrls.get(href);
-            capturedBlobUrl = href;
+          if (captureActive && href) {
+            if (objectUrls.has(href)) {
+              capturedBlob = objectUrls.get(href);
+              capturedBlobUrl = href;
+            } else if (!/^javascript:|^about:/i.test(href)) capturedDownloadUrl = href;
           }
           return originalOpen.apply(this, arguments);
+        };
+        window.fetch = async function() {
+          const args = arguments;
+          const response = await originalFetch.apply(this, args);
+          if (captureActive) {
+            const requestUrl = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
+            enqueueCapture(rememberJsonOrFile(requestUrl, response, "fetch"));
+          }
+          return response;
+        };
+        XMLHttpRequest.prototype.open = function(method, url) {
+          this.__badocBatchSearchRequest = { method: String(method || "GET"), url: String(url || "") };
+          return originalXhrOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function() {
+          if (captureActive) {
+            this.addEventListener("load", () => {
+              try {
+                const request = this.__badocBatchSearchRequest || {};
+                const headers = this.getAllResponseHeaders ? this.getAllResponseHeaders() : "";
+                const recordResponse = {
+                  status: this.status,
+                  headers: { get: name => {
+                    const line = String(headers).split(/\r?\n/).find(value => value.toLowerCase().startsWith(String(name).toLowerCase() + ":"));
+                    return line ? line.slice(line.indexOf(":") + 1).trim() : "";
+                  }},
+                  clone: () => ({
+                    blob: async () => {
+                      if (this.responseType === "blob") return this.response;
+                      if (this.responseType === "arraybuffer") return new Blob([this.response]);
+                      return new Blob([this.responseText || ""]);
+                    },
+                    text: async () => {
+                      if (this.responseType === "json") return JSON.stringify(this.response || {});
+                      if (this.responseType === "blob" && this.response) return await this.response.text();
+                      if (this.responseType === "arraybuffer" && this.response) return new TextDecoder().decode(this.response);
+                      return String(this.responseText || "");
+                    }
+                  })
+                };
+                enqueueCapture(rememberJsonOrFile(request.url, recordResponse, "xhr:" + request.method));
+              } catch (error) {
+                rememberNetwork({ source: "xhr", error: String(error?.message || error).slice(0, 180) });
+              }
+            }, { once: true });
+          }
+          return originalXhrSend.apply(this, arguments);
         };
 
         const exportLabel = "export batch-search results";
@@ -3466,12 +3620,40 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
           throw new Error("SPX did not enable Export → Export Batch-Search Results after the search. Check that SPX finished searching the pasted numbers.");
         }
 
+        captureActive = true;
         exportItem.click();
-        const blob = await waitFor(
-          () => capturedBlob,
-          120000,
-          "SPX did not produce a downloadable file after Export Batch-Search Results was selected."
-        );
+        let ready = false;
+        try {
+          await waitFor(
+            () => capturedBlob || capturedDownloadUrl || capturedTaskId,
+            120000,
+            "SPX accepted Export Batch-Search Results, but no file, download URL, or export-task ID was observed."
+          );
+          ready = true;
+        } catch (_) {}
+        await Promise.allSettled(pendingCaptureTasks);
+        if (!ready) {
+          return {
+            ok: false,
+            error: "SPX export was selected, but no downloadable file, signed URL, or export-task ID was captured.",
+            diagnostics: networkDiagnostics,
+            pageTitle: String(document.title || "").slice(0, 120),
+            route: String(location.hash || "").slice(0, 120)
+          };
+        }
+        if (!capturedBlob) {
+          return {
+            ok: true,
+            base64: "",
+            downloadUrl: capturedDownloadUrl,
+            taskId: capturedTaskId,
+            fileName: capturedFileName || ("batch_search_result_" + chunkNumber + ".xlsx"),
+            diagnostics: networkDiagnostics,
+            chunkNumber,
+            chunkTotal
+          };
+        }
+        const blob = capturedBlob;
         if (!blob || !blob.size) throw new Error("SPX returned an empty Batch-Search Results file.");
         const buffer = await blob.arrayBuffer();
         const bytes = new Uint8Array(buffer);
@@ -3486,25 +3668,132 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
           fileName: capturedFileName || ("batch_search_result_" + chunkNumber + ".xlsx"),
           byteLength: bytes.length,
           blobUrlCaptured: !!capturedBlobUrl,
+          diagnostics: networkDiagnostics,
           chunkNumber,
           chunkTotal
         };
       } finally {
+        captureActive = false;
         try { URL.createObjectURL = originalCreateObjectURL; } catch (_) {}
         try { HTMLAnchorElement.prototype.click = originalAnchorClick; } catch (_) {}
         try { window.open = originalOpen; } catch (_) {}
+        try { window.fetch = originalFetch; } catch (_) {}
+        try { XMLHttpRequest.prototype.open = originalXhrOpen; } catch (_) {}
+        try { XMLHttpRequest.prototype.send = originalXhrSend; } catch (_) {}
+      }
+      } catch (error) {
+        return {
+          ok: false,
+          error: String(error?.message || error),
+          diagnostics
+        };
       }
     }
   }), 210000, "SPX Batch Search and export");
 
   const result = injected?.[0]?.result;
-  if (!result?.ok || !result.base64) {
-    throw new Error(result?.error || "SPX did not return the Batch-Search Results file.");
+  if (!result) {
+    throw new Error("SPX Order Tracking did not return a result from the page script. It may have reloaded or navigated during export. Keep the signed-in Order Tracking tab open and retry.");
   }
-  const binary = atob(result.base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
-  const converted = await firstMileBufferToCsv(bytes.buffer, result.fileName || ("batch_search_result_" + chunkIndex + ".xlsx"));
+  if (!result.ok) {
+    const diagnosticText = Array.isArray(result.diagnostics) && result.diagnostics.length
+      ? " Network responses: " + result.diagnostics.slice(0, 6).map(item =>
+          (item.source || "request") + " " + (item.status || "") + " " +
+          (item.url || "") + " " + (item.contentType || "") +
+          (item.message || item.captureError || item.error || "")
+        ).join(" | ")
+      : "";
+    throw new Error((result.error || "SPX Batch-Search Results export failed.") + diagnosticText);
+  }
+
+  let buffer = null;
+  let resultFileName = result.fileName || ("batch_search_result_" + chunkIndex + ".xlsx");
+  let resultDisposition = "";
+  if (result.base64) {
+    const binary = atob(result.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    buffer = bytes.buffer;
+  } else if (result.downloadUrl) {
+    let downloadUrl;
+    try { downloadUrl = new URL(result.downloadUrl, SPX_ORIGIN); }
+    catch (_) { throw new Error("SPX returned an invalid Batch Search download URL."); }
+    const allowedHost = downloadUrl.hostname === "spx.shopee.ph" ||
+      downloadUrl.hostname === "susercontent.com" ||
+      downloadUrl.hostname.endsWith(".susercontent.com") ||
+      downloadUrl.hostname.endsWith(".file.susercontent.com");
+    if (downloadUrl.protocol !== "https:" || !allowedHost || downloadUrl.username || downloadUrl.password) {
+      throw new Error("SPX returned a Batch Search download URL outside the allowed SPX file hosts.");
+    }
+    const fileResponse = await extensionFetchBuffer(downloadUrl.toString(), {
+      headers: {
+        "Accept": "text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream,*/*",
+        "Referer": SPX_ORIGIN + "/"
+      }
+    });
+    if (!fileResponse.ok) throw new Error("SPX Batch Search file download failed (HTTP " + fileResponse.status + ").");
+    buffer = fileResponse.buffer;
+    resultDisposition = fileResponse.contentDisposition || "";
+  } else if (Number(result.taskId) > 0) {
+    const taskId = Number(result.taskId);
+    sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+      phase: "batch-search-task",
+      chunkIndex,
+      totalChunks,
+      taskId,
+      message: "SPX returned Batch Search export task " + taskId + ". Waiting for its downloadable file…"
+    });
+    const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
+    const completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Batch Search Results");
+    let mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task);
+    if (!mediaId) {
+      const sources = [...new Set([completedInfo.source || "fms", "fms", "fm", ""])];
+      const deadline = Date.now() + ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS;
+      let lastNotice = 0;
+      while (Date.now() < deadline && !mediaId) {
+        if (job.cancelled) throw new Error("Batch Search Results media lookup cancelled.");
+        for (const source of sources) {
+          try {
+            const rows = await listTasks(0, source, 1, true, 0);
+            const full = (rows || []).find(item => getExportTaskId(item) === taskId);
+            if (full) {
+              mediaId = getExportMediaId(full);
+              if (mediaId) break;
+            }
+          } catch (_) {}
+        }
+        if (!mediaId && Date.now() - lastNotice >= 8000) {
+          sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+            phase: "batch-search-media",
+            chunkIndex,
+            totalChunks,
+            taskId,
+            message: "SPX marked Batch Search export " + taskId + " complete. Waiting for its media ID…"
+          });
+          lastNotice = Date.now();
+        }
+        if (!mediaId) await sleep(ASSIGNMENT_TASK_MEDIA_ID_POLL_MS);
+      }
+    }
+    const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId);
+    const fileResponse = await extensionFetchBuffer(signedUrl, {
+      headers: {
+        "Accept": "text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream,*/*",
+        "Referer": SPX_ORIGIN + "/"
+      }
+    });
+    if (!fileResponse.ok) throw new Error("SPX Batch Search export task file download failed (HTTP " + fileResponse.status + ").");
+    buffer = fileResponse.buffer;
+    resultDisposition = fileResponse.contentDisposition || "";
+  } else {
+    const detail = Array.isArray(result.diagnostics) && result.diagnostics.length
+      ? " Captured: " + result.diagnostics.slice(0, 6).map(item => [item.source,item.status,item.url,item.contentType,item.message,item.preview].filter(Boolean).join(" ")).join(" | ")
+      : "";
+    throw new Error("SPX export response had no file payload, download URL, or task ID." + detail);
+  }
+
+  if (!buffer || !buffer.byteLength) throw new Error("SPX returned an empty Batch-Search Results file.");
+  const converted = await firstMileBufferToCsv(buffer, resultFileName, resultDisposition);
   const rows = parseAssignedExportCsvRows(converted.text);
   if (!rows.length || !rows[0]?.length) {
     throw new Error("SPX Batch-Search Results file did not contain CSV headers.");
