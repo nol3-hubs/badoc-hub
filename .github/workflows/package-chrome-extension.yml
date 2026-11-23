@@ -180,6 +180,20 @@ jobs:
               raise SystemExit(f"Expected one KPI card value-rendering point in index.html; found {card_count}.")
           updated = updated.replace(card_marker, card_replacement, 1)
 
+          # These three loss/fraud/compliance metrics use a fixed zero-good threshold:
+          # 0 is green; 0.1 or higher is red. Values between 0 and 0.1 stay neutral.
+          color_marker = '        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;\\n        if(actualNum!==null){'
+          color_replacement = '''        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;
+                  const zeroGoodThresholdMetrics=["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points"];
+                  if(actualNum!==null && zeroGoodThresholdMetrics.includes(name)){
+                    if(actualNum===0) card.classList.add("kpi-status-a");
+                    else if(actualNum>=0.1) card.classList.add("kpi-status-below-b");
+                  }else if(actualNum!==null){'''
+          color_count = updated.count(color_marker)
+          if color_count != 1:
+              raise SystemExit(f"Expected one KPI threshold-coloring block in index.html; found {color_count}.")
+          updated = updated.replace(color_marker, color_replacement, 1)
+
           index_path.write_text(updated, encoding="utf-8")
           print(f"Embedded {len(files)} Chrome files and synchronized required version {chrome_version}.")
           PY
