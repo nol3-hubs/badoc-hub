@@ -3565,21 +3565,36 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         status.style.borderColor = state === "done" ? "#20b879" : state === "error" ? "#e05252" : "#2797d4";
         status.style.background = state === "done" ? "#073c2b" : state === "error" ? "#4a1717" : "#092b40";
       };
-      const findSearchResultCount = () => {
-        const text = String(document.body?.innerText || "");
-        const patterns = [
-          /(?:all\s+)?([\d,]+)\s+(?:orders?|records?)\s+(?:have\s+been\s+found|found)/i,
-          /total\s*[:：]?\s*([\d,]+)\s*(?:orders?|records?)/i,
-          /([\d,]+)\s+results?/i
-        ];
-        for (const pattern of patterns) {
-          const match = text.match(pattern);
+      const findSearchResultConfirmation = () => {
+        const confirmationPattern = /^All\s+([\d,]+)\s+orders?\s+have\s+been\s+found\.?$/i;
+        const selectors = [
+          '.el-alert.el-alert--success',
+          '.el-message--success',
+          '.el-notification',
+          '[role="alert"]',
+          '[class*="alert"][class*="success"]',
+          '[class*="Alert"][class*="success"]'
+        ].join(',');
+        const candidates = [...document.querySelectorAll(selectors)].filter(visible);
+        for (const element of candidates) {
+          const message = textOf(element).replace(/\s+/g, ' ').trim();
+          const match = message.match(confirmationPattern);
           if (match) {
-            const count = Number(String(match[1]).replace(/,/g, ""));
-            if (Number.isFinite(count)) return count;
+            return {
+              count: Number(String(match[1]).replace(/,/g, '')),
+              message
+            };
           }
         }
-        return null;
+        // Fallback for SPX builds that render the green success bar without
+        // an alert role/class. The phrase must still match the exact
+        // confirmation shown below the Batch Search controls.
+        const bodyText = String(document.body?.innerText || '');
+        const match = bodyText.match(/(?:^|\n)\s*(All\s+[\d,]+\s+orders?\s+have\s+been\s+found\.?)\s*(?:\n|$)/i);
+        if (!match) return null;
+        const parsed = match[1].match(confirmationPattern);
+        if (!parsed) return null;
+        return { count: Number(String(parsed[1]).replace(/,/g, '')), message: match[1].trim() };
       };
       showBatchSearchStatus("SPX is searching " + numbers.length.toLocaleString() + " tracking numbers…", "working");
       submitButton.click();
@@ -3589,6 +3604,19 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         30000,
         "SPX Batch Search dialog did not close after Submit."
       );
+      showBatchSearchStatus(
+        "Batch Search submitted. Waiting for SPX's green confirmation: All orders have been found…",
+        "working"
+      );
+      const searchConfirmation = await waitFor(
+        () => findSearchResultConfirmation(),
+        180000,
+        "SPX did not show the green 'All … orders have been found.' confirmation. Export was not started."
+      );
+      const searchResultCount = searchConfirmation.count;
+      const completedMessage = "SPX confirmed: " + searchConfirmation.message +
+        " Batch Search is complete. Preparing Batch-Search Results export…";
+      showBatchSearchStatus(completedMessage, "done");
       await sleep(900);
 
       let capturedBlob = null;
@@ -3845,12 +3873,8 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
           throw new Error("SPX did not enable Export → Export Batch-Search Results after the search. Check that SPX finished searching the pasted numbers.");
         }
 
-        const searchResultCount = findSearchResultCount();
-        const completedMessage = "SPX finished searching all " + numbers.length.toLocaleString() +
-          " tracking numbers" + (searchResultCount === null ? "." : " · " + searchResultCount.toLocaleString() + " result row(s) found.") +
-          " Preparing Batch-Search Results export…";
-        showBatchSearchStatus(completedMessage, "done");
-        
+        // Search is confirmed by SPX's green success alert above; proceed to export.
+
         captureActive = true;
         exportItem.click();
         let ready = false;
