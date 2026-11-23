@@ -3328,15 +3328,11 @@ async function openBatchSearchOrderTrackingTab(ownerPort, job) {
               const style = getComputedStyle(element);
               return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
             };
-            const labels = [...document.querySelectorAll("button,[role='button']")]
-              .filter(visible)
-              .map(element => String(element.innerText || element.textContent || element.getAttribute("aria-label") || "")
-                .replace(/\\s+/g, " ").trim());
             const bodyText = String(document.body?.innerText || "").slice(0, 5000);
             return {
               route: String(location.hash || ""),
               readyState: document.readyState,
-              hasBatchSearch: labels.some(label => /^batch\s*search$/i.test(label)),
+              pageHasContent: !!document.body && bodyText.trim().length > 20,
               loginRequired: !!document.querySelector("input[type='password']") ||
                 /session (?:has )?expired|please (?:log in|sign in)|(?:log in|sign in) to continue|login required/i.test(bodyText)
             };
@@ -3346,10 +3342,10 @@ async function openBatchSearchOrderTrackingTab(ownerPort, job) {
         if (page?.loginRequired) {
           throw new Error("The new SPX tab requires sign-in. Sign in to SPX, then retry Batch Search Result.");
         }
-        if (page && /orderTracking/i.test(page.route) && page.hasBatchSearch) {
+        if (page && /orderTracking/i.test(page.route) && page.readyState === "complete" && page.pageHasContent) {
           sendToPort(ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
             phase: "batch-search-tab-ready",
-            message: "SPX Order Tracking is ready in the new tab. Starting Batch Search…"
+            message: "SPX Order Tracking has loaded in the new tab. Waiting for Batch Search controls…"
           });
           return current;
         }
@@ -3392,7 +3388,7 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
     chunkIndex,
     totalChunks,
     inputCount: trackingNumbers.length,
-    message: "Submitting SPX Batch Search " + chunkIndex + "/" + totalChunks + " with " +
+    message: "Opening SPX Batch Search and submitting chunk " + chunkIndex + "/" + totalChunks + " with " +
       trackingNumbers.length.toLocaleString() + " tracking number(s)…"
   });
 
@@ -3447,12 +3443,15 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
       const textareaSelector = "textarea[placeholder*='SPX Tracking Number'],textarea[placeholder*='Tracking Number'],textarea";
       let textarea = [...document.querySelectorAll(textareaSelector)].find(visible) || null;
       if (!textarea) {
-        const batchButton = findButtons().find(button => /^batch\s*search$/i.test(textOf(button)));
-        if (!batchButton) throw new Error("Could not find the SPX Batch Search button on Order Tracking.");
+        const batchButton = await waitFor(
+          () => findButtons().find(button => /^batch\s*search$/i.test(textOf(button))),
+          30000,
+          "SPX Order Tracking loaded, but its Batch Search button did not become available."
+        );
         batchButton.click();
         textarea = await waitFor(
           () => [...document.querySelectorAll(textareaSelector)].find(visible),
-          15000,
+          20000,
           "SPX Batch Search dialog did not open or its tracking-number box was not found."
         );
       }
