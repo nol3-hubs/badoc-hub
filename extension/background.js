@@ -3440,39 +3440,93 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
       if (!Array.isArray(numbers) || !numbers.length || numbers.length > 3000) {
         throw new Error("Each SPX Batch Search must contain between 1 and 3,000 tracking numbers.");
       }
-      const textareaSelector = "textarea[placeholder*='SPX Tracking Number'],textarea[placeholder*='Tracking Number'],textarea";
-      let textarea = [...document.querySelectorAll(textareaSelector)].find(visible) || null;
-      if (!textarea) {
-        const batchButton = await waitFor(
-          () => findButtons().find(button => /^batch\s*search$/i.test(textOf(button))),
-          30000,
-          "SPX Order Tracking loaded, but its Batch Search button did not become available."
+      // SPX can render Batch Search in a custom overlay, iframe, or portal
+      // rather than an element with a conventional dialog class. Search those
+      // roots and avoid accidentally choosing the main form's Sort Code input.
+      const queryDeep = (root, selector) => {
+        const found = [];
+        const roots = [root];
+        const seenRoots = new Set();
+        for (let index = 0; index < roots.length; index++) {
+          const currentRoot = roots[index];
+          if (!currentRoot || seenRoots.has(currentRoot)) continue;
+          seenRoots.add(currentRoot);
+          let elements = [];
+          try { elements = [...currentRoot.querySelectorAll(selector)]; } catch (_) {}
+          found.push(...elements);
+          let all = [];
+          try { all = [...currentRoot.querySelectorAll("*")]; } catch (_) {}
+          for (const element of all) {
+            try {
+              if (element.shadowRoot) roots.push(element.shadowRoot);
+              if (String(element.tagName || "").toLowerCase() === "iframe" && element.contentDocument) {
+                roots.push(element.contentDocument);
+              }
+            } catch (_) {}
+          }
+        }
+        return [...new Set(found)];
+      };
+      const visibleBefore = new Set(queryDeep(document, "textarea").filter(visible));
+      const textareaSelector = [
+        "textarea[placeholder*='Tracking Number' i]",
+        "textarea[aria-label*='Tracking Number' i]",
+        "textarea[placeholder*='SPX TN' i]"
+      ].join(",");
+      const findBatchSearchButton = () => queryDeep(document, "button,[role='button'],.el-button,.ant-btn,.ivu-btn")
+        .filter(visible)
+        .find(button => /^batch\s*search$/i.test(textOf(button)));
+      const batchButton = await waitFor(
+        () => findBatchSearchButton(),
+        30000,
+        "SPX Order Tracking loaded, but its Batch Search button did not become available."
+      );
+      batchButton.click();
+
+      const findBatchSearchTextarea = () => {
+        const explicit = queryDeep(document, textareaSelector).find(visible);
+        if (explicit) return explicit;
+        // Prefer a textarea that became visible only after Batch Search was opened.
+        const newlyVisible = queryDeep(document, "textarea").find(element =>
+          visible(element) && !visibleBefore.has(element)
         );
-        batchButton.click();
-        textarea = await waitFor(
-          () => [...document.querySelectorAll(textareaSelector)].find(visible),
-          20000,
-          "SPX Batch Search dialog did not open or its tracking-number box was not found."
-        );
-      }
+        if (newlyVisible) return newlyVisible;
+        // Last fallback: a textarea inside an identifiable Batch Search overlay.
+        const overlays = queryDeep(document,
+          "[role='dialog'],[aria-modal='true'],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal,[class*='dialog'],[class*='Dialog'],[class*='modal'],[class*='Modal']"
+        ).filter(visible);
+        for (const overlay of overlays) {
+          if (/batch\s*search/i.test(textOf(overlay))) {
+            const candidate = queryDeep(overlay, "textarea").find(visible);
+            if (candidate) return candidate;
+          }
+        }
+        return null;
+      };
+      const textarea = await waitFor(
+        () => findBatchSearchTextarea(),
+        20000,
+        "SPX Batch Search dialog did not open or its tracking-number box was not found. The unrelated Order Tracking filter fields were ignored."
+      );
 
       const dialogSelector = "[role='dialog'],[aria-modal='true'],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal,[class*='dialog'],[class*='Dialog'],[class*='modal'],[class*='Modal']";
-      const modalCandidates = [...document.querySelectorAll(dialogSelector)]
-        .filter(element => visible(element) && element.contains(textarea));
+      const modalCandidates = queryDeep(document, dialogSelector)
+        .filter(element => visible(element) && element.contains?.(textarea));
       const ancestorScopes = [];
-      for (let node = textarea.parentElement, depth = 0; node && depth < 14; node = node.parentElement, depth++) {
-        if (visible(node) && node.contains(textarea)) ancestorScopes.push(node);
+      for (let node = textarea.parentElement, depth = 0; node && depth < 18; node = node.parentElement, depth++) {
+        if (visible(node) && node.contains?.(textarea)) ancestorScopes.push(node);
       }
-      let dialog = modalCandidates[0] || ancestorScopes.find(node =>
-        /dialog|modal/i.test(String(node.className || "")) || /batch\\s*search/i.test(textOf(node))
-      ) || textarea.parentElement?.parentElement?.parentElement || document.body;
       const inputText = numbers.join("\n");
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-      if (setter) setter.call(textarea, inputText);
+      const textareaWindow = textarea.ownerDocument?.defaultView || window;
+      const textareaSetter = Object.getOwnPropertyDescriptor(
+        textareaWindow.HTMLTextAreaElement?.prototype || HTMLTextAreaElement.prototype,
+        "value"
+      )?.set;
+      if (textareaSetter) textareaSetter.call(textarea, inputText);
       else textarea.value = inputText;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-      textarea.dispatchEvent(new Event("change", { bubbles: true }));
-      textarea.dispatchEvent(new Event("blur", { bubbles: true }));
+      textarea.dispatchEvent(new textareaWindow.Event("input", { bubbles: true }));
+      textarea.dispatchEvent(new textareaWindow.Event("change", { bubbles: true }));
+      textarea.dispatchEvent(new textareaWindow.Event("blur", { bubbles: true }));
       if (String(textarea.value || "").trim().split(/\r?\n/).filter(Boolean).length !== numbers.length) {
         throw new Error("SPX Batch Search did not accept all tracking numbers in the input box.");
       }
@@ -3481,15 +3535,15 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
       const normalizedControlText = element => String(
         textOf(element) || element?.getAttribute?.("aria-label") ||
         element?.getAttribute?.("title") || element?.value || ""
-      ).replace(/\\s+/g, " ").trim().toLowerCase();
+      ).replace(/\s+/g, " ").trim().toLowerCase();
       const nearestClickable = element =>
         element?.closest?.("button,[role='button'],input[type='button'],input[type='submit'],.el-button,.ant-btn,.ivu-btn,[onclick]") || element;
       const findSubmitControl = scope => {
         if (!scope || typeof scope.querySelectorAll !== "function") return null;
-        const controls = [...scope.querySelectorAll(submitControlSelector)].filter(visible);
+        const controls = queryDeep(scope, submitControlSelector).filter(visible);
         const exactControl = controls.find(element => normalizedControlText(element) === "submit");
         if (exactControl) return nearestClickable(exactControl);
-        const textNodes = [...scope.querySelectorAll("span,div,a,li,label")]
+        const textNodes = queryDeep(scope, "span,div,a,li,label")
           .filter(element => visible(element) && normalizedControlText(element) === "submit");
         for (const element of textNodes) {
           const control = nearestClickable(element);
@@ -3497,46 +3551,54 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         }
         return null;
       };
+      const findCommonAncestor = (first, second) => {
+        const firstAncestors = new Set();
+        for (let node = first; node; node = node.parentElement) firstAncestors.add(node);
+        for (let node = second; node; node = node.parentElement) {
+          if (firstAncestors.has(node)) return node;
+        }
+        return null;
+      };
       let submitButton = null;
+      let dialog = modalCandidates
+        .sort((left, right) => {
+          const leftRect = left.getBoundingClientRect();
+          const rightRect = right.getBoundingClientRect();
+          return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+        })[0] || null;
       const searchScopes = [];
       const addScope = scope => {
         if (scope && typeof scope.querySelectorAll === "function" && !searchScopes.includes(scope)) searchScopes.push(scope);
       };
-      // Search the textarea's ancestors from nearest to widest so the footer
-      // can be found even when SPX renders it outside the dialog body.
-      ancestorScopes.forEach(addScope);
+      // Check explicit overlay roots first, then the input's ancestors, then
+      // its owning document. This also finds footer controls rendered as siblings.
       modalCandidates.forEach(addScope);
-      addScope(dialog);
-      addScope(document);
+      [...ancestorScopes].reverse().forEach(addScope);
+      addScope(textarea.ownerDocument || document);
       for (const scope of searchScopes) {
         submitButton = findSubmitControl(scope);
         if (submitButton) {
-          let node = submitButton;
-          for (let depth = 0; node && depth < 14; node = node.parentElement, depth++) {
-            if (node.contains?.(textarea) && (
-              node.matches?.(dialogSelector) ||
-              /dialog|modal/i.test(String(node.className || "")) ||
-              /batch\\s*search/i.test(textOf(node))
-            )) {
-              dialog = node;
-              break;
-            }
-          }
+          dialog = modalCandidates.find(candidate =>
+            candidate.contains?.(textarea) && candidate.contains?.(submitButton)
+          ) || findCommonAncestor(textarea, submitButton) || dialog || textarea.parentElement;
           break;
         }
       }
       if (!submitButton) {
-        const visibleButtons = [...document.querySelectorAll("button,[role='button'],.el-button,.ant-btn,.ivu-btn")]
-          .filter(visible)
-          .map(element => normalizedControlText(element))
-          .filter(Boolean)
-          .slice(0, 18);
-        const modalName = textOf(dialog).slice(0, 140);
+        const visibleButtons = queryDeep(textarea.ownerDocument || document,
+          "button,[role='button'],.el-button,.ant-btn,.ivu-btn"
+        ).filter(visible).map(normalizedControlText).filter(Boolean).slice(0, 30);
+        const visibleTextareas = queryDeep(document, "textarea").filter(visible).map(element => ({
+          placeholder: String(element.getAttribute("placeholder") || ""),
+          ariaLabel: String(element.getAttribute("aria-label") || ""),
+          name: String(element.getAttribute("name") || ""),
+          context: textOf(element.parentElement?.parentElement).slice(0, 100)
+        })).slice(0, 8);
         throw new Error(
-          "Could not locate a visible Submit control after pasting the tracking numbers. " +
-          "SPX Batch Search dialog text: " + modalName +
-          ". Visible button labels on page: " + (visibleButtons.join(" | ") || "none") +
-          ". Dialog candidates containing the tracking box: " + modalCandidates.length + "."
+          "Could not locate a visible Submit control inside the SPX Batch Search popup. " +
+          "Visible controls: " + (visibleButtons.join(" | ") || "none") +
+          ". Tracking input context: " + textOf(textarea.parentElement?.parentElement).slice(0, 140) +
+          ". Visible textareas: " + JSON.stringify(visibleTextareas) + "."
         );
       }
       if (isDisabled(submitButton)) {
