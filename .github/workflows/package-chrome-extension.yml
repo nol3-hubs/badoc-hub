@@ -182,7 +182,8 @@ jobs:
 
           # These three loss/fraud/compliance metrics use a fixed zero-good threshold:
           # 0 is green; 0.1 or higher is red. Values between 0 and 0.1 stay neutral.
-          color_marker = '        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;\\n        if(actualNum!==null){'
+          color_marker = '''        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;
+        if(actualNum!==null){'''
           color_replacement = '''        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;
                   const zeroGoodThresholdMetrics=["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points"];
                   if(actualNum!==null && zeroGoodThresholdMetrics.includes(name)){
