@@ -3798,15 +3798,47 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         );
         let exportItem = null;
         const menuDeadline = Date.now() + 120000;
+        // SPX opens this dropdown on hover. Dispatch the same pointer/mouse
+        // enter events on its dropdown wrapper and trigger; do not click the
+        // generic Export button because that can start a different export.
+        const hoverTargets = [...new Set([
+          exportButton.closest?.('.el-dropdown'),
+          exportButton.closest?.('.ant-dropdown-trigger'),
+          exportButton.closest?.('.ivu-dropdown'),
+          exportButton.parentElement,
+          exportButton
+        ].filter(Boolean))];
+        const simulateExportHover = () => {
+          for (const target of hoverTargets) {
+            if (!target.isConnected) continue;
+            const rect = target.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            try {
+              if (typeof PointerEvent === 'function') {
+                target.dispatchEvent(new PointerEvent('pointerover', {
+                  bubbles: true, cancelable: true, pointerType: 'mouse',
+                  clientX: x, clientY: y, view: window
+                }));
+                target.dispatchEvent(new PointerEvent('pointerenter', {
+                  bubbles: false, cancelable: false, pointerType: 'mouse',
+                  clientX: x, clientY: y, view: window
+                }));
+              }
+              target.dispatchEvent(new MouseEvent('mouseover', {
+                bubbles: true, cancelable: true, view: window, clientX: x, clientY: y
+              }));
+              target.dispatchEvent(new MouseEvent('mouseenter', {
+                bubbles: false, cancelable: false, view: window, clientX: x, clientY: y
+              }));
+            } catch (_) {}
+          }
+        };
         while (Date.now() < menuDeadline) {
           exportItem = findExportItem();
-          if (!exportItem) {
-            exportButton.click();
-            await sleep(300);
-            exportItem = findExportItem();
-          }
           if (exportItem && !isDisabled(exportItem)) break;
-          await sleep(350);
+          simulateExportHover();
+          await sleep(300);
         }
         if (!exportItem || isDisabled(exportItem)) {
           showBatchSearchStatus("SPX has not finished searching the tracking numbers yet. Waiting for the Batch-Search Results option…", "working");
