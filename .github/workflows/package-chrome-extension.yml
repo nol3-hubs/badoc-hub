@@ -164,21 +164,8 @@ jobs:
           if settings_count != 1:
               raise SystemExit(f"Expected one Settings-page Chrome version label; found {settings_count}.")
           # Apply the Hub Compliance fallback once. The sentinel prevents duplicate insertion on later package runs.
-          score_sentinel = "BADOC_HUB_COMPLIANCE_SCORE_WEIGHT_FALLBACK_V1"
-          legacy_score_remap = "\n".join([
-              '        if(name==="Hub Compliance Score"){',
-              '          const actualText=String(v.actual??"").trim();',
-              '          const weightText=String(v.weight??"").trim();',
-              '          if((!actualText || actualText==="—") && weightText){',
-              '            v.actual=v.weight;',
-              '            v.weight="";',
-              '          }',
-              '        }'
-          ])
-          # If the sentinel version exists, remove one older unsentinelled copy.
-          if score_sentinel in updated:
-              updated = updated.replace(legacy_score_remap, "", 1)
-          if score_sentinel not in updated:
+          # Add the Hub Compliance fallback only when the mapping is not already present.
+          if 'v.actual=v.weight;' not in updated:
               card_marker = '        const v=getMetricValue(rows,block.data,block.metricHeader,name);'
               card_replacement = "\n".join([
                   '        const v=getMetricValue(rows,block.data,block.metricHeader,name);',
