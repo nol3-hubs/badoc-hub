@@ -3368,8 +3368,16 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         );
       }
 
-      const dialogSelector = "[role='dialog'],[aria-modal='true'],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal";
-      const dialog = textarea.closest(dialogSelector) || textarea.parentElement?.parentElement?.parentElement || document.body;
+      const dialogSelector = "[role='dialog'],[aria-modal='true'],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal,[class*='dialog'],[class*='Dialog'],[class*='modal'],[class*='Modal']";
+      const modalCandidates = [...document.querySelectorAll(dialogSelector)]
+        .filter(element => visible(element) && element.contains(textarea));
+      const ancestorScopes = [];
+      for (let node = textarea.parentElement, depth = 0; node && depth < 14; node = node.parentElement, depth++) {
+        if (visible(node) && node.contains(textarea)) ancestorScopes.push(node);
+      }
+      let dialog = modalCandidates[0] || ancestorScopes.find(node =>
+        /dialog|modal/i.test(String(node.className || "")) || /batch\\s*search/i.test(textOf(node))
+      ) || textarea.parentElement?.parentElement?.parentElement || document.body;
       const inputText = numbers.join("\n");
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
       if (setter) setter.call(textarea, inputText);
@@ -3381,12 +3389,68 @@ async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, total
         throw new Error("SPX Batch Search did not accept all tracking numbers in the input box.");
       }
 
-      const submitButton = await waitFor(
-        () => [...dialog.querySelectorAll("button,[role='button']")].filter(visible)
-          .find(button => /^submit$/i.test(textOf(button))),
-        8000,
-        "Submit button was not found in the SPX Batch Search dialog."
-      );
+      const submitControlSelector = "button,[role='button'],input[type='button'],input[type='submit'],.el-button,.ant-btn,.ivu-btn,[class*='submit'],[class*='Submit']";
+      const normalizedControlText = element => String(
+        textOf(element) || element?.getAttribute?.("aria-label") ||
+        element?.getAttribute?.("title") || element?.value || ""
+      ).replace(/\\s+/g, " ").trim().toLowerCase();
+      const nearestClickable = element =>
+        element?.closest?.("button,[role='button'],input[type='button'],input[type='submit'],.el-button,.ant-btn,.ivu-btn,[onclick]") || element;
+      const findSubmitControl = scope => {
+        if (!scope || typeof scope.querySelectorAll !== "function") return null;
+        const controls = [...scope.querySelectorAll(submitControlSelector)].filter(visible);
+        const exactControl = controls.find(element => normalizedControlText(element) === "submit");
+        if (exactControl) return nearestClickable(exactControl);
+        const textNodes = [...scope.querySelectorAll("span,div,a,li,label")]
+          .filter(element => visible(element) && normalizedControlText(element) === "submit");
+        for (const element of textNodes) {
+          const control = nearestClickable(element);
+          if (control && visible(control) && normalizedControlText(control) === "submit") return control;
+        }
+        return null;
+      };
+      let submitButton = null;
+      const searchScopes = [];
+      const addScope = scope => {
+        if (scope && typeof scope.querySelectorAll === "function" && !searchScopes.includes(scope)) searchScopes.push(scope);
+      };
+      // Search the textarea's ancestors from nearest to widest so the footer
+      // can be found even when SPX renders it outside the dialog body.
+      ancestorScopes.forEach(addScope);
+      modalCandidates.forEach(addScope);
+      addScope(dialog);
+      addScope(document);
+      for (const scope of searchScopes) {
+        submitButton = findSubmitControl(scope);
+        if (submitButton) {
+          let node = submitButton;
+          for (let depth = 0; node && depth < 14; node = node.parentElement, depth++) {
+            if (node.contains?.(textarea) && (
+              node.matches?.(dialogSelector) ||
+              /dialog|modal/i.test(String(node.className || "")) ||
+              /batch\\s*search/i.test(textOf(node))
+            )) {
+              dialog = node;
+              break;
+            }
+          }
+          break;
+        }
+      }
+      if (!submitButton) {
+        const visibleButtons = [...document.querySelectorAll("button,[role='button'],.el-button,.ant-btn,.ivu-btn")]
+          .filter(visible)
+          .map(element => normalizedControlText(element))
+          .filter(Boolean)
+          .slice(0, 18);
+        const modalName = textOf(dialog).slice(0, 140);
+        throw new Error(
+          "Could not locate a visible Submit control after pasting the tracking numbers. " +
+          "SPX Batch Search dialog text: " + modalName +
+          ". Visible button labels on page: " + (visibleButtons.join(" | ") || "none") +
+          ". Dialog candidates containing the tracking box: " + modalCandidates.length + "."
+        );
+      }
       if (isDisabled(submitButton)) {
         await waitFor(() => !isDisabled(submitButton), 5000, "SPX kept Submit disabled after the tracking numbers were pasted.");
       }
