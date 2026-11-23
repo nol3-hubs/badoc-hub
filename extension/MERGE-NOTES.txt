@@ -250,3 +250,10 @@ UPDATE — 2026-11-17 · POD/POOH Checker — Recognize Pick Up Time in CSV
 - This correction makes the existing `pick_up_time` export filter verifiable in the downloaded CSV. It does not by itself recover an order that SPX omitted from the source CSV.
 - Chrome bumped to v1.4.0; Firefox bumped to v69.5.1; checker script cache and PWA cache marker refreshed.
 - Static JavaScript and manifest validation required; live Forward/Return export behavior still requires confirmation with authenticated SPX data.
+
+
+UPDATE — 2026-11-23 · Hourly AT export stays in Badoc Hub (Chrome v1.5.20)
+- Assignment Task export now injects its export handler into the already-open, authenticated SPX Delivery Assignment → List tab without activating that tab or focusing its window.
+- The workflow does not create an SPX tab. Badoc Hub remains the foreground tab while the export runs in the existing SPX tab.
+- Bumped the Chrome extension to v1.5.20 and synchronized the dashboard's embedded Bridge Installer package, required-version check, app version (v138), and PWA cache marker.
+- Static source/package checks passed. A live authenticated SPX export is still required to confirm behavior in the user's browser session.
