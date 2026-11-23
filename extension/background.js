@@ -105,7 +105,8 @@ const PARALLEL_JOB_ALLOWLIST = {
   "first-mile-orders": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-tasks", "linehaul", "assigned-onhold-today"]),
   "first-mile-tasks": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "linehaul", "assigned-onhold-today"]),
   "linehaul": new Set(["parcel-inbound", "parcel-delivery", "parcel-secondary", "first-mile-orders", "first-mile-tasks", "assigned-onhold-today"]),
-  "assigned-onhold-today": new Set(["parcel-inbound", "first-mile-orders", "first-mile-tasks", "linehaul"])
+  "assigned-onhold-today": new Set(["parcel-inbound", "first-mile-orders", "first-mile-tasks", "linehaul"]),
+  "batch-search-result": new Set(["assignment-task"])
 };
 
 function sendToPort(port, type, data = {}) {
@@ -3275,6 +3276,316 @@ async function runJob(job) {
   }
 }
 
+
+
+async function findBatchSearchOrderTrackingTab(ownerPort) {
+  const all = (await chrome.tabs.query({ url: SPX_ORIGIN + "/*" }))
+    .filter(tab => !tab.discarded && tab.id != null);
+  const preferredWindowId = ownerPort?.sender?.tab?.windowId;
+  const candidates = all.filter(tab => /#\/orderTracking(?:[/?]|$)/i.test(String(tab.url || "")));
+  candidates.sort((a, b) => {
+    const aw = a.windowId === preferredWindowId ? 1 : 0;
+    const bw = b.windowId === preferredWindowId ? 1 : 0;
+    if (aw !== bw) return bw - aw;
+    return (b.lastAccessed || 0) - (a.lastAccessed || 0);
+  });
+  const tab = candidates[0];
+  if (!tab?.id) {
+    throw new Error("Open SPX → Order Management → Order Tracking in a signed-in tab, then retry Batch Search Result.");
+  }
+  return tab;
+}
+
+async function executeBatchSearchChunk(tabId, trackingNumbers, chunkIndex, totalChunks, job) {
+  if (job.cancelled) throw new Error("Batch Search Result export cancelled.");
+  sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+    phase: "batch-search-submit",
+    chunkIndex,
+    totalChunks,
+    inputCount: trackingNumbers.length,
+    message: "Submitting SPX Batch Search " + chunkIndex + "/" + totalChunks + " with " +
+      trackingNumbers.length.toLocaleString() + " tracking number(s)…"
+  });
+
+  const injected = await withTimeout(chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    args: [trackingNumbers, chunkIndex, totalChunks],
+    func: async (numbers, chunkNumber, chunkTotal) => {
+      const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const visible = element => {
+        if (!element || !element.isConnected) return false;
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) return false;
+        const style = getComputedStyle(element);
+        return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+      };
+      const textOf = element => String(element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim();
+      const isDisabled = element => {
+        if (!element) return true;
+        if (element.disabled === true || element.getAttribute("disabled") !== null ||
+            String(element.getAttribute("aria-disabled") || "").toLowerCase() === "true") return true;
+        let current = element;
+        for (let depth = 0; current && depth < 5; depth++, current = current.parentElement) {
+          const cls = typeof current.className === "string" ? current.className : "";
+          if (/(^|\s)(?:is-)?disabled(?:\s|$)|is-disabled|--disabled/i.test(cls)) return true;
+          if (current.getAttribute?.("aria-disabled") === "true") return true;
+        }
+        return false;
+      };
+      const waitFor = async (predicate, timeoutMs, message) => {
+        const started = Date.now();
+        let lastError = "";
+        while (Date.now() - started < timeoutMs) {
+          try {
+            const value = predicate();
+            if (value) return value;
+          } catch (error) { lastError = error?.message || String(error); }
+          await sleep(250);
+        }
+        throw new Error(message + (lastError ? " " + lastError : ""));
+      };
+      const findButtons = () => [...document.querySelectorAll("button,[role='button']")].filter(visible);
+      const pageRoute = String(location.hash || "");
+      if (!/orderTracking/i.test(pageRoute)) {
+        throw new Error("The selected SPX tab is not on Order Management → Order Tracking.");
+      }
+      if (!Array.isArray(numbers) || !numbers.length || numbers.length > 3000) {
+        throw new Error("Each SPX Batch Search must contain between 1 and 3,000 tracking numbers.");
+      }
+      const textareaSelector = "textarea[placeholder*='SPX Tracking Number'],textarea[placeholder*='Tracking Number'],textarea";
+      let textarea = [...document.querySelectorAll(textareaSelector)].find(visible) || null;
+      if (!textarea) {
+        const batchButton = findButtons().find(button => /^batch\s*search$/i.test(textOf(button)));
+        if (!batchButton) throw new Error("Could not find the SPX Batch Search button on Order Tracking.");
+        batchButton.click();
+        textarea = await waitFor(
+          () => [...document.querySelectorAll(textareaSelector)].find(visible),
+          15000,
+          "SPX Batch Search dialog did not open or its tracking-number box was not found."
+        );
+      }
+
+      const dialogSelector = "[role='dialog'],[aria-modal='true'],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal";
+      const dialog = textarea.closest(dialogSelector) || textarea.parentElement?.parentElement?.parentElement || document.body;
+      const inputText = numbers.join("\n");
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      if (setter) setter.call(textarea, inputText);
+      else textarea.value = inputText;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea.dispatchEvent(new Event("change", { bubbles: true }));
+      textarea.dispatchEvent(new Event("blur", { bubbles: true }));
+      if (String(textarea.value || "").trim().split(/\r?\n/).filter(Boolean).length !== numbers.length) {
+        throw new Error("SPX Batch Search did not accept all tracking numbers in the input box.");
+      }
+
+      const submitButton = await waitFor(
+        () => [...dialog.querySelectorAll("button,[role='button']")].filter(visible)
+          .find(button => /^submit$/i.test(textOf(button))),
+        8000,
+        "Submit button was not found in the SPX Batch Search dialog."
+      );
+      if (isDisabled(submitButton)) {
+        await waitFor(() => !isDisabled(submitButton), 5000, "SPX kept Submit disabled after the tracking numbers were pasted.");
+      }
+      submitButton.click();
+
+      await waitFor(
+        () => !visible(textarea) || !visible(dialog),
+        30000,
+        "SPX Batch Search dialog did not close after Submit."
+      );
+      await sleep(900);
+
+      let capturedBlob = null;
+      let capturedBlobUrl = "";
+      let capturedFileName = "";
+      const objectUrls = new Map();
+      const originalCreateObjectURL = URL.createObjectURL;
+      const originalAnchorClick = HTMLAnchorElement.prototype.click;
+      const originalOpen = window.open;
+
+      try {
+        URL.createObjectURL = function(object) {
+          const url = originalCreateObjectURL.call(URL, object);
+          if (object instanceof Blob) {
+            objectUrls.set(url, object);
+            capturedBlob = object;
+            capturedBlobUrl = url;
+          }
+          return url;
+        };
+        HTMLAnchorElement.prototype.click = function() {
+          const href = String(this.href || this.getAttribute("href") || "");
+          if (this.download || /^blob:|^data:/i.test(href)) {
+            capturedFileName = String(this.download || capturedFileName || "");
+            const blob = objectUrls.get(href);
+            if (blob) { capturedBlob = blob; capturedBlobUrl = href; }
+          }
+          return originalAnchorClick.apply(this, arguments);
+        };
+        window.open = function(url) {
+          const href = String(url || "");
+          if (href && objectUrls.has(href)) {
+            capturedBlob = objectUrls.get(href);
+            capturedBlobUrl = href;
+          }
+          return originalOpen.apply(this, arguments);
+        };
+
+        const exportLabel = "export batch-search results";
+        const menuSelectors = "button,[role='menuitem'],a,li,.el-dropdown-menu__item,.ant-dropdown-menu-item,.ivu-dropdown-item";
+        const findExportItem = () => {
+          const known = [...document.querySelectorAll(menuSelectors)].filter(visible)
+            .find(element => textOf(element).toLowerCase() === exportLabel);
+          if (known) return known;
+          const fallback = [...document.querySelectorAll("body *")].filter(element =>
+            visible(element) && textOf(element).toLowerCase() === exportLabel &&
+            ![...element.children].some(child => textOf(child).toLowerCase() === exportLabel)
+          );
+          return fallback[0] || null;
+        };
+        const exportButton = await waitFor(
+          () => findButtons().find(button => /^export$/i.test(textOf(button))),
+          15000,
+          "SPX Order Tracking Export dropdown was not found."
+        );
+        let exportItem = null;
+        const menuDeadline = Date.now() + 120000;
+        while (Date.now() < menuDeadline) {
+          exportItem = findExportItem();
+          if (!exportItem) {
+            exportButton.click();
+            await sleep(300);
+            exportItem = findExportItem();
+          }
+          if (exportItem && !isDisabled(exportItem)) break;
+          await sleep(350);
+        }
+        if (!exportItem || isDisabled(exportItem)) {
+          throw new Error("SPX did not enable Export → Export Batch-Search Results after the search. Check that SPX finished searching the pasted numbers.");
+        }
+
+        exportItem.click();
+        const blob = await waitFor(
+          () => capturedBlob,
+          120000,
+          "SPX did not produce a downloadable file after Export Batch-Search Results was selected."
+        );
+        if (!blob || !blob.size) throw new Error("SPX returned an empty Batch-Search Results file.");
+        const buffer = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+        }
+        return {
+          ok: true,
+          base64: btoa(binary),
+          mimeType: String(blob.type || ""),
+          fileName: capturedFileName || ("batch_search_result_" + chunkNumber + ".xlsx"),
+          byteLength: bytes.length,
+          blobUrlCaptured: !!capturedBlobUrl,
+          chunkNumber,
+          chunkTotal
+        };
+      } finally {
+        try { URL.createObjectURL = originalCreateObjectURL; } catch (_) {}
+        try { HTMLAnchorElement.prototype.click = originalAnchorClick; } catch (_) {}
+        try { window.open = originalOpen; } catch (_) {}
+      }
+    }
+  }), 210000, "SPX Batch Search and export");
+
+  const result = injected?.[0]?.result;
+  if (!result?.ok || !result.base64) {
+    throw new Error(result?.error || "SPX did not return the Batch-Search Results file.");
+  }
+  const binary = atob(result.base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  const converted = await firstMileBufferToCsv(bytes.buffer, result.fileName || ("batch_search_result_" + chunkIndex + ".xlsx"));
+  const rows = parseAssignedExportCsvRows(converted.text);
+  if (!rows.length || !rows[0]?.length) {
+    throw new Error("SPX Batch-Search Results file did not contain CSV headers.");
+  }
+  return { text: converted.text, fileName: converted.fileName, rows };
+}
+
+async function runBatchSearchExportJob(job) {
+  const port = job.ownerPort;
+  try {
+    job.startedAt = Date.now();
+    const numbers = [...new Set((Array.isArray(job.trackingNumbers) ? job.trackingNumbers : [])
+      .map(value => String(value || "").trim()).filter(Boolean))];
+    if (!numbers.length) throw new Error("Assignment Task export did not contain SPX Tracking Numbers.");
+    if (numbers.length > 30000) {
+      throw new Error("Batch Search contains " + numbers.length.toLocaleString() + " tracking numbers. The current safe limit is 30,000 per run.");
+    }
+    const tab = await findBatchSearchOrderTrackingTab(port);
+    job.spxTabId = tab.id;
+    const chunks = [];
+    for (let offset = 0; offset < numbers.length; offset += 3000) {
+      chunks.push(numbers.slice(offset, offset + 3000));
+    }
+    const totalChunks = chunks.length;
+    let headers = null;
+    const outputRows = [];
+    let outputFileName = "batch_search_result.csv";
+
+    for (let index = 0; index < chunks.length; index++) {
+      if (job.cancelled) throw new Error("Batch Search Result export cancelled.");
+      sendToPort(port, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+        phase: "batch-search-running",
+        chunkIndex: index + 1,
+        totalChunks,
+        inputCount: numbers.length,
+        message: "Running SPX Batch Search " + (index + 1) + "/" + totalChunks + " (" +
+          chunks[index].length.toLocaleString() + " tracking numbers)…"
+      });
+      const result = await executeBatchSearchChunk(tab.id, chunks[index], index + 1, totalChunks, job);
+      const rows = result.rows;
+      const currentHeaders = rows[0].map(value => String(value ?? "").trim());
+      if (!headers) {
+        headers = currentHeaders;
+        outputFileName = result.fileName || outputFileName;
+      } else if (headers.length !== currentHeaders.length ||
+          headers.some((value, col) => value !== currentHeaders[col])) {
+        throw new Error("SPX Batch-Search Results columns changed between chunks. The combined output was not created.");
+      }
+      outputRows.push(...rows.slice(1));
+      sendToPort(port, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+        phase: "batch-search-chunk-complete",
+        chunkIndex: index + 1,
+        totalChunks,
+        resultCount: outputRows.length,
+        inputCount: numbers.length,
+        message: "Completed SPX Batch Search " + (index + 1) + "/" + totalChunks + ". Collected " +
+          outputRows.length.toLocaleString() + " result row(s)…"
+      });
+    }
+
+    const csvText = firstMileRowsToCsv([headers || [], ...outputRows]);
+    sendToPort(port, "BADOC_SPX_BATCH_SEARCH_CSV", {
+      selectedDate: job.selectedDate,
+      sourceTaskId: job.sourceTaskId || "",
+      inputCount: numbers.length,
+      chunkCount: chunks.length,
+      rowCount: outputRows.length,
+      fileName: firstMileCsvFileName(outputFileName, "batch_search_result.csv"),
+      csvText
+    });
+  } catch (error) {
+    console.error("BADOC SPX Batch Search Result export failed:", error);
+    sendToPort(port, "BADOC_SPX_BATCH_SEARCH_ERROR", {
+      selectedDate: job.selectedDate,
+      message: error?.message || String(error)
+    });
+  } finally {
+    releaseActiveJob(job);
+  }
+}
+
 function isBadocPageUrl(url) {
   const u = String(url || "");
   if (u.startsWith("file://") || /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?\//i.test(u)) return true;
@@ -3447,6 +3758,29 @@ chrome.runtime.onConnect.addListener(port => {
           releaseActiveJob(job);
         }
       })();
+      return;
+    }
+
+    if (type === "BADOC_START_BATCH_SEARCH_EXPORT") {
+      const trackingNumbers = Array.isArray(message?.trackingNumbers) ? message.trackingNumbers : [];
+      sendToPort(port, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+        phase: "command-received",
+        inputCount: trackingNumbers.length,
+        message: "Extension background received the Batch Search Result command. Preparing SPX Order Tracking…"
+      });
+      const job = reserveActiveJob("batch-search-result", port, {
+        selectedDate: String(message?.selectedDate || "").trim(),
+        sourceTaskId: String(message?.sourceTaskId || "").trim(),
+        trackingNumbers,
+        startedAt: Date.now()
+      });
+      if (!job) {
+        sendToPort(port, "BADOC_SPX_BATCH_SEARCH_ERROR", {
+          message: "Another SPX export is still running. Wait for it to finish, then retry Batch Search Result."
+        });
+        return;
+      }
+      void runBatchSearchExportJob(job);
       return;
     }
 

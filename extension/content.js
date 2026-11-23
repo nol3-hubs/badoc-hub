@@ -165,6 +165,7 @@
       "BADOC_START_FIRST_MILE_ORDERS_SYNC",
       "BADOC_START_FIRST_MILE_TASKS_SYNC",
       "BADOC_START_ASSIGNMENT_TASK_EXPORT",
+      "BADOC_START_BATCH_SEARCH_EXPORT",
       "BADOC_LOOKUP_PICKUP_INFO",
       "BADOC_ABORT_SYNC",    ]);
     if (!supported.has(data.type)) return;
@@ -194,8 +195,14 @@
       const payload = { type: data.type };
       if (data.type === "BADOC_LOOKUP_PICKUP_INFO") { payload.reqId=String(data.reqId||""); payload.orderId=String(data.orderId||"").trim(); }
       if (data.type === "BADOC_START_POD_CHECKER_ASSIGNED_TODAY" || data.type === "BADOC_START_POD_CHECKER_ONHOLD") payload.requestId=String(data.requestId||"");
-      if (data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC" || data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
+      if (data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC" || data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT" || data.type === "BADOC_START_BATCH_SEARCH_EXPORT") {
         if (data.selectedDate !== undefined) payload.selectedDate = String(data.selectedDate || "");
+      }
+      if (data.type === "BADOC_START_BATCH_SEARCH_EXPORT") {
+        payload.sourceTaskId = String(data.sourceTaskId || "");
+        payload.trackingNumbers = Array.isArray(data.trackingNumbers)
+          ? data.trackingNumbers.map(value => String(value || "").trim()).filter(Boolean)
+          : [];
       }
       if (data.type === "BADOC_START_RIDER_SYNC") {
         payload.hubId = Number(data.hubId || 0) || 0;
@@ -213,6 +220,14 @@
           kind: "assignment-task",
           selectedDate: String(data.selectedDate || ""),
           message: "Assignment Task command forwarded from the dashboard to the extension background."
+        });
+      }
+      if (data.type === "BADOC_START_BATCH_SEARCH_EXPORT") {
+        emit("BADOC_SPX_COMMAND_FORWARDED", {
+          kind: "batch-search-result",
+          selectedDate: String(data.selectedDate || ""),
+          trackingNumberCount: Array.isArray(data.trackingNumbers) ? data.trackingNumbers.length : 0,
+          message: "Batch Search Result command forwarded to the extension background."
         });
       }
       if (data.type === "BADOC_START_ASSIGNED_ONHOLD_TODAY") {
@@ -234,6 +249,7 @@
       }
     } catch (error) {
       const errorKind = data.type === "BADOC_START_ASSIGNMENT_TASK_EXPORT" ? "assignment-task" :
+        data.type === "BADOC_START_BATCH_SEARCH_EXPORT" ? "batch-search-result" :
         data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" ? "first-mile-orders" :
         data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC" ? "first-mile-tasks" :
         data.type === "BADOC_START_PARCEL_DELIVERY_SYNC" ? "parcel-delivery" :
