@@ -8460,7 +8460,7 @@ async function loadLiveKPI(){
         const zeroGoodThresholdMetrics=["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points"];
         if(actualNum!==null && zeroGoodThresholdMetrics.includes(name)){
           if(actualNum===0) card.classList.add("kpi-status-a");
-          else if(actualNum>=0.1) card.classList.add("kpi-status-below-b");
+          else if(actualNum>=0.1 || actualNum<0) card.classList.add("kpi-status-below-b");
         }else if(actualNum!==null){
           if(aNum!==null || bNum!==null){
             if(aNum!==null && meets(actualNum,aNum)) card.classList.add("kpi-status-a");
