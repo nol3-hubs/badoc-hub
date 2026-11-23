@@ -7,6 +7,10 @@ on:
       - "extension/**"
       - ".github/workflows/package-chrome-extension.yml"
 
+concurrency:
+  group: badoc-chrome-package
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
