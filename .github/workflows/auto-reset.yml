@@ -2,9 +2,15 @@ name: Badoc Hub cloud save + 12 AM reset (Manila)
 
 on:
   schedule:
-    - cron: '30 15 * * *'  # 23:30 Manila — primary preflight
-    - cron: '45 15 * * *'  # 23:45 Manila — backup preflight
-  workflow_dispatch:       # Manual runs are preflight-only; they never save or reset.
+    # Primary attempt at 11:30 PM Manila. Additional attempts every 30 minutes
+    # through 2:30 AM recover from GitHub's delayed or missed scheduled runs.
+    - cron: '30 15 * * *'
+    - cron: '0,30 16-18 * * *'
+  # Allows an independent external Manila-time scheduler to trigger the same
+  # guarded reset through the GitHub repository_dispatch API.
+  repository_dispatch:
+    types: [badoc-midnight-reset]
+  workflow_dispatch:       # Manual runs remain preflight-only; they never reset.
 
 permissions:
   contents: read
@@ -30,5 +36,5 @@ jobs:
       - name: Refresh shared cloud, save Daily History, then reset
         run: node tools/auto-reset.mjs
         env:
-          APP_URL: ${{ vars.APP_URL || 'https://nol3-hubs.github.io/Test2/' }}
+          APP_URL: ${{ vars.APP_URL || 'https://nol3-hubs.github.io/badoc-hub/' }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
