@@ -3,9 +3,9 @@ name: Badoc Hub cloud save + 12 AM reset (Manila)
 on:
   schedule:
     # Primary attempt at 11:30 PM Manila. Additional attempts every 30 minutes
-    # through 2:30 AM recover from GitHub's delayed or missed scheduled runs.
+    # through 2:45 AM recover from GitHub's delayed or missed scheduled runs.
     - cron: '30 15 * * *'
-    - cron: '0,30 16-18 * * *'
+    - cron: '15,45 16-18 * * *'
   # Allows an independent external Manila-time scheduler to trigger the same
   # guarded reset through the GitHub repository_dispatch API.
   repository_dispatch:
