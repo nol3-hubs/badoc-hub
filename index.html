@@ -10251,6 +10251,22 @@ window.DASHBOARD_V2_READY = true;
     try{
       const cloud=await downloadLedger();
       if(!cloud||!cloud.date)return true;
+      const today=__badocTime.dayKey();
+      const cloudDate=String(cloud.date||"");
+      // Never restore yesterday's scanned/unscanned membership into today's
+      // CFR1 ledger. Keep the existing eligibility, freeze, and status logic
+      // unchanged; only discard a stale in-memory snapshot at the day boundary.
+      if(cloudDate!==today){
+        const staleMemory=window.__badocCfr1LedgerMemory||null;
+        if(staleMemory && String(staleMemory.date||"")!==today){
+          window.__badocCfr1LedgerMemory=null;
+          lastCloudStamp=String(cloud._cloudUpdatedAt||"");
+          // Re-run the existing CFR1 calculation after this poll releases its
+          // lock, so today's ledger is rebuilt through the unchanged rules.
+          setTimeout(()=>{try{window.updateOperationProgress?.()}catch(e){console.warn("CFR1 daily refresh after stale-ledger discard:",e)}},0);
+        }
+        return true;
+      }
       const memory=window.__badocCfr1LedgerMemory||null;
       const cloudStamp=String(cloud._cloudUpdatedAt||"");
       if(!memory||memory.date!==cloud.date){
