@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 
 const APP_URL = process.env.APP_URL;
 const EVENT = process.env.GITHUB_EVENT_NAME || 'workflow_dispatch';
-const IS_SCHEDULED = EVENT === 'schedule';
+const IS_SCHEDULED = EVENT === 'schedule' || EVENT === 'repository_dispatch';
 const POLL_MS = Number(process.env.POLL_MS || 5000);
 const WAIT_TIMEOUT_MS = Number(process.env.WAIT_TIMEOUT_MS || 45 * 60 * 1000);
 
@@ -51,6 +51,62 @@ page.on('console', msg => {
 });
 page.on('pageerror', error => console.log('[pageerror]', error.message));
 
+async function verifyCloudReset(expectedDate) {
+  await page.waitForFunction(() => !!window.BadocCloud && !!window.BADOC_SHARED_CONFIG, null, { timeout: 60000 });
+  const report = await page.evaluate(async date => {
+    const cfg = window.BADOC_SHARED_CONFIG || {};
+    const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    });
+    const bucket = client.storage.from('exported-files');
+    const isMissing = async path => {
+      const result = await bucket.download(path);
+      if (!result.error) return false;
+      const code = String(result.error.code || '');
+      const message = String(result.error.message || '');
+      if (code === '404' || /not found|404|object not found/i.test(message)) return true;
+      throw new Error('Could not verify cleared cloud file ' + path + ': ' + (message || code || 'unknown error'));
+    };
+
+    const markerResult = await bucket.download('current/.badoc-daily-reset.json');
+    if (markerResult.error) throw new Error('Could not read cloud reset marker: ' + (markerResult.error.message || 'unknown error'));
+    const marker = JSON.parse(await markerResult.data.text());
+    const stateResult = await client.from('badoc_shared_state').select('*').eq('id', 1).maybeSingle();
+    if (stateResult.error) throw new Error('Could not verify shared parcel state: ' + (stateResult.error.message || 'unknown error'));
+    if (!stateResult.data) throw new Error('Shared parcel state row is missing after reset.');
+
+    const paths = [
+      'current/uploaded.csv',
+      'current/linehaul.csv',
+      'current/linehaul-arrival-flags.json',
+      'current/cfr1-ledger.json'
+    ];
+    const missing = await Promise.all(paths.map(isMissing));
+    return {
+      markerDate: String(marker && marker.date || ''),
+      uploadExists: stateResult.data.upload_exists === true,
+      linehaulExists: stateResult.data.linehaul_exists === true,
+      uploadFilePresent: !missing[0],
+      linehaulFilePresent: !missing[1],
+      linehaulArrivalFlagsPresent: !missing[2],
+      cfr1LedgerPresent: !missing[3],
+      localValidRows: typeof current !== 'undefined' && Array.isArray(current && current.valid) ? current.valid.length : 0,
+      localBatchCount: typeof batches !== 'undefined' && Array.isArray(batches) ? batches.length : 0
+    };
+  }, expectedDate);
+
+  const failures = [];
+  if (report.markerDate !== expectedDate) failures.push('cloud reset marker date is ' + (report.markerDate || 'missing'));
+  if (report.uploadExists || report.uploadFilePresent) failures.push('uploaded parcel data still exists in shared cloud');
+  if (report.linehaulExists || report.linehaulFilePresent || report.linehaulArrivalFlagsPresent) failures.push('linehaul data still exists in shared cloud');
+  if (report.cfr1LedgerPresent) failures.push('CFR1 cloud ledger still exists');
+  if (report.localValidRows !== 0 || report.localBatchCount !== 0) failures.push('local parcel working data is not empty');
+  if (failures.length) throw new Error('Midnight reset verification failed: ' + failures.join('; '));
+
+  console.log('Cloud and local reset verification passed: ' + JSON.stringify(report));
+  return report;
+}
+
 try {
   // Hold the dashboard's own reset timer until this job explicitly releases it.
   await page.addInitScript(() => { window.__BADOC_GITHUB_AUTOMATION_HOLD_RESET = true; });
@@ -80,6 +136,8 @@ try {
   });
 
   if (IS_SCHEDULED && markerDate === resetDate) {
+    console.log('Reset marker already exists for ' + resetDate + '; verifying the shared cloud before skipping.');
+    await verifyCloudReset(resetDate);
     console.log('Already reset for ' + resetDate + '; leaving data untouched.');
     process.exit(0);
   }
@@ -196,10 +254,21 @@ try {
   await page.waitForFunction(date => {
     try {
       const status = JSON.parse(localStorage.getItem('badoc_reset_status') || 'null');
-      return status && status.date === date && (status.state === 'done' || status.state === 'already-done');
+      return status && status.date === date &&
+        (status.state === 'done' || status.state === 'already-done' || status.state === 'failed');
     } catch (_) { return false; }
   }, resetDate, { timeout: 8 * 60 * 1000, polling: POLL_MS });
-  console.log('Daily History, CFR summary, and guarded 12:00 AM reset completed for ' + resetDate + '.');
+
+  const resetStatus = await page.evaluate(() => {
+    try { return JSON.parse(localStorage.getItem('badoc_reset_status') || 'null'); }
+    catch (_) { return null; }
+  });
+  if (!resetStatus || (resetStatus.state !== 'done' && resetStatus.state !== 'already-done')) {
+    throw new Error('Dashboard reset did not complete: ' + JSON.stringify(resetStatus || {}));
+  }
+
+  await verifyCloudReset(resetDate);
+  console.log('Daily History, CFR summary, and verified 12:00 AM reset completed for ' + resetDate + '.');
 } catch (error) {
   console.error('GitHub-only automation stopped safely: ' + (error && (error.stack || error)));
   process.exitCode = 1;
