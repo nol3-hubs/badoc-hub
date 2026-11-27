@@ -215,10 +215,21 @@ async function repairCfr1ForCurrentDay(expectedDate, previousDate) {
     }, expectedDate, { timeout: 45000, polling: 1000 });
     persisted = await readCfr1CloudLedger();
   } else {
+    // The publish/delete operation is asynchronous. Wait for the stale cloud
+    // object to disappear (or for a current-day ledger to replace it).
+    await page.waitForFunction(async date => {
+      try {
+        const cfg = window.BADOC_SHARED_CONFIG || {};
+        const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        });
+        const result = await client.storage.from('exported-files').download('current/cfr1-ledger.json');
+        if (result.error) return /not found|404|object not found/i.test(result.error.message || '');
+        const ledger = JSON.parse(await result.data.text());
+        return String(ledger.date || '') === date;
+      } catch (_) { return false; }
+    }, expectedDate, { timeout: 45000, polling: 1000 });
     persisted = await readCfr1CloudLedger();
-    if (persisted && persisted.date !== expectedDate) {
-      throw new Error('Previous-day CFR1 ledger remains after an empty rebuild: ' + JSON.stringify(persisted));
-    }
   }
   return { rebuilt: true, before, live, persisted };
 }
