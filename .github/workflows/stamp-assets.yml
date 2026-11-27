@@ -1,0 +1,39 @@
+name: Stamp asset versions
+
+# Keeps index.html's ?v=<hash> parameters and sw.js's precache list in sync with js/ and css/.
+# Runs on every push that touches those files and commits only if something actually changed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "js/**"
+      - "css/**"
+      - "actual-scanned.js"
+      - "extension/pod-checker/app.js"
+      - "index.html"
+      - "tools/stamp-assets.mjs"
+
+concurrency:
+  group: badoc-stamp-assets
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  stamp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node tools/stamp-assets.mjs
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html sw.js
+          if git diff --cached --quiet; then echo "Already stamped."; exit 0; fi
+          git commit -m "Stamp asset versions"
+          git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"

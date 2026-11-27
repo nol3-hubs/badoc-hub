@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badoc Hub Extension",
-  "version": "1.5.32",
-  "description": "Badoc Hub extension with robust SPX Batch Search popup and Submit detection, green search confirmation, automatic Export hover, temporary Order Tracking tabs, and live Pickup Info.",
+  "version": "1.6.7",
+  "description": "Badoc Hub extension with SPX exports, live Pickup Info, and parallel Sync All job support.",
   "permissions": [
     "cookies",
     "scripting",

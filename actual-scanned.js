@@ -1,6 +1,13 @@
 (function(){
 "use strict";
 function byId(id){return document.getElementById(id)}
+const ALL_DATES_VALUE="__ALL_DATES__";
+let lastRenderManilaDayKey="";
+function manilaTodayKey(){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const p={};parts.forEach(part=>{if(part.type!=="literal")p[part.type]=part.value});
+  return p.year+"-"+p.month+"-"+p.day;
+}
 function norm(v){return String(v??"").trim().toUpperCase().replace(/\s+/g," ")}
 function key(v){return norm(v).replace(/[^A-Z0-9]/g,"")}
 function value(row,names){
@@ -146,24 +153,33 @@ function optionList(values,selected,label){
 function render(){
   const root=byId("actualScannedByRiders");if(!root)return;
   const data=build(),all=data.records;
-  const ids=["date","vehicle","town","compare","status","search"];
+  const today=manilaTodayKey(),dateSelect=byId("actualScanDate");
+  let requestedDate=dateSelect?.value||"";
+  if(lastRenderManilaDayKey&&lastRenderManilaDayKey!==today)requestedDate=today;
+  if(!requestedDate)requestedDate=today;
+  lastRenderManilaDayKey=today;
+  const dates=[...new Set([today,...all.map(r=>r.date).filter(Boolean)])].sort().reverse();
+  if(dateSelect){
+    const chosen=requestedDate===ALL_DATES_VALUE?ALL_DATES_VALUE:(dates.includes(requestedDate)?requestedDate:today);
+    dateSelect.innerHTML='<option value="'+ALL_DATES_VALUE+'">All dates</option>'+dates.map(d=>'<option value="'+esc(d)+'">'+esc(d)+'</option>').join("");
+    dateSelect.value=chosen;
+  }
   const selected={
-    date:byId("actualScanDate")?.value||"",vehicle:byId("actualScanVehicle")?.value||"",
+    date:dateSelect?.value||today,vehicle:byId("actualScanVehicle")?.value||"",
     rider:byId("actualScanRider")?.value||"",town:byId("actualScanTown")?.value||"",compare:byId("actualScanCompare")?.value||"",
     status:byId("actualScanStatus")?.value||"",search:byId("actualScanSearch")?.value||""
   };
-  const dates=[...new Set(all.map(r=>r.date).filter(Boolean))].sort().reverse();
   const riderOptions=[...new Map(all.filter(r=>r.hasScanner).map(r=>[r.riderKey,r.actualName])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
   const towns=[...new Set(all.map(r=>r.town).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const statuses=[...new Set(all.map(r=>r.status).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const riderSelect=byId("actualScanRider");
   if(riderSelect){riderSelect.innerHTML='<option value="">All riders</option>'+riderOptions.map(x=>'<option value="'+esc(x[0])+'"'+(x[0]===selected.rider?' selected':'')+'>'+esc(x[1])+'</option>').join("");if(riderOptions.some(x=>x[0]===selected.rider))riderSelect.value=selected.rider;}
-  [["actualScanDate",dates,selected.date,"All dates"],["actualScanTown",towns,selected.town,"All towns"],["actualScanStatus",statuses,selected.status,"All statuses"]].forEach(x=>{
+  [["actualScanTown",towns,selected.town,"All towns"],["actualScanStatus",statuses,selected.status,"All statuses"]].forEach(x=>{
     const el=byId(x[0]);if(!el)return;el.innerHTML=optionList(x[1],x[2],x[3]);if(x[1].includes(x[2]))el.value=x[2];
   });
   const q=norm(selected.search);
   const rows=all.filter(r=>{
-    if(selected.date&&r.date!==selected.date)return false;
+    if(selected.date&&selected.date!==ALL_DATES_VALUE&&r.date!==selected.date)return false;
     if(selected.vehicle&&r.vehicle!==selected.vehicle)return false;
     if(selected.rider&&r.riderKey!==selected.rider)return false;
     if(selected.town&&r.town!==selected.town)return false;

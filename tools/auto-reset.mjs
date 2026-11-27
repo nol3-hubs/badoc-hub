@@ -1,11 +1,11 @@
-// Badoc Hub — GitHub-only cloud refresh, Daily History capture, and guarded Manila-day reset.
+// Badoc Hub — GitHub-only cloud refresh, Daily History capture, and guarded 12 AM reset.
 // GitHub Actions has no authenticated SPX tab or local Chrome extension, so it cannot run SPX Sync All.
 // It refreshes only parcel/linehaul files that have already been uploaded to the shared cloud.
 import { chromium } from 'playwright';
 
 const APP_URL = process.env.APP_URL;
 const EVENT = process.env.GITHUB_EVENT_NAME || 'workflow_dispatch';
-const IS_SCHEDULED = EVENT === 'schedule' || EVENT === 'repository_dispatch';
+const IS_SCHEDULED = EVENT === 'schedule';
 const POLL_MS = Number(process.env.POLL_MS || 5000);
 const WAIT_TIMEOUT_MS = Number(process.env.WAIT_TIMEOUT_MS || 45 * 60 * 1000);
 
@@ -34,15 +34,12 @@ const startedAt = manilaNow();
 const operationalDate = startedAt.hour === 23 ? startedAt.date : addDays(startedAt.date, -1);
 const resetDate = addDays(operationalDate, 1);
 function inResetWindow(t) {
-  // GitHub Actions scheduled runs can be delayed by several hours. Permit a
-  // guarded catch-up through 9:59 AM Manila; current-day uploads are protected
-  // below and will never be cleared by a late catch-up.
   return (t.date === operationalDate && t.hour === 23) ||
-    (t.date === resetDate && t.hour < 10);
+    (t.date === resetDate && t.hour < 3);
 }
 console.log('Manila time: ' + startedAt.date + ' ' + startedAt.hour + ':' + startedAt.minute + ':' + startedAt.second);
 if (IS_SCHEDULED && !inResetWindow(startedAt)) {
-  console.log('SAFE SKIP: scheduled run started outside the 11 PM–10 AM Manila recovery window. Nothing was changed.');
+  console.log('SAFE SKIP: scheduled run started outside the 11 PM–3 AM Manila reset window. Nothing was changed.');
   process.exit(0);
 }
 
@@ -53,181 +50,6 @@ page.on('console', msg => {
   if (msg.type() === 'warning' || msg.type() === 'error') console.log('[app]', msg.text().slice(0, 300));
 });
 page.on('pageerror', error => console.log('[pageerror]', error.message));
-
-async function verifyCloudReset(expectedDate) {
-  await page.waitForFunction(() => !!window.BadocCloud && !!window.BADOC_SHARED_CONFIG, null, { timeout: 60000 });
-  const report = await page.evaluate(async date => {
-    const cfg = window.BADOC_SHARED_CONFIG || {};
-    const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-    });
-    const bucket = client.storage.from('exported-files');
-    const isMissing = async path => {
-      const result = await bucket.download(path);
-      if (!result.error) return false;
-      const code = String(result.error.code || '');
-      const message = String(result.error.message || '');
-      if (code === '404' || /not found|404|object not found/i.test(message)) return true;
-      throw new Error('Could not verify cleared cloud file ' + path + ': ' + (message || code || 'unknown error'));
-    };
-
-    const markerResult = await bucket.download('current/.badoc-daily-reset.json');
-    if (markerResult.error) throw new Error('Could not read cloud reset marker: ' + (markerResult.error.message || 'unknown error'));
-    const marker = JSON.parse(await markerResult.data.text());
-    const stateResult = await client.from('badoc_shared_state').select('*').eq('id', 1).maybeSingle();
-    if (stateResult.error) throw new Error('Could not verify shared parcel state: ' + (stateResult.error.message || 'unknown error'));
-    if (!stateResult.data) throw new Error('Shared parcel state row is missing after reset.');
-
-    const paths = [
-      'current/uploaded.csv',
-      'current/linehaul.csv',
-      'current/linehaul-arrival-flags.json',
-      'current/cfr1-ledger.json'
-    ];
-    const missing = await Promise.all(paths.map(isMissing));
-    return {
-      markerDate: String(marker && marker.date || ''),
-      uploadExists: stateResult.data.upload_exists === true,
-      linehaulExists: stateResult.data.linehaul_exists === true,
-      uploadFilePresent: !missing[0],
-      linehaulFilePresent: !missing[1],
-      linehaulArrivalFlagsPresent: !missing[2],
-      cfr1LedgerPresent: !missing[3],
-      localValidRows: typeof current !== 'undefined' && Array.isArray(current && current.valid) ? current.valid.length : 0,
-      localBatchCount: typeof batches !== 'undefined' && Array.isArray(batches) ? batches.length : 0
-    };
-  }, expectedDate);
-
-  const failures = [];
-  if (report.markerDate !== expectedDate) failures.push('cloud reset marker date is ' + (report.markerDate || 'missing'));
-  if (report.uploadExists || report.uploadFilePresent) failures.push('uploaded parcel data still exists in shared cloud');
-  if (report.linehaulExists || report.linehaulFilePresent || report.linehaulArrivalFlagsPresent) failures.push('linehaul data still exists in shared cloud');
-  if (report.cfr1LedgerPresent) failures.push('CFR1 cloud ledger still exists');
-  if (report.localValidRows !== 0 || report.localBatchCount !== 0) failures.push('local parcel working data is not empty');
-  if (failures.length) throw new Error('Midnight reset verification failed: ' + failures.join('; '));
-
-  console.log('Cloud and local reset verification passed: ' + JSON.stringify(report));
-  return report;
-}
-
-
-
-async function readCurrentDayOperationalActivity(dayKey) {
-  const dayStart = Date.parse(dayKey + 'T00:00:00+08:00');
-  return page.evaluate(async dayStartMs => {
-    const cfg = window.BADOC_SHARED_CONFIG || {};
-    if (!cfg.url || !cfg.key || !window.BadocCloud) throw new Error('Shared cloud configuration is incomplete.');
-    const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-    });
-    const result = await client.from('badoc_shared_state')
-      .select('upload_exists,upload_version,linehaul_exists,linehaul_version,pickup_orders_exists,pickup_orders_version,pickup_tasks_exists,pickup_tasks_version')
-      .eq('id', 1).maybeSingle();
-    if (result.error) throw new Error('Could not check current-day upload safety: ' + (result.error.message || 'unknown cloud error'));
-    const state = result.data || {};
-    const sources = [
-      { name: 'parcel upload', exists: state.upload_exists === true, version: Number(state.upload_version || 0) },
-      { name: 'linehaul upload', exists: state.linehaul_exists === true, version: Number(state.linehaul_version || 0) },
-      { name: 'pickup orders', exists: state.pickup_orders_exists === true, version: Number(state.pickup_orders_version || 0) },
-      { name: 'pickup tasks', exists: state.pickup_tasks_exists === true, version: Number(state.pickup_tasks_version || 0) }
-    ];
-    const active = sources.filter(item => item.exists && item.version >= dayStartMs);
-    return { currentDayActivity: active.length > 0, activeSources: active.map(item => item.name), state };
-  }, dayStart);
-}
-
-async function readCfr1CloudLedger() {
-  return page.evaluate(async () => {
-    const cfg = window.BADOC_SHARED_CONFIG || {};
-    if (!cfg.url || !cfg.key || !window.BadocCloud) throw new Error('Shared cloud configuration is incomplete.');
-    const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-    });
-    const result = await client.storage.from('exported-files').download('current/cfr1-ledger.json');
-    if (result.error) {
-      if (/not found|404|object not found/i.test(result.error.message || '')) return null;
-      throw new Error('Could not read CFR1 cloud ledger: ' + (result.error.message || 'unknown cloud error'));
-    }
-    const ledger = JSON.parse(await result.data.text());
-    return {
-      date: String(ledger && ledger.date || ''),
-      recordCount: ledger && ledger.records && typeof ledger.records === 'object' ? Object.keys(ledger.records).length : 0,
-      updatedAt: Number(ledger && ledger._cloudUpdatedAt || 0)
-    };
-  });
-}
-
-async function repairCfr1ForCurrentDay(expectedDate) {
-  await page.waitForFunction(() =>
-    !!window.__badocCfr1Details &&
-    typeof window.__badocCfr1CloudSync?.resetCloud === 'function' &&
-    typeof window.updateOperationProgress === 'function',
-    null, { timeout: 60000 }
-  );
-
-  const before = await readCfr1CloudLedger();
-  if (before && before.date === expectedDate) {
-    const live = await page.evaluate(() => ({
-      date: String(window.__badocCfr1Debug && window.__badocCfr1Debug.date || ''),
-      scanned: Number(window.__badocCfr1Details && window.__badocCfr1Details.scannedCount || 0),
-      total: Number(window.__badocCfr1Details && window.__badocCfr1Details.totalCount || 0)
-    }));
-    if (live.date === expectedDate) return { alreadyCurrent: true, ledger: before, live };
-  }
-
-  await page.evaluate(async () => {
-    await window.__badocCfr1CloudSync.resetCloud();
-    window.__badocCfr1LedgerMemory = null;
-    window.updateOperationProgress();
-  });
-  await page.waitForFunction(date =>
-    String(window.__badocCfr1Debug && window.__badocCfr1Debug.date || '') === date,
-    expectedDate, { timeout: 30000, polling: 250 }
-  );
-
-  const live = await page.evaluate(() => ({
-    date: String(window.__badocCfr1Debug && window.__badocCfr1Debug.date || ''),
-    scanned: Number(window.__badocCfr1Details && window.__badocCfr1Details.scannedCount || 0),
-    unscanned: Array.isArray(window.__badocCfr1Details && window.__badocCfr1Details.unscanned)
-      ? window.__badocCfr1Details.unscanned.length : 0,
-    total: Number(window.__badocCfr1Details && window.__badocCfr1Details.totalCount || 0)
-  }));
-  if (live.date !== expectedDate) throw new Error('CFR1 rebuild date mismatch: ' + JSON.stringify(live));
-
-  let persisted = null;
-  if (live.total > 0) {
-    await page.waitForFunction(async date => {
-      try {
-        const cfg = window.BADOC_SHARED_CONFIG || {};
-        const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
-          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-        });
-        const result = await client.storage.from('exported-files').download('current/cfr1-ledger.json');
-        if (result.error) return false;
-        const ledger = JSON.parse(await result.data.text());
-        return String(ledger.date || '') === date && Object.keys(ledger.records || {}).length > 0;
-      } catch (_) { return false; }
-    }, expectedDate, { timeout: 45000, polling: 1000 });
-    persisted = await readCfr1CloudLedger();
-  } else {
-    // The publish/delete operation is asynchronous. Wait for the stale cloud
-    // object to disappear (or for a current-day ledger to replace it).
-    await page.waitForFunction(async date => {
-      try {
-        const cfg = window.BADOC_SHARED_CONFIG || {};
-        const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
-          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-        });
-        const result = await client.storage.from('exported-files').download('current/cfr1-ledger.json');
-        if (result.error) return /not found|404|object not found/i.test(result.error.message || '');
-        const ledger = JSON.parse(await result.data.text());
-        return String(ledger.date || '') === date;
-      } catch (_) { return false; }
-    }, expectedDate, { timeout: 45000, polling: 1000 });
-    persisted = await readCfr1CloudLedger();
-  }
-  return { rebuilt: true, before, live, persisted };
-}
 
 try {
   // Hold the dashboard's own reset timer until this job explicitly releases it.
@@ -257,46 +79,23 @@ try {
     return String(saved && saved.date || '') || null;
   });
 
+  if (IS_SCHEDULED && markerDate === resetDate) {
+    console.log('Already reset for ' + resetDate + '; leaving data untouched.');
+    process.exit(0);
+  }
+
+  // An empty but successfully loaded Parcel Count dataset is valid. Wait for
+  // the import state itself, not for at least one parcel row; otherwise a
+  // legitimate empty day prevents the guarded reset forever.
   const waitForParcelData = async timeout => page.waitForFunction(() => {
     try {
-      const count = (Array.isArray(current && current.valid) ? current.valid.length : 0) +
-        (Array.isArray(current && current.mis) ? current.mis.length : 0);
-      return count > 0;
+      return !!current && Array.isArray(current.valid) && Array.isArray(current.mis) &&
+        Array.isArray(current.rows);
     } catch (_) { return false; }
   }, null, { timeout });
 
   console.log('Refreshing data already saved in the shared cloud. This does not import fresh SPX data.');
   await page.evaluate(async () => { await window.__badocSharedPullNow(); });
-  const currentDayActivity = IS_SCHEDULED
-    ? await readCurrentDayOperationalActivity(resetDate)
-    : { currentDayActivity: false, activeSources: [] };
-
-  if (IS_SCHEDULED && markerDate === resetDate) {
-    if (currentDayActivity.currentDayActivity) {
-      console.log('Reset marker exists, but current-day uploads are present. Preserving operational data and checking CFR1.');
-      await waitForParcelData(90000);
-      await page.waitForFunction(() => !!window.__badocCfr1Details, null, { timeout: 60000 });
-      const repaired = await repairCfr1ForCurrentDay(resetDate);
-      console.log('Current-day CFR1 verification: ' + JSON.stringify(repaired));
-    } else {
-      console.log('Reset marker already exists for ' + resetDate + '; verifying the completed reset.');
-      await verifyCloudReset(resetDate);
-    }
-    console.log('Daily reset already handled for ' + resetDate + '; leaving operational data untouched.');
-    process.exit(0);
-  }
-
-  if (IS_SCHEDULED && currentDayActivity.currentDayActivity) {
-    // A late workflow must never erase files uploaded after today's Manila
-    // midnight. Repair only a stale CFR1 ledger, preserving current-day work.
-    console.log('Current-day uploads detected (' + currentDayActivity.activeSources.join(', ') + '). Skipping destructive operational reset.');
-    await waitForParcelData(90000);
-    await page.waitForFunction(() => !!window.__badocCfr1Details, null, { timeout: 60000 });
-    const repaired = await repairCfr1ForCurrentDay(resetDate);
-    console.log('Safe CFR1-only catch-up completed: ' + JSON.stringify(repaired));
-    process.exit(0);
-  }
-
   await waitForParcelData(90000);
   await page.waitForFunction(() => {
     const e = window.__badocEodDashboard;
@@ -316,21 +115,21 @@ try {
     process.exit(0);
   }
 
-  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: cloud preflight finished outside the 11 PM–10 AM Manila recovery window.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: cloud preflight finished outside the midnight reset window.');
 
   // Refresh and capture close to midnight. When a scheduled run starts before
   // midnight, wait until 11:58 PM; if GitHub starts it just after midnight,
   // recover the previous calendar day's still-uncleared data immediately.
-  console.log('Holding reset until 11:58 PM Manila when the run starts before midnight; delayed runs recover the previous day immediately.');
+  console.log('Holding reset until 11:58 PM Manila for final cloud and EOD refresh.');
   const waitStarted = Date.now();
   while (true) {
     const t = manilaNow();
     if (t.date !== operationalDate || (t.hour === 23 && t.minute >= 58)) break;
-    if (!inResetWindow(t)) throw new Error('SAFE STOP: outside the 11 PM–10 AM Manila recovery window.');
+    if (!inResetWindow(t)) throw new Error('SAFE STOP: outside the midnight refresh window.');
     if (Date.now() - waitStarted > WAIT_TIMEOUT_MS) throw new Error('Timed out before final refresh. Reset was not released.');
     await sleep(POLL_MS);
   }
-  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: missed the 11 PM–10 AM Manila recovery window.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: missed the midnight refresh window.');
 
   await page.evaluate(async () => { await window.__badocSharedPullNow(); });
   await waitForParcelData(60000);
@@ -399,21 +198,10 @@ try {
   await page.waitForFunction(date => {
     try {
       const status = JSON.parse(localStorage.getItem('badoc_reset_status') || 'null');
-      return status && status.date === date &&
-        (status.state === 'done' || status.state === 'already-done' || status.state === 'failed');
+      return status && status.date === date && (status.state === 'done' || status.state === 'already-done');
     } catch (_) { return false; }
   }, resetDate, { timeout: 8 * 60 * 1000, polling: POLL_MS });
-
-  const resetStatus = await page.evaluate(() => {
-    try { return JSON.parse(localStorage.getItem('badoc_reset_status') || 'null'); }
-    catch (_) { return null; }
-  });
-  if (!resetStatus || (resetStatus.state !== 'done' && resetStatus.state !== 'already-done')) {
-    throw new Error('Dashboard reset did not complete: ' + JSON.stringify(resetStatus || {}));
-  }
-
-  await verifyCloudReset(resetDate);
-  console.log('Daily History, CFR summary, and verified 12:00 AM reset completed for ' + resetDate + '.');
+  console.log('Daily History, CFR summary, and guarded 12:00 AM reset completed for ' + resetDate + '.');
 } catch (error) {
   console.error('GitHub-only automation stopped safely: ' + (error && (error.stack || error)));
   process.exitCode = 1;

@@ -6,6 +6,8 @@ on:
     paths:
       - "extension/**"
       - ".github/workflows/package-chrome-extension.yml"
+      - "tools/sync_bridge.py"
+      - "tools/stamp-assets.mjs"
 
 concurrency:
   group: badoc-chrome-package
@@ -20,6 +22,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Validate package
         shell: bash
         run: |
@@ -53,61 +59,8 @@ jobs:
       - name: Refresh embedded Chrome bridge in dashboard
         shell: bash
         run: |
-          python3 - <<'PY'
-          import base64
-          import json
-          import re
-          from pathlib import Path
-
-          root = Path("extension")
-          files = {
-              path.relative_to(root).as_posix(): base64.b64encode(path.read_bytes()).decode("ascii")
-              for path in sorted(root.rglob("*"))
-              if path.is_file()
-          }
-          index_path = Path("index.html")
-          html = index_path.read_text(encoding="utf-8")
-          assignment = "window.BADOC_BRIDGE_FILES=" + json.dumps(files, separators=(",", ":")) + ";"
-          pattern = re.compile(r"window\.BADOC_BRIDGE_FILES\s*=\s*\{.*?\}\s*;", re.DOTALL)
-          updated, count = pattern.subn(lambda _match: assignment, html, count=1)
-          if count != 1:
-              raise SystemExit(f"Expected one embedded bridge file map in index.html; found {count}.")
-          # Keep the dashboard's minimum Chrome package version synchronized
-          # with the exact extension package embedded above.
-          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-          chrome_version = manifest["version"]
-          required_pattern = re.compile(r'(const\s+REQUIRED_CHROME_VERSION\s*=\s*["\'])[^"\']+(["\'];)')
-          updated, required_count = required_pattern.subn(
-              lambda match: match.group(1) + chrome_version + match.group(2),
-              updated,
-              count=1
-          )
-          if required_count != 1:
-              raise SystemExit(
-                  "Expected one REQUIRED_CHROME_VERSION declaration in index.html; "
-                  f"found {required_count}."
-              )
-
-          settings_pattern = re.compile(
-              r'(const\s+required\s*=\s*firefox\s*\?\s*["\']Firefox\s+[^"\']+["\']\s*:\s*["\']Chrome\s+)[^"\']+(["\'];)'
-          )
-          updated, settings_count = settings_pattern.subn(
-              lambda match: match.group(1) + chrome_version + match.group(2),
-              updated,
-              count=1
-          )
-          if settings_count != 1:
-              raise SystemExit(
-                  "Expected one Settings-page Chrome required-version label in index.html; "
-                  f"found {settings_count}."
-              )
-
-
-
-
-
-          index_path.write_text(updated, encoding="utf-8")
-          print(f"Embedded {len(files)} Chrome extension files and synchronized required version {chrome_version} in index.html.")
+          python3 tools/sync_bridge.py
+          node tools/stamp-assets.mjs
 
       - name: Publish ZIP in repository
         shell: bash
@@ -122,104 +75,9 @@ jobs:
             mkdir -p downloads
             cp -f "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" downloads/
             cp -f "SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256" downloads/
-            python3 - <<'PY'
-          import base64
-          import json
-          import re
-          from pathlib import Path
-          
-          root = Path("extension")
-          files = {
-              path.relative_to(root).as_posix(): base64.b64encode(path.read_bytes()).decode("ascii")
-              for path in sorted(root.rglob("*"))
-              if path.is_file()
-          }
-          index_path = Path("index.html")
-          html = index_path.read_text(encoding="utf-8")
-          assignment = "window.BADOC_BRIDGE_FILES=" + json.dumps(files, separators=(",", ":")) + ";"
-          pattern = re.compile(r"window\.BADOC_BRIDGE_FILES\s*=\s*\{.*?\}\s*;", re.DOTALL)
-          updated, count = pattern.subn(lambda _match: assignment, html, count=1)
-          if count != 1:
-              raise SystemExit(f"Expected one embedded bridge file map in index.html; found {count}.")
-          
-          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-          chrome_version = manifest["version"]
-          required_pattern = re.compile(r'(const\s+REQUIRED_CHROME_VERSION\s*=\s*["\'])[^"\']+(["\'];)')
-          updated, required_count = required_pattern.subn(
-              lambda match: match.group(1) + chrome_version + match.group(2),
-              updated,
-              count=1
-          )
-          if required_count != 1:
-              raise SystemExit(f"Expected one REQUIRED_CHROME_VERSION declaration; found {required_count}.")
-          
-          settings_pattern = re.compile(
-              r'(const\s+required\s*=\s*firefox\s*\?\s*["\']Firefox\s+[^"\']+["\']\s*:\s*["\']Chrome\s+)[^"\']+(["\'];)'
-          )
-          updated, settings_count = settings_pattern.subn(
-              lambda match: match.group(1) + chrome_version + match.group(2),
-              updated,
-              count=1
-          )
-          if settings_count != 1:
-              raise SystemExit(f"Expected one Settings-page Chrome version label; found {settings_count}.")
-          # Apply the Hub Compliance fallback once. The sentinel prevents duplicate insertion on later package runs.
-          # Add the Hub Compliance fallback only when the mapping is not already present.
-          if 'v.actual=v.weight;' not in updated:
-              card_marker = '        const v=getMetricValue(rows,block.data,block.metricHeader,name);'
-              card_replacement = "\n".join([
-                  '        const v=getMetricValue(rows,block.data,block.metricHeader,name);',
-                  '        // BADOC_HUB_COMPLIANCE_SCORE_WEIGHT_FALLBACK_V1',
-                  '        if(name==="Hub Compliance Score"){',
-                  '          const actualText=String(v.actual??"").trim();',
-                  '          const weightText=String(v.weight??"").trim();',
-                  '          if((!actualText || actualText==="—") && weightText){',
-                  '            v.actual=v.weight;',
-                  '            v.weight="";',
-                  '          }',
-                  '        }'
-              ])
-              card_count = updated.count(card_marker)
-              if card_count != 1:
-                  raise SystemExit(f"Expected one KPI card value-rendering point in index.html; found {card_count}.")
-              updated = updated.replace(card_marker, card_replacement, 1)
-          # Zero is green; 0.1 and above is red for these three metrics.
-          threshold_patch = "\n".join([
-              '        const zeroGoodThresholdMetrics=["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points"];',
-              '        if(actualNum!==null && zeroGoodThresholdMetrics.includes(name)){',
-              '          if(actualNum===0) card.classList.add("kpi-status-a");',
-              '          else if(actualNum>=0.1) card.classList.add("kpi-status-below-b");',
-              '        }else if(actualNum!==null){'
-          ])
-          threshold_parts = updated.split(threshold_patch)
-          if len(threshold_parts) > 1:
-              updated = threshold_parts[0] + threshold_patch + "".join(threshold_parts[1:])
-          else:
-              color_marker = '        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;' + chr(10) + '        if(actualNum!==null){'
-              color_replacement = "\n".join([
-                  '        const meets=(actual,target)=>lowerIsBetter?actual<=target:actual>=target;',
-                  '        const zeroGoodThresholdMetrics=["Hub Compliance Score","Feeder Fraud","Linehaul Arrival Points"];',
-                  '        if(actualNum!==null && zeroGoodThresholdMetrics.includes(name)){',
-                  '          if(actualNum===0) card.classList.add("kpi-status-a");',
-                  '          else if(actualNum>=0.1) card.classList.add("kpi-status-below-b");',
-                  '        }else if(actualNum!==null){'
-              ])
-              color_count = updated.count(color_marker)
-              if color_count != 1:
-                  raise SystemExit(f"Expected one KPI threshold-coloring block in index.html; found {color_count}.")
-              updated = updated.replace(color_marker, color_replacement, 1)
-
-          # A negative compliance/fraud score is also a non-zero exception and must be red.
-          old_red_rule = 'else if(actualNum>=0.1) card.classList.add("kpi-status-below-b");'
-          new_red_rule = 'else if(actualNum>=0.1 || actualNum<0) card.classList.add("kpi-status-below-b");'
-          if old_red_rule in updated:
-              updated = updated.replace(old_red_rule, new_red_rule)
-          elif new_red_rule not in updated:
-              raise SystemExit("Could not find the zero-good KPI red threshold rule in index.html.")
-          index_path.write_text(updated, encoding="utf-8")
-          print(f"Embedded {len(files)} Chrome files and synchronized required version {chrome_version}.")
-          PY
-            git add index.html "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
+            python3 tools/sync_bridge.py
+            node tools/stamp-assets.mjs
+            git add index.html sw.js js "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.zip" "downloads/SPX-BRIDGE-BADOC-HUB-CHROME-${PACKAGE_VERSION}.sha256"
             if git diff --cached --quiet; then
               echo "Chrome package files are already current."
               published=1

@@ -1,0 +1,28 @@
+BADOC HUB — FULL APP PACKAGE / UPLOAD NOTES
+Build date: November 25, 2026
+
+WHAT IS INCLUDED
+- Complete modular dashboard app (index.html, js/, css/, service worker, icons, manifest)
+- Chrome and Firefox extension source and the bundled installer artifacts
+- Tools and regression tests
+- Pickup timestamp merge fix for the fixed 3:00 PM Manila OnHold rule
+- Ever OnHold / Current OnHold history module for Actual Scanned by Riders
+
+IMPORTANT SOURCE WARNING
+This ZIP is based on the latest complete saved modular Test2-derived build (November 23, 2026). It is NOT an exact export of the current production nol3-hubs/badoc-hub main branch, which uses a different monolithic index.html app structure. Do not upload this archive over that production branch unless you intentionally want to replace it with this modular Test2-derived build.
+
+UPLOAD STRUCTURE
+The archive contains one top-level folder named badoc-hub-main/. If deploying this modular build to its intended matching repository, extract the ZIP and upload the CONTENTS of badoc-hub-main/ into the repository root. Keep relative folders (js/, css/, extension/, extension-firefox/, icons/, downloads/, tools/, .github/) intact. Do not upload only index.html.
+
+ONHOLD HISTORY STORAGE
+Historical OnHold events are stored in this browser's IndexedDB. They do not automatically sync to another computer/browser. Events already lost from all available exports and local storage cannot be reconstructed unless an old export still contains an explicit OnHold status or OnHold Time.
+
+CHECKS PERFORMED
+- 12 automated regression tests passed.
+- JavaScript syntax checks passed for the app JS and extension JS files.
+- Asset hashes and the service-worker precache were regenerated.
+- ZIP integrity will be checked after packaging.
+
+NOT YET VERIFIED
+- No live browser end-to-end test against Shopee SPX was performed.
+- Firebase/cloud cross-device synchronization of this new OnHold history store is not implemented.

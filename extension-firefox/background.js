@@ -3,6 +3,10 @@ const extApi = globalThis.browser || globalThis.chrome;
 if (!extApi) throw new Error("WebExtensions API is unavailable.");
 
 const SPX_ORIGIN = "https://spx.shopee.ph";
+const ASSIGNMENT_TASK_EXPORT_PATH = "/spx_delivery/admin/assignment/assignment_task/export";
+const ASSIGNMENT_TASK_EXPORT_BIZ_NAME = "delivery_mgt";
+const ASSIGNMENT_TASK_EXPORT_NAME = "feeder_assignment_task";
+const ASSIGNMENT_TASK_STATION_ID = 3061;
 const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
@@ -16,9 +20,12 @@ const RIDER_EXPORT_BIZ_NAME = "driver";
 
 
 const POLL_MS = 3000;
+const ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS = 30 * 1000;
+const ASSIGNMENT_TASK_MEDIA_ID_POLL_MS = 4000;
 const LINEHAUL_POLL_MS = 2000;
 const MAX_WAIT_MS = 25 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 30000;
+const PARCEL_ORDER_TRACKING_ROUTE = "#/orderTracking";
 const PARCEL_EXPORT_NAME = "export_forward_order";
 const PARCEL_EXPORT_BIZ_NAME = "fleet_order";
 // Received Checking-only exports (kept separate from the host app's existing Parcel Count sync).
@@ -310,13 +317,17 @@ async function listTasks(startSec, source = "", page = 1, omitStartTime = false,
   return known[0] || [];
 }
 
-async function getSignedDownloadUrl(taskId, preferredSource = "fms") {
+async function getSignedDownloadUrl(taskId, preferredSource = "fms", mediaId = "") {
   let lastError = "";
+  const media = String(mediaId || "").trim();
   const sources = [...new Set([preferredSource, "fms", "fm", ""])];
   for (const source of sources) {
-    const query = `${source ? `source=${encodeURIComponent(source)}&` : ""}task_id=${encodeURIComponent(taskId)}`;
+    const params = new URLSearchParams();
+    if (source) params.set("source", source);
+    params.set("task_id", String(taskId));
+    if (media) params.set("media_id", media);
     try {
-      const response = await extensionFetchText(`${SPX_ORIGIN}${SIGNED_URL_PATH}?${query}`);
+      const response = await extensionFetchText(`${SPX_ORIGIN}${SIGNED_URL_PATH}?${params.toString()}`);
       const json = parseJsonResponse("SPX signed download URL", response);
       if (Number(json?.retcode) !== 0) { lastError = json?.message || "SPX did not return a signed download URL."; continue; }
       const url = String(json?.data?.download_url || json?.data?.url || json?.download_url || "").trim();
@@ -1027,448 +1038,6 @@ async function invokeSpxNativeExport(tabId) {
 }
 
 
-async function invokeSpxAssignmentTaskExport(tabId, selectedDate) {
-  const requestId = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
-  const resultStorageKey = "badoc_assignment_task_export_" + requestId;
-  let results = null;
-  let injectionError = null;
-  try {
-    results = await extApi.scripting.executeScript({
-    target: { tabId },
-    world: "MAIN",
-    args: [selectedDate, requestId, resultStorageKey],
-    func: async (dateValue, exportRequestId, exportResultStorageKey) => {
-      try {
-      const visible = el => {
-        if (!el) return false;
-        const rect = el.getBoundingClientRect();
-        if (!rect.width || !rect.height) return false;
-        const style = getComputedStyle(el);
-        return style.display !== "none" && style.visibility !== "hidden";
-      };
-      const route = String(location.hash || "");
-      if (!route.includes("assignment-task-new")) {
-        throw new Error("Open SPX Delivery Assignment → List before requesting the Assignment Task report.");
-      }
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || "")) ? String(dateValue) : new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit"
-      }).format(new Date());
-      const startText = date + " 00:00:00";
-      const endText = date + " 23:59:59";
-      const dialogSelector = '[role="dialog"],[aria-modal="true"],.el-dialog,.el-dialog__wrapper,.ant-modal,.ivu-modal,[class*="dialog"],[class*="modal"],[class*="Dialog"],[class*="Modal"]';
-      const getVueChain = element => {
-        const queue = [element?.__vue__, element?.__vueParentComponent].filter(Boolean);
-        const seen = new Set();
-        const chain = [];
-        while (queue.length && chain.length < 24) {
-          const current = queue.shift();
-          if (!current || (typeof current !== "object" && typeof current !== "function") || seen.has(current)) continue;
-          seen.add(current);
-          chain.push(current);
-          const parent = current.$parent || current.parent || current.$?.parent || current.proxy?.$parent;
-          if (parent && !seen.has(parent)) queue.push(parent);
-        }
-        return chain;
-      };
-      const getCandidate = (rawVm, dialogText, dialogRoot) => {
-        // SPX may split the export dialog across nested Vue components: the
-        // date form can live in a child while exportFunction/confirm live in
-        // its parent. Inspect the full component chain instead of requiring
-        // all three members on one component instance.
-        const componentChain = getVueChain(rawVm);
-        const records = componentChain.map(component => {
-          const proxy = component?.proxy || component;
-          const setupState = component?.setupState || {};
-          const ctx = component?.ctx || {};
-          const propsList = [
-            component?.$options?.propsData, component?.$props, component?.props,
-            component?.vnode?.props, component?.$?.vnode?.props, proxy?.$props
-          ].filter(value => value && typeof value === "object");
-          return { component, proxy, setupState, ctx, propsList };
-        });
-        const owners = [];
-        const addOwner = owner => {
-          if (owner && typeof owner === "object" && !owners.includes(owner)) owners.push(owner);
-        };
-        for (const record of records) {
-          addOwner(record.proxy);
-          addOwner(record.component);
-          addOwner(record.setupState);
-          addOwner(record.ctx);
-          addOwner(record.proxy?.$data);
-          addOwner(record.component?.data);
-          addOwner(record.component?.$?.setupState);
-          record.propsList.forEach(addOwner);
-        }
-
-        // SPX has used form, formData, searchForm, and filter-form objects
-        // across different export-dialog builds.
-        const formNames = ["form", "exportForm", "searchForm", "filterForm", "queryForm", "formData", "filters"];
-        let formHit = null;
-        for (const name of formNames) {
-          formHit = owners.map(owner => ({ owner, name, value: owner[name] }))
-            .find(item => item.value && typeof item.value === "object");
-          if (formHit) break;
-        }
-        const exportHit = owners.map(owner => ({ owner, value: owner.exportFunction }))
-          .find(item => typeof item.value === "function");
-        const confirmNames = ["confirm", "confirmExport", "handleConfirm", "onConfirm", "submit", "handleSubmit"];
-        let confirmHit = null;
-        for (const name of confirmNames) {
-          confirmHit = owners.map(owner => ({ owner, name, value: owner[name] }))
-            .find(item => typeof item.value === "function");
-          if (confirmHit) break;
-        }
-        if (!formHit || !exportHit) return null;
-
-        const formValue = formHit.value;
-        const actualForm = formValue.__v_isRef && formValue.value && typeof formValue.value === "object"
-          ? formValue.value : formValue;
-        const keys = Object.keys(actualForm);
-        let createdKey = keys.find(key => {
-          const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-          return (normalized.includes("create") || normalized.includes("ctime")) &&
-            (normalized.includes("time") || normalized.includes("date") || normalized.endsWith("at"));
-        });
-
-        // Some SPX builds use a generic dateRange key. Only infer it when the
-        // dialog visibly labels the control as Created Date and there is one
-        // unambiguous date-range value in the form.
-        const isDateSample = value => {
-          if (value == null || value === "") return true;
-          if (value instanceof Date) return true;
-          if (typeof value === "number") return Number.isFinite(value) && value !== 0;
-          if (typeof value === "string") return /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(value.trim());
-          return typeof value === "object" && (
-            typeof value.clone === "function" || typeof value.toDate === "function" || value.$d instanceof Date
-          );
-        };
-        const isDateRange = value => {
-          if (Array.isArray(value)) return value.length === 2 && value.every(isDateSample);
-          if (value && typeof value === "object" &&
-              ("start" in value || "end" in value || "startTime" in value || "endTime" in value)) {
-            const start = value.start ?? value.startTime;
-            const end = value.end ?? value.endTime;
-            return isDateSample(start) && isDateSample(end);
-          }
-          return false;
-        };
-        if (!createdKey && /created\s*date|create\s*date/i.test(String(dialogText || ""))) {
-          const rangeKeys = keys.filter(key => isDateRange(actualForm[key]));
-          if (rangeKeys.length === 1) createdKey = rangeKeys[0];
-        }
-
-        const context = records.map(record => {
-          const propsContext = record.propsList.map(props =>
-            props.contextName || props.context_name || ""
-          ).find(Boolean) || "";
-          return String(
-            propsContext || record.proxy?.contextName || record.component?.contextName ||
-            record.component?.type?.name || record.component?.$options?.name || ""
-          );
-        }).filter(Boolean).join(" ");
-        if (!createdKey && !/assignment|task|created\s*date/i.test(context + " " + String(dialogText || ""))) return null;
-
-        const callbackOwners = owners.filter(owner => owner.exportFunction === exportHit.value);
-        const vm = records.map(record => record.proxy)
-          .find(proxy => proxy && typeof proxy.$forceUpdate === "function") ||
-          records[0]?.proxy || exportHit.owner;
-        return {
-          vm, rawVm, form: actualForm, createdKey, context,
-          originalExportFunction: exportHit.value, confirm: confirmHit?.value,
-          confirmOwner: confirmHit?.owner, callbackOwners, dialogRoot
-        };
-      };
-      const findExportComponent = () => {
-        const roots = [...document.querySelectorAll(dialogSelector)].filter(visible);
-        const targets = new Set();
-        for (const root of roots) {
-          targets.add(root);
-          for (const child of root.querySelectorAll("*")) {
-            if (visible(child)) targets.add(child);
-          }
-        }
-        for (const element of document.querySelectorAll('button,[role="button"],input,form')) {
-          if (visible(element)) targets.add(element);
-        }
-        const matchesByComponent = new Map();
-        for (const element of targets) {
-          const dialogRoot = element.closest(dialogSelector) || element;
-          const dialogText = String(dialogRoot.innerText || dialogRoot.textContent || "").slice(0, 3000);
-          for (const rawVm of getVueChain(element)) {
-            const candidate = getCandidate(rawVm, dialogText, dialogRoot);
-            if (!candidate) continue;
-            const score =
-              (/assignment/i.test(candidate.context) ? 8 : 0) +
-              (/task/i.test(candidate.context) ? 5 : 0) +
-              (/assignment/i.test(dialogText) ? 4 : 0) +
-              (/task/i.test(dialogText) ? 2 : 0) +
-              (candidate.createdKey ? 3 : 0);
-            const previous = matchesByComponent.get(rawVm);
-            if (!previous || score > previous.score) {
-              matchesByComponent.set(rawVm, { candidate, score });
-            }
-          }
-        }
-        const matches = [...matchesByComponent.values()].sort((a, b) => b.score - a.score);
-        return matches[0]?.candidate || null;
-      };
-      let found = findExportComponent();
-      if (!found) {
-        const exportButton = [...document.querySelectorAll("button")]
-          .filter(button => visible(button) && String(button.innerText || button.textContent || "").trim() === "Export")
-          .find(button => {
-            let el = button;
-            for (let i = 0; i < 7 && el; i++, el = el.parentElement) {
-              if (el.matches?.(".btns-container.btns-container-left.btns-container-wrapper")) return true;
-            }
-            return true;
-          });
-        if (!exportButton) throw new Error("SPX Assignment Task Export button was not found. Keep the Delivery Assignment → List page open.");
-        const dropdownVm = exportButton.__vue__?.$parent?.$parent;
-        if (typeof dropdownVm?.handleCommand === "function") dropdownVm.handleCommand("Export");
-        else exportButton.click();
-        const deadline = Date.now() + 8000;
-        while (Date.now() < deadline) {
-          found = findExportComponent();
-          if (found) break;
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-      if (!found) {
-        const details = [...document.querySelectorAll(dialogSelector)].filter(visible).map(root => {
-          const text = String(root.innerText || root.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180);
-          const inputs = [...root.querySelectorAll("input")].filter(visible).map(input =>
-            input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.type || "input"
-          ).slice(0, 8).join(", ");
-          const buttons = [...root.querySelectorAll("button,[role='button']")].filter(visible).map(button =>
-            String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
-          ).filter(Boolean).slice(0, 8).join(", ");
-          return [text, inputs ? "inputs: " + inputs : "", buttons ? "buttons: " + buttons : ""].filter(Boolean).join(" | ");
-        }).join(" || ").slice(0, 850);
-        throw new Error("SPX Assignment Task Export dialog opened, but its internal form/export component could not be connected." +
-          (details ? " Detected dialog: " + details : " No visible export dialog controls were found."));
-      }
-      const { vm: exportVm, form, createdKey, context } = found;
-      if (!createdKey) throw new Error("SPX Assignment Task export dialog was found, but its Created Date field is not mapped. Detected form fields: " + Object.keys(form).join(", "));
-      const existing = form[createdKey];
-      const buildDateValue = (text, sample) => {
-        if (sample instanceof Date) return new Date(text.replace(" ", "T"));
-        if (sample && typeof sample.clone === "function" && typeof sample.startOf === "function") {
-          const datePart = text.slice(0, 10), timePart = text.slice(11);
-          const parsed = new Date(datePart + "T" + timePart);
-          if (window.moment) return window.moment(parsed);
-          return sample.clone().set({
-            year: parsed.getFullYear(), month: parsed.getMonth(), date: parsed.getDate(),
-            hour: parsed.getHours(), minute: parsed.getMinutes(), second: parsed.getSeconds(), millisecond: 0
-          });
-        }
-        if (typeof sample === "number") {
-          const stamp = new Date(text.replace(" ", "T")).getTime();
-          return sample > 100000000000 ? stamp : Math.floor(stamp / 1000);
-        }
-        return text;
-      };
-      if (Array.isArray(existing)) {
-        form[createdKey] = [buildDateValue(startText, existing[0]), buildDateValue(endText, existing[1] ?? existing[0])];
-      } else if (existing && typeof existing === "object" && ("start" in existing || "end" in existing || "startTime" in existing || "endTime" in existing)) {
-        const clone = { ...existing };
-        const startKey = "start" in clone ? "start" : "startTime";
-        const endKey = "end" in clone ? "end" : "endTime";
-        clone[startKey] = buildDateValue(startText, clone[startKey]);
-        clone[endKey] = buildDateValue(endText, clone[endKey]);
-        form[createdKey] = clone;
-      } else form[createdKey] = [startText, endText];
-      try { exportVm.$forceUpdate?.(); } catch (_) {}
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const originalExportFunction = found.originalExportFunction || exportVm.exportFunction;
-      const confirmExport = found.confirm || exportVm.confirm;
-      const confirmOwner = found.confirmOwner || exportVm;
-      const confirmRoot = found.dialogRoot || document;
-      const confirmButton = [...confirmRoot.querySelectorAll("button,[role='button'],.el-button")]
-        .filter(visible)
-        .find(button => /\b(confirm|export|generate|download)\b/i.test(
-          String(button.innerText || button.textContent || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
-        ));
-      if (typeof originalExportFunction !== "function") {
-        throw new Error("SPX Assignment Task export handler was not found in the dialog component chain.");
-      }
-      if (typeof confirmExport !== "function" && !confirmButton) {
-        throw new Error("SPX Assignment Task dialog was detected, but no Confirm/Export action was available.");
-      }
-      let apiResult = null;
-      const wrappedExportFunction = async function(params) {
-        const response = await originalExportFunction.call(this, params);
-        const body = response?.data ?? response ?? null;
-        try { apiResult = JSON.parse(JSON.stringify(body)); }
-        catch (_) {
-          apiResult = {
-            retcode: body?.retcode,
-            message: body?.message,
-            data: { task_id: body?.data?.task_id, download_url: body?.data?.download_url }
-          };
-        }
-        try {
-          sessionStorage.setItem(exportResultStorageKey, JSON.stringify({
-            __badocAssignmentTask: true, ok: true, stage: "api-response",
-            taskId: getTaskIdFromPageResponse(apiResult), apiResult,
-            directUrl: String(apiResult?.data?.download_url || apiResult?.data?.url || "").trim(),
-            createdDate: date, context
-          }));
-        } catch (_) {}
-        return response;
-      };
-      let patchedOwner = null;
-      for (const owner of (found.callbackOwners || [exportVm])) {
-        try {
-          owner.exportFunction = wrappedExportFunction;
-          if (owner.exportFunction === wrappedExportFunction) {
-            patchedOwner = owner;
-            break;
-          }
-        } catch (_) {}
-      }
-      if (!patchedOwner) {
-        throw new Error("SPX Assignment Task export callback could not be hooked from its dialog component.");
-      }
-      try {
-        if (typeof confirmExport === "function") {
-          await confirmExport.call(confirmOwner);
-        } else {
-          confirmButton.click();
-          const clickDeadline = Date.now() + 30000;
-          while (Date.now() < clickDeadline && !apiResult) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          if (!apiResult) {
-            throw new Error("SPX Confirm/Export was clicked, but the export handler did not return an API response.");
-          }
-        }
-      } finally {
-        try { patchedOwner.exportFunction = originalExportFunction; } catch (_) {}
-      }
-      const taskId = getTaskIdFromPageResponse(apiResult);
-      const data = apiResult?.data || apiResult || {};
-      const finalResult = {
-        __badocAssignmentTask: true, ok: true, stage: "confirmed",
-        taskId, apiResult,
-        directUrl: String(data.download_url || data.url || "").trim(),
-        createdDate: date, context
-      };
-      try { sessionStorage.setItem(exportResultStorageKey, JSON.stringify(finalResult)); } catch (_) {}
-      return finalResult;
-      function getTaskIdFromPageResponse(value, depth = 0) {
-        if (!value || depth > 5) return 0;
-        if (Array.isArray(value)) { for (const item of value) { const id = getTaskIdFromPageResponse(item, depth + 1); if (id) return id; } return 0; }
-        if (typeof value !== "object") return 0;
-        for (const key of ["task_id", "taskId", "export_task_id", "exportTaskId", "id"]) {
-          const id = Number(value[key] || 0); if (Number.isFinite(id) && id > 0) return id;
-        }
-        for (const key of ["task", "export_task", "exportTask", "data", "result"]) {
-          const id = getTaskIdFromPageResponse(value[key], depth + 1); if (id) return id;
-        }
-        return 0;
-      }
-      } catch(error) {
-        const failure = {
-          __badocAssignmentTask: true, ok: false,
-          error: String(error?.message || error),
-          stack: String(error?.stack || "").slice(0, 1200),
-          route: String(location.href || "")
-        };
-        try { sessionStorage.setItem(exportResultStorageKey, JSON.stringify(failure)); } catch (_) {}
-        return failure;
-      }
-    }
-  });
-  } catch (error) { injectionError = error; }
-  let result = null;
-  const injection = Array.isArray(results)
-    ? (results.find(item => item && item.frameId === 0) || results[0])
-    : null;
-  if (injection?.error) injectionError = new Error(String(injection.error.message || injection.error));
-  result = injection?.result || null;
-  // The export callback writes its response to sessionStorage before SPX can
-  // close/repaint its dialog. Read it back if executeScript lost its return.
-  if (!result) {
-    const readDeadline = Date.now() + 5000;
-    while (Date.now() < readDeadline && !result) {
-      try {
-        const storedResults = await extApi.scripting.executeScript({
-          target: { tabId },
-          world: "MAIN",
-          args: [resultStorageKey],
-          func: key => {
-            try {
-              const raw = sessionStorage.getItem(key);
-              if (!raw) return null;
-              sessionStorage.removeItem(key);
-              return JSON.parse(raw);
-            } catch (error) {
-              return { __badocAssignmentTask: true, ok: false, error: "Could not read saved SPX export response: " + String(error?.message || error) };
-            }
-          }
-        });
-        const stored = Array.isArray(storedResults)
-          ? (storedResults.find(item => item && item.frameId === 0) || storedResults[0])
-          : null;
-        result = stored?.result || null;
-        if (result) break;
-      } catch (error) { injectionError = injectionError || error; }
-      await sleep(250);
-    }
-  }
-  if (!result) {
-    const detail = injectionError?.message ? " " + injectionError.message : "";
-    throw new Error("SPX did not return its Assignment Task export response before the page handoff ended. Confirm the Export dialog was submitted and retry." + detail);
-  }
-  if (result.__badocAssignmentTask && result.ok === false) {
-    throw new Error("SPX Assignment Task page: " + result.error + (result.route ? " · " + result.route : ""));
-  }
-  if (!result.__badocAssignmentTask || result.ok !== true) {
-    throw new Error("SPX page returned an unexpected Assignment Task response.");
-  }
-  return result;
-}
-
-async function runAssignmentTaskExportJob(job) {
-  const port = job.ownerPort;
-  try {
-    job.startedAt = Date.now();
-    const tabs = await extApi.tabs.query({ url: SPX_ORIGIN + "/*" });
-    const tab = tabs.find(item => String(item.url || "").includes("/#/assignment-task-new/list")) ||
-      tabs.find(item => String(item.url || "").includes("assignment-task-new"));
-    if (!tab?.id) throw new Error("Open the authenticated SPX Delivery Assignment → List page, then retry Assignment Task in Reports.");
-    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-      message: "SPX Assignment Task page found. Starting its Export dialog for " + job.selectedDate + "…"
-    });
-    const result = await invokeSpxAssignmentTaskExport(tab.id, job.selectedDate);
-    let csv = null;
-    let taskId = Number(result.taskId || getExportTaskId(result.apiResult) || 0);
-    if (result.directUrl) csv = await downloadCsv(result.directUrl);
-    else if (taskId) {
-      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-        message: "SPX accepted Assignment Task export " + taskId + ". Waiting for the CSV…"
-      });
-      const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
-      const completed = await waitForCompletion(taskId, waitStartSec, job);
-      const signedUrl = await getSignedDownloadUrl(taskId, String(completed?.source || "fms"));
-      csv = await downloadCsv(signedUrl);
-    } else throw new Error("SPX opened the Assignment Task export but did not return an export task ID or download URL. Check SPX's export task monitor and retry.");
-    const rowCount = Math.max(0, String(csv.text || "").split(/\r?\n/).filter(Boolean).length - 1);
-    if (!rowCount) throw new Error("SPX Assignment Task export completed but contained no data rows.");
-    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_CSV", {
-      taskId: taskId || "direct", selectedDate: job.selectedDate,
-      fileName: csv.fileName || "assignment_task.csv", csvText: csv.text, rowCount
-    });
-  } catch (error) {
-    console.error("BADOC SPX Assignment Task export failed:", error);
-    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", { message: error?.message || String(error), selectedDate: job.selectedDate });
-  } finally {
-    releaseActiveJob(job);
-  }
-}
-
 function setsEqual(a, b) {
   const aa = new Set((a || []).map(String));
   const bb = new Set((b || []).map(String));
@@ -1854,6 +1423,839 @@ async function runRiderJob(job) {
   } catch (error) {
     console.error("BADOC SPX rider auto-import failed:", error);
     sendToBadoc("BADOC_SPX_ERROR", { message: error?.message || String(error), kind: "riders" });
+  } finally {
+    releaseActiveJob(job);
+  }
+}
+
+async function createDedicatedSpxTab() {
+  // Batch Search is part of Order Management → Order Tracking.
+  // Open that route directly so the SPA does not remain on TO List when a
+  // hash-only route change fails to trigger tabs.onUpdated(status=complete).
+  const tab = await extApi.tabs.create({
+    url: `${SPX_ORIGIN}${PARCEL_ORDER_TRACKING_ROUTE}`,
+    active: false
+  });
+
+  if (!tab?.id) {
+    throw new Error("Could not create the temporary SPX tab.");
+  }
+
+  progress("Created a dedicated temporary SPX tab…", { phase: "tab", tabId: tab.id });
+
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
+
+    const cleanup = () => {
+      extApi.tabs.onUpdated.removeListener(onUpdated);
+      if (timer) clearTimeout(timer);
+    };
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const onUpdated = (updatedTabId, changeInfo, updatedTab) => {
+      if (updatedTabId !== tab.id) return;
+      const url = String(updatedTab?.url || "");
+      if (changeInfo.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) {
+        finish();
+      }
+    };
+
+    extApi.tabs.onUpdated.addListener(onUpdated);
+    timer = setTimeout(() => fail(new Error("Timed out opening the temporary SPX TO List tab.")), 30000);
+
+    extApi.tabs.get(tab.id).then(current => {
+      const url = String(current?.url || "");
+      if (current?.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) finish();
+    }).catch(fail);
+  });
+
+  await sleep(2200);
+  return tab.id;
+}
+
+async function ensureParcelOrderTrackingRoute(tabId) {
+  const tab = await extApi.tabs.get(tabId);
+  const currentUrl = String(tab?.url || "");
+  if (/^https:\/\/spx\.shopee\.ph\/#\/orderTracking(?:[/?#]|$)/i.test(currentUrl)) {
+    progress("SPX is on Order Management → Order Tracking.", { phase: "route" });
+    return;
+  }
+
+  progress("Opening SPX Order Management → Order Tracking automatically…", { phase: "route" });
+
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
+    const cleanup = () => {
+      extApi.tabs.onUpdated.removeListener(onUpdated);
+      if (timer) clearTimeout(timer);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onUpdated = (updatedTabId, changeInfo, updatedTab) => {
+      if (updatedTabId !== tabId) return;
+      const url = String(updatedTab?.url || "");
+      if (changeInfo.status === "complete" && /https:\/\/spx\.shopee\.ph\/#\/orderTracking/i.test(url)) finish();
+    };
+    extApi.tabs.onUpdated.addListener(onUpdated);
+    timer = setTimeout(() => fail(new Error("Timed out opening SPX Order Tracking.")), 20000);
+    extApi.tabs.update(tabId, { url: `${SPX_ORIGIN}/${PARCEL_ORDER_TRACKING_ROUTE}` }).catch(fail);
+  });
+
+  await sleep(2200);
+}
+
+async function executeSpxBatchSearch(tabId, trackingNumbers) {
+  let injectionResults;
+  try {
+    injectionResults = await extApi.scripting.executeScript({
+      target: { tabId },
+      args: [trackingNumbers],
+      func: async (tns) => {
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const visible = el => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+        const clean = value => String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+        let stage = "initialize";
+        const normalizeTextForDiagnostics = value => String(value || "").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+        const diagnostics = () => ({
+          url: String(location.href || ""),
+          title: String(document.title || ""),
+          readyState: document.readyState,
+          textareaCount: document.querySelectorAll("textarea").length,
+          visibleTextareas: [...document.querySelectorAll("textarea")].filter(visible).map(el => String(el.placeholder || "").slice(0, 160)),
+          visibleButtons: [...document.querySelectorAll("button,[role='button'],.ssc-button,[class*=\'ssc-button\']")].filter(visible).map(el => String(el.innerText || el.textContent || "").trim()).filter(Boolean).slice(0, 60),
+          batchSearchCandidates: [...document.querySelectorAll("button,[role='button'],a,[tabindex],.ssc-button,[class*=\'ssc-button\'],span,div")].filter(el => visible(el) && normalizeTextForDiagnostics(el.innerText || el.textContent).includes("batchsearch")).slice(0, 10).map(el => ({tag:el.tagName, text:String(el.innerText || el.textContent || "").trim().slice(0,100), className:String(el.className || "").slice(0,120), outerHTML:String(el.outerHTML || "").slice(0,250)})),
+          tables: [...document.querySelectorAll("table")].map((table, i) => ({
+            index: i,
+            headers: [...table.querySelectorAll("thead th")].map(th => String(th.innerText || "").trim()).filter(Boolean).slice(0, 70),
+            rows: table.querySelectorAll("tbody tr").length
+          })).slice(0, 10)
+        });
+
+        try {
+          stage = "validate tracking numbers";
+          const wanted = new Set((tns || []).map(clean).filter(Boolean));
+          if (!wanted.size) return { results: [], message: "No TNs in batch.", diagnostics: diagnostics() };
+
+          const normalizeActionLabel = value => String(value || "")
+          .normalize("NFKC")
+          .replace(/[\u200B-\u200D\uFEFF]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+        const labelVariants = el => [
+          el?.innerText,
+          el?.textContent,
+          el?.getAttribute?.("aria-label"),
+          el?.getAttribute?.("title")
+        ].map(normalizeActionLabel).filter(Boolean);
+        const exactAction = (el, action) => visible(el) && labelVariants(el).includes(action);
+        // Prefer exact labels, then use a substring fallback for SPX variants that
+        // append icons, hidden labels, or a count to the Batch Search button.
+        const containsAction = (el, action) => visible(el) && labelVariants(el).some(label => label.includes(action));
+        const isClickableCandidate = el => /^(BUTTON|A)$/.test(el.tagName) ||
+          el.getAttribute?.("role") === "button" || /(^|\s)(ssc-button|ssc-btn|el-button|ant-btn)(\s|$)/i.test(String(el.className || "")) ||
+          el.hasAttribute?.("tabindex");
+        const findActionControl = (action) => {
+          const selector = "button,[role='button'],a.el-button,.el-button,.ant-btn,[tabindex],.ssc-button,[class*=\'ssc-button\']";
+          const candidates = [...document.querySelectorAll(selector)].filter(visible);
+          const exact = candidates.filter(el => exactAction(el, action));
+          if (exact.length) {
+            exact.sort((a,b) => (isClickableCandidate(b) ? 1 : 0) - (isClickableCandidate(a) ? 1 : 0));
+            return exact[0];
+          }
+          const partial = candidates.filter(el => isClickableCandidate(el) && containsAction(el, action));
+          partial.sort((a,b) => {
+            const la = labelVariants(a).filter(v => v.includes(action)).map(v => v.length);
+            const lb = labelVariants(b).filter(v => v.includes(action)).map(v => v.length);
+            return (Math.min(...la, 9999)) - (Math.min(...lb, 9999));
+          });
+          if (partial.length) return partial[0];
+          const labelNodes = [...document.querySelectorAll("span,div,a")].filter(el =>
+            visible(el) && normalizeActionLabel(el.innerText || el.textContent) === action
+          );
+          for (const node of labelNodes) {
+            const target = node.closest("button,[role='button'],a.el-button,.el-button,.ant-btn,[tabindex],.ssc-button,[class*=\'ssc-button\']");
+            if (target && visible(target)) return target;
+            if (typeof node.click === "function") return node;
+          }
+          return null;
+        };
+        const findTextarea = () => [...document.querySelectorAll("textarea")]
+            .find(el => /SPX Tracking Number/i.test(el.placeholder || "") && visible(el));
+          stage = "find or open Batch Search dialog";
+          let textarea = findTextarea();
+          if (!textarea) {
+            const buttonDeadline = Date.now() + 15000;
+            let batchButton = null;
+            const buttonSelectors = "button,[role='button'],a.el-button,.el-button,.ant-btn,[tabindex],.ssc-button,[class*=\'ssc-button\']";
+            // SPX Order Tracking uses this dedicated class on its Batch Search control.
+            // Target it first; generic label matching is only a fallback.
+            const directSelector = "button.batch-search-button, .batch-search-button";
+            const findDirectBatchSearchControl = () => {
+              const direct = [...document.querySelectorAll(directSelector)];
+              // Never click a hidden placeholder. Only accept an actually visible,
+              // enabled control and reject aria-disabled controls.
+              return direct.find(el => visible(el) && !el.disabled && el.getAttribute("aria-disabled") !== "true") || null;
+            };
+            const findBatchByVisibleLabel = () => {
+              const candidates = [...document.querySelectorAll(buttonSelectors)].filter(visible);
+              return candidates.find(el => !el.disabled && el.getAttribute("aria-disabled") !== "true" &&
+                labelVariants(el).some(label => label.includes("batch") && label.includes("search"))) || null;
+            };
+            while (Date.now() < buttonDeadline && !batchButton) {
+              batchButton = findDirectBatchSearchControl() || findBatchByVisibleLabel() || findActionControl("batchsearch");
+              if (!batchButton) await sleep(250);
+            }
+            if (!batchButton) {
+              const observed = [...document.querySelectorAll(buttonSelectors)]
+                .filter(visible)
+                .map(el => ({ text: String(el.innerText || el.textContent || "").trim().slice(0, 100), normalized: labelVariants(el), tag: el.tagName, className: String(el.className || "").slice(0, 100), outerHTML: String(el.outerHTML || "").slice(0, 220) }))
+                .filter(x => x.text).slice(0, 35);
+              const directControls = [...document.querySelectorAll(directSelector)].map(el => ({
+                visible: visible(el), disabled: !!el.disabled, ariaDisabled: el.getAttribute("aria-disabled"),
+                text: String(el.innerText || el.textContent || "").trim().slice(0, 100),
+                className: String(el.className || "").slice(0, 160),
+                outerHTML: String(el.outerHTML || "").slice(0, 320)
+              })).slice(0, 8);
+              throw new Error("Could not find a visible, enabled Batch Search control. Page URL=" + String(location.href || "") +
+                "; title=" + String(document.title || "") + "; direct controls=" + JSON.stringify(directControls) +
+                "; visible controls=" + JSON.stringify(observed));
+            }
+            try { batchButton.scrollIntoView({ block: "center", inline: "nearest" }); } catch {}
+            batchButton.click();
+            const textareaDeadline = Date.now() + 15000;
+            while (Date.now() < textareaDeadline && !textarea) {
+              await sleep(250);
+              textarea = findTextarea();
+            }
+          }
+          if (!textarea) throw new Error("The Batch Search tracking-number textarea did not open in the temporary SPX tab.");
+
+          stage = "populate Batch Search textarea";
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+          if (setter) setter.call(textarea, tns.join("\n")); else textarea.value = tns.join("\n");
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          textarea.dispatchEvent(new Event("change", { bubbles: true }));
+          await sleep(250);
+          if (!String(textarea.value || "").trim()) throw new Error("TN list did not remain in the Batch Search textarea after input events.");
+
+          stage = "locate Submit button";
+          let submitButton = null;
+          for (let ancestor = textarea.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+            submitButton = [...ancestor.querySelectorAll("button,[role='button'],.ssc-button,[class*=\'ssc-button\']")]
+              .find(el => exactAction(el, "submit")) || null;
+            if (submitButton) break;
+          }
+          if (!submitButton) submitButton = findActionControl("submit");
+          if (!submitButton) throw new Error("Could not locate the visible Submit button for Batch Search.");
+
+          const getPage = () => [...document.querySelectorAll("table tbody tr")].flatMap(tr => {
+            const cells = [...tr.querySelectorAll("td")];
+            const cellText = cells.map(cell => String(cell.innerText || cell.textContent || "").replace(/\s+/g, " ").trim());
+            // Match requested TNs against every cell; SPX can reorder or prepend columns.
+            const table = tr.closest("table");
+            const headerRows = [...(table?.querySelectorAll("thead tr") || [])];
+            const headerCells = headerRows.length ? [...headerRows[headerRows.length - 1].querySelectorAll("th,td")] : [];
+            const headers = headerCells.map(th => String(th.innerText || th.textContent || "")
+              .normalize("NFKC").replace(/\s+/g, " ").trim().toUpperCase());
+            const statusIndex = headers.findIndex(h => /^(ORDER STATUS|PARCEL STATUS|PARCEL ORDER STATUS|ORDER\/PARCEL STATUS|STATUS)$/.test(h));
+            let status = statusIndex >= 0 && statusIndex < cellText.length ? cellText[statusIndex] : "";
+            const isPlausibleStatus = value => {
+              const v = String(value || "").trim();
+              if (!v || v === "-" || /^(VIEW|POUCH)$/i.test(v)) return false;
+              // SPX return-flow statuses are explicit status tokens. Never infer a status from Size Type.
+              return /^(Return_LMHub_[A-Za-z0-9_]+|[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)$/.test(v);
+            };
+            if (!isPlausibleStatus(status)) {
+              // Some SPX table layouts render a header row with an extra selection/settings cell.
+              // Resolve only by finding an actual status-shaped value in this row; never use Pouch.
+              status = cellText.find(isPlausibleStatus) || "";
+            }
+            const matches = [...new Set(cellText.map(clean).filter(v => v && wanted.has(v)))];
+            const identifiers = cellText.filter(v => /^(PH[A-Z0-9]{8,}|[A-Z0-9]{10,})$/i.test(v));
+            const spxTN = identifiers[0] || "";
+            const slsTN = identifiers[1] || "";
+            const thirdTN = identifiers[2] || "";
+            return matches.map(matchedTN => ({ tn: matchedTN, matchedTN, spxTN, slsTN, thirdTN, status }));
+          }).filter(r => r.matchedTN && r.status && r.status !== "-" && r.status.toUpperCase() !== "VIEW" && r.status.toUpperCase() !== "POUCH");
+          const signature = () => [...document.querySelectorAll("table tbody tr")]
+            .map(tr => String(tr.innerText || "").replace(/\s+/g, " ").trim()).join("\n");
+          const before = signature();
+          const started = Date.now();
+          stage = "submit Batch Search and wait for results";
+          submitButton.click();
+          let lastSig = before, stableSince = Date.now(), latestRows = [];
+          const deadline = Date.now() + 45000;
+          while (Date.now() < deadline) {
+            await sleep(350);
+            const sig = signature();
+            if (sig !== lastSig) { lastSig = sig; stableSince = Date.now(); }
+            latestRows = getPage();
+            const hadFreshResults = latestRows.length > 0 || (sig !== before && Date.now() - started > 1800);
+            if (Date.now() - started >= 2200 && hadFreshResults && Date.now() - stableSince >= 1200) break;
+          }
+          if (Date.now() >= deadline) throw new Error("Timed out after 45 seconds waiting for the result table to refresh after Submit.");
+
+          stage = "read current results page";
+          const output = new Map();
+          const addCurrentPage = () => {
+            for (const item of getPage()) output.set(clean(item.matchedTN || item.tn), item);
+          };
+          addCurrentPage();
+          for (let page = 0; page < 400; page++) {
+            const candidates = [
+              document.querySelector(".el-pagination button.btn-next"),
+              document.querySelector(".el-pagination .btn-next"),
+              document.querySelector(".ant-pagination-next"),
+              document.querySelector("button[aria-label='Next page']"),
+              document.querySelector("[aria-label='Next page']")
+            ].filter(Boolean);
+            const next = candidates.find(el => visible(el));
+            if (!next) break;
+            const disabled = next.disabled || next.getAttribute("aria-disabled") === "true" || /disabled/.test(String(next.className || "")) || next.closest("li")?.classList?.contains("disabled");
+            if (disabled) break;
+            stage = `paginate results page ${page + 2}`;
+            const beforePage = signature();
+            next.click();
+            let changed = false;
+            for (let wait = 0; wait < 40; wait++) {
+              await sleep(250);
+              if (signature() !== beforePage) { changed = true; break; }
+            }
+            if (!changed) break;
+            addCurrentPage();
+          }
+          return { results: [...output.values()], requestedCount: tns.length, capturedAt: new Date().toISOString(), diagnostics: diagnostics() };
+        } catch (error) {
+          return {
+            __spxBatchSearchError: true,
+            stage,
+            error: String(error?.message || error),
+            stack: String(error?.stack || "").slice(0, 1200),
+            diagnostics: diagnostics()
+          };
+        }
+      }
+    });
+  } catch (error) {
+    throw new Error(`Chrome could not execute the SPX Batch Search script: ${error?.message || error}`);
+  }
+
+  const result = injectionResults?.[0]?.result;
+  if (!injectionResults?.length) {
+    const tab = await extApi.tabs.get(tabId).catch(() => null);
+    throw new Error(`Chrome injected no result frame. SPX tab URL: ${tab?.url || "unknown"}; status: ${tab?.status || "unknown"}.`);
+  }
+  if (!result) {
+    const tab = await extApi.tabs.get(tabId).catch(() => null);
+    throw new Error(`The SPX script returned no value (frame ${injectionResults[0]?.frameId ?? "unknown"}). Tab URL: ${tab?.url || "unknown"}; status: ${tab?.status || "unknown"}. Check the SPX tab console for a script exception.`);
+  }
+  if (result.__spxBatchSearchError) {
+    const d = result.diagnostics || {};
+    const candidates = d.batchSearchCandidates?.length ? JSON.stringify(d.batchSearchCandidates).slice(0, 800) : "none detected";
+    const details = `Stage: ${result.stage}. ${result.error}. Batch Search text candidates: ${candidates}. URL: ${d.url || "unknown"}; page: ${d.title || "unknown"}; readyState: ${d.readyState || "unknown"}; visible textarea(s): ${(d.visibleTextareas || []).join(" | ") || "none"}; visible buttons: ${(d.visibleButtons || []).join(" | ") || "none"}; tables: ${(d.tables || []).map(t => `#${t.index} ${t.rows} row(s)`).join(", ") || "none"}.`;
+    throw new Error(details.slice(0, 2500));
+  }
+  return result;
+}
+
+const SPX_BATCH_SEARCH_SIZE = 3000;
+
+function normalizeBatchSearchTn(value) {
+  return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function batchSearchCsv(rows) {
+  const headers = ["Input Tracking Number","Matched Tracking Number","SPX TN","SLS TN","Third TN","Status","Search Result","Error"];
+  const cell = value => {
+    const text = String(value ?? "");
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  return [headers, ...rows.map(row => headers.map(header => row[header] ?? ""))]
+    .map(row => row.map(cell).join(",")).join("\r\n");
+}
+
+async function runBatchSearchExportJob(job) {
+  let tabId = null;
+  const allResults = new Map();
+  const failedByTn = new Map();
+  const rawTns = Array.isArray(job.trackingNumbers) ? job.trackingNumbers : [];
+  const tns = [...new Map(rawTns.map(value => {
+    const original = String(value ?? "").trim();
+    return [normalizeBatchSearchTn(original), original];
+  }).filter(([key, value]) => key && value)).values()];
+
+  const sendProgress = message => sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_PROGRESS", {
+    kind: "batch-search-result", message, selectedDate: job.selectedDate || ""
+  });
+
+  try {
+    if (!tns.length) throw new Error("No valid SPX Tracking Numbers were supplied from the Assignment Task export.");
+    if (tns.length > 50000) throw new Error("Batch Search is limited to 50,000 unique tracking numbers per run.");
+
+    job.startedAt = Date.now();
+    sendProgress("Opening SPX Order Tracking for " + tns.length.toLocaleString() + " unique tracking number(s)…");
+    tabId = await createDedicatedSpxTab();
+    job.spxTabId = tabId;
+    await ensureParcelOrderTrackingRoute(tabId);
+
+    const batches = [];
+    for (let i = 0; i < tns.length; i += SPX_BATCH_SEARCH_SIZE) batches.push(tns.slice(i, i + SPX_BATCH_SEARCH_SIZE));
+
+    for (let i = 0; i < batches.length; i++) {
+      if (job.cancelled) throw new Error("Batch Search was cancelled.");
+      const batch = batches[i];
+      const batchKeys = new Set(batch.map(normalizeBatchSearchTn));
+      sendProgress("SPX Batch Search " + (i + 1) + "/" + batches.length + " · submitting " + batch.length.toLocaleString() + " tracking number(s)…");
+      try {
+        const response = await executeSpxBatchSearch(tabId, batch);
+        if (!response || !Array.isArray(response.results)) throw new Error("SPX Batch Search returned an invalid result payload.");
+        for (const item of response.results) {
+          const key = normalizeBatchSearchTn(item?.matchedTN || item?.tn || "");
+          if (!key || !batchKeys.has(key)) continue;
+          allResults.set(key, {
+            tn: String(item.tn || item.matchedTN || "").trim(),
+            matchedTN: String(item.matchedTN || item.tn || "").trim(),
+            spxTN: String(item.spxTN || "").trim(),
+            slsTN: String(item.slsTN || "").trim(),
+            thirdTN: String(item.thirdTN || "").trim(),
+            status: String(item.status || "").trim()
+          });
+        }
+        const foundInBatch = batch.filter(value => allResults.has(normalizeBatchSearchTn(value))).length;
+        sendProgress("Batch " + (i + 1) + "/" + batches.length + " complete · " + foundInBatch.toLocaleString() + "/" + batch.length.toLocaleString() + " matched.");
+      } catch (error) {
+        const message = String(error?.message || error);
+        batch.forEach(value => failedByTn.set(normalizeBatchSearchTn(value), message));
+        console.error("SPX Batch Search chunk failed:", error);
+        sendProgress("Batch " + (i + 1) + "/" + batches.length + " failed · " + message);
+      }
+    }
+
+    const outputRows = tns.map(inputTn => {
+      const key = normalizeBatchSearchTn(inputTn);
+      const result = allResults.get(key);
+      const error = failedByTn.get(key) || "";
+      return {
+        "Input Tracking Number": inputTn,
+        "Matched Tracking Number": result?.matchedTN || "",
+        "SPX TN": result?.spxTN || "",
+        "SLS TN": result?.slsTN || "",
+        "Third TN": result?.thirdTN || "",
+        "Status": result?.status || (error ? "Search Failed" : ""),
+        "Search Result": result ? "Found" : (error ? "Search Failed" : "Not Found"),
+        "Error": error
+      };
+    });
+    const matchedCount = outputRows.filter(row => row["Search Result"] === "Found").length;
+    const failedCount = outputRows.filter(row => row["Search Result"] === "Search Failed").length;
+    const notFoundCount = outputRows.length - matchedCount - failedCount;
+    const failedBatchCount = [...batches].filter(batch => batch.some(value => failedByTn.has(normalizeBatchSearchTn(value)))).length;
+
+    sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_CSV", {
+      selectedDate: String(job.selectedDate || ""),
+      sourceTaskId: String(job.sourceTaskId || ""),
+      csvText: batchSearchCsv(outputRows),
+      fileName: "batch_search_result.csv",
+      inputCount: tns.length,
+      chunkCount: batches.length,
+      rowCount: outputRows.length,
+      matchedCount,
+      notFoundCount,
+      failedCount,
+      failedBatchCount
+    });
+  } catch (error) {
+    console.error("SPX Batch Search export failed:", error);
+    sendToPort(job.ownerPort, "BADOC_SPX_BATCH_SEARCH_ERROR", {
+      kind: "batch-search-result",
+      message: error?.message || String(error)
+    });
+  } finally {
+    if (tabId) {
+      try { await extApi.tabs.remove(tabId); } catch (error) { console.warn("Could not close temporary SPX Batch Search tab:", error); }
+    }
+    releaseActiveJob(job);
+  }
+}
+
+function getExportMediaId(value, depth = 0, seen = new Set()) {
+  if (value == null || depth > 18) return "";
+  if (typeof value === "string") {
+    const text = value.trim();
+    if ((text.startsWith("{") && text.endsWith("}")) || (text.startsWith("[") && text.endsWith("]"))) {
+      try { return getExportMediaId(JSON.parse(text), depth + 1, seen); } catch {}
+    }
+    return "";
+  }
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return "";
+    seen.add(value);
+    for (const item of value) {
+      const found = getExportMediaId(item, depth + 1, seen);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (typeof value !== "object") return "";
+  if (seen.has(value)) return "";
+  seen.add(value);
+  for (const key of ["media_id", "mediaId", "mediaID"]) {
+    const raw = value[key];
+    if (raw != null && (typeof raw !== "object" || Array.isArray(raw)) && String(raw).trim()) return String(raw).trim();
+  }
+  for (const key of ["media", "media_info", "mediaInfo", "media_file", "mediaFile", "export_file", "exportFile", "file_info", "fileInfo", "attachment"]) {
+    const child = value[key];
+    if (!child || typeof child !== "object") continue;
+    for (const idKey of ["media_id", "mediaId", "mediaID", "file_id", "fileId", "id"]) {
+      const raw = child[idKey];
+      if (raw != null && String(raw).trim()) return String(raw).trim();
+    }
+  }
+  const entries = Object.entries(value).sort(([a], [b]) => {
+    const score = key => /media|file|attachment|data|result|task/i.test(key) ? 0 : 1;
+    return score(a) - score(b);
+  });
+  for (const [, child] of entries) {
+    const found = getExportMediaId(child, depth + 1, seen);
+    if (found) return found;
+  }
+  return "";
+}
+
+async function downloadAssignmentTaskFile(task, taskId) {
+  const rawPath = String(task?.file_name || "").trim().replace(/^\/+/, "");
+  if (!rawPath) throw new Error("SPX completed the Assignment Task but did not return file_name.");
+
+  // Only allow the known SPX Assignment Task export artifact path and require
+  // its embedded task ID to match the task returned by our own export request.
+  const match = rawPath.match(/^downloads\/export\/live\/ph\/(\d{4})\/(\d{2})\/(\d{2})\/delivery\/assignment_task\/(\d+)\/([A-Za-z0-9._-]+\.csv)$/i);
+  if (!match || Number(match[4]) !== Number(taskId)) {
+    throw new Error("SPX Assignment Task file_name is not a recognized task-specific CSV path for task " + taskId + ".");
+  }
+
+  const url = new URL(rawPath, SPX_ORIGIN + "/");
+  if (url.origin !== SPX_ORIGIN || url.username || url.password || url.search || url.hash) {
+    throw new Error("SPX Assignment Task file_name resolved to an unsafe download URL.");
+  }
+
+  const response = await extensionFetchText(url.toString(), {
+    headers: {
+      "Accept": "text/csv,text/plain,application/octet-stream,*/*",
+      "Referer": SPX_ORIGIN + "/"
+    }
+  });
+  const text = String(response?.text || "").replace(/^\uFEFF/, "");
+  if (!response.ok) throw new Error("SPX direct Assignment Task file download failed (HTTP " + response.status + ").");
+  if (!text.trim()) throw new Error("SPX returned an empty direct Assignment Task file.");
+  if (/^(?:<!doctype|<html|\{|\[)/i.test(text.trim().slice(0, 300))) {
+    throw new Error("SPX direct Assignment Task file path returned HTML or JSON instead of CSV.");
+  }
+  return {
+    text,
+    fileName: match[5],
+    url: url.toString()
+  };
+}
+
+async function waitForAssignmentTaskMediaId(taskId, completedInfo, job, label = "Assignment Task") {
+  let bestTask = { ...(completedInfo?.task || {}) };
+  let bestSource = completedInfo?.source || "fms";
+  let mediaId = completedInfo?.mediaId || getExportMediaId(bestTask);
+  if (mediaId) return { task: bestTask, source: bestSource, mediaId, lookupErrors: [] };
+
+  const sources = [...new Set([bestSource, "fms", "fm", ""])];
+  const startedAt = Date.now();
+  const deadline = startedAt + ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS;
+  let lastProgressAt = 0;
+  const lookupErrors = [];
+
+  while (Date.now() < deadline) {
+    if (job?.cancelled) throw new Error(label + " media-ID lookup cancelled.");
+
+    // SPX can mark an export Succeeded before the media/file metadata is
+    // visible in list_for_portal. Re-read the full, unfiltered task rows
+    // instead of treating the first completed snapshot as final.
+    for (const source of sources) {
+      let rows = [];
+      try {
+        rows = await listTasks(0, source, 1, true, 0);
+      } catch (error) {
+        lookupErrors.push((source || "default") + ": " + (error?.message || String(error)));
+        continue;
+      }
+
+      let detailed = rows.find(item => getExportTaskId(item) === Number(taskId)) || null;
+      for (let page = 2; !detailed && rows.length >= 100 && page <= 5; page++) {
+        try {
+          rows = await listTasks(0, source, page, true, 0);
+          detailed = rows.find(item => getExportTaskId(item) === Number(taskId)) || null;
+        } catch (error) {
+          lookupErrors.push((source || "default") + " page " + page + ": " + (error?.message || String(error)));
+          break;
+        }
+      }
+
+      if (!detailed) continue;
+      bestTask = { ...bestTask, ...detailed };
+      bestSource = source;
+      mediaId = getExportMediaId(detailed) || getExportMediaId(bestTask);
+      if (mediaId) return { task: bestTask, source: bestSource, mediaId, lookupErrors };
+    }
+
+    const now = Date.now();
+    if (now - lastProgressAt >= 8000) {
+      const elapsed = Math.floor((now - startedAt) / 1000);
+      sendToPort(job?.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        message: "SPX marked Assignment Task " + taskId + " as Succeeded. Waiting for its file media_id to appear in the full task record… (" + elapsed + "s)"
+      });
+      lastProgressAt = now;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining > 0) await sleep(Math.min(ASSIGNMENT_TASK_MEDIA_ID_POLL_MS, remaining));
+  }
+
+  return { task: bestTask, source: bestSource, mediaId: "", lookupErrors };
+}
+
+function assignmentTaskDateRange(selectedDate) {
+  let date = String(selectedDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = phDateString();
+  const parsed = new Date(date + "T00:00:00Z");
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    date = phDateString();
+  }
+  // SPX ctime uses Unix seconds aligned to Asia/Manila midnight.
+  const dayStartMs = Date.parse(date + "T00:00:00Z") - 8 * 60 * 60 * 1000;
+  const startSec = Math.floor(dayStartMs / 1000);
+  const endSec = startSec + 24 * 60 * 60 - 1;
+  return {
+    date,
+    startSec,
+    endSec,
+    formatCondition: "Created Date= " + date + " 00:00:00," + date + " 23:59:59"
+  };
+}
+
+function assignmentTaskRowMatches(task, range, submittedAtSec) {
+  if (!task || typeof task !== "object") return false;
+  if (String(task.biz_name || "") !== ASSIGNMENT_TASK_EXPORT_BIZ_NAME) return false;
+  if (String(task.export_name || "") !== ASSIGNMENT_TASK_EXPORT_NAME) return false;
+  if (Number(task.station_id || 0) && Number(task.station_id) !== ASSIGNMENT_TASK_STATION_ID) return false;
+  const condition = parseTaskCondition(task);
+  const conditionStart = Number(condition?.gte?.ctime || 0);
+  const conditionEnd = Number(condition?.lte?.ctime || 0);
+  const exactDateRange = conditionStart === range.startSec && conditionEnd === range.endSec;
+  const createdAt = Number(task.ctime || 0);
+  const freshTask = createdAt >= submittedAtSec - 120 && createdAt <= Math.floor(Date.now() / 1000) + 60;
+  const hasConditionRange = conditionStart > 0 || conditionEnd > 0;
+  return exactDateRange || (!hasConditionRange && freshTask);
+}
+
+function findAssignmentTaskIdInResponse(json, range, submittedAtSec) {
+  const directTaskId = Number(
+    json?.data?.task_id || json?.task_id ||
+    json?.data?.task?.task_id || json?.data?.export_task_id || 0
+  );
+  if (Number.isFinite(directTaskId) && directTaskId > 0) return directTaskId;
+
+  const possibleLists = [
+    json?.data?.task_list, json?.data?.tasks, json?.data?.list,
+    json?.task_list, json?.tasks, json?.list
+  ].filter(Array.isArray);
+  for (const rows of possibleLists) {
+    const match = rows
+      .filter(task => assignmentTaskRowMatches(task, range, submittedAtSec))
+      .sort((a, b) => Number(b?.ctime || 0) - Number(a?.ctime || 0))[0];
+    const taskId = Number(match?.task_id || match?.taskId || 0);
+    if (taskId > 0) return taskId;
+  }
+  return 0;
+}
+
+async function findSubmittedAssignmentTaskId(range, submittedAtSec, job) {
+  const sources = ["fms", "fm", ""];
+  const startTime = Math.max(0, submittedAtSec - 120);
+  const deadline = Date.now() + 45000;
+  let lastErrors = [];
+  while (Date.now() < deadline) {
+    if (job.cancelled) throw new Error("Assignment Task export cancelled.");
+    const lookups = await Promise.allSettled(
+      sources.map(source => listTasks(startTime, source, 1, false, 0))
+    );
+    for (let i = 0; i < lookups.length; i++) {
+      const lookup = lookups[i];
+      if (lookup.status !== "fulfilled") {
+        lastErrors.push((sources[i] || "default") + ": " + (lookup.reason?.message || String(lookup.reason)));
+        continue;
+      }
+      const match = (lookup.value || [])
+        .filter(task => assignmentTaskRowMatches(task, range, submittedAtSec))
+        .sort((a, b) => Number(b?.ctime || 0) - Number(a?.ctime || 0))[0];
+      const taskId = Number(match?.task_id || match?.taskId || 0);
+      if (taskId > 0) return taskId;
+    }
+    await sleep(1800);
+  }
+  const detail = lastErrors.length ? " Task-list lookup errors: " + [...new Set(lastErrors)].slice(0, 3).join("; ") + "." : "";
+  throw new Error("SPX received the Assignment Task export request but did not expose its new feeder_assignment_task ID in the response or task list." + detail);
+}
+
+async function submitAssignmentTaskExport(job) {
+  const range = assignmentTaskDateRange(job.selectedDate);
+  const submittedAtSec = Math.floor(Date.now() / 1000);
+  const query = fmQuery({
+    ctime: String(range.startSec) + "," + String(range.endSec),
+    format_condition: range.formatCondition
+  });
+  const url = SPX_ORIGIN + ASSIGNMENT_TASK_EXPORT_PATH + "?" + query;
+
+  sendToPort(job.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+    message: "Submitting Assignment Task export directly to SPX for " + range.date + " without opening an SPX tab…"
+  });
+  const response = await extensionFetchText(url, {
+    method: "GET",
+    headers: await getLinehaulRequestHeaders()
+  });
+  const json = parseJsonResponse("SPX Assignment Task export", response);
+  if (!response.ok || Number(json?.retcode) !== 0) {
+    throw new Error("SPX Assignment Task export request failed: " +
+      (json?.message || "SPX export failed (HTTP " + response.status + ")."));
+  }
+
+  let taskId = findAssignmentTaskIdInResponse(json, range, submittedAtSec);
+  if (!taskId) {
+    sendToPort(job.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+      message: "SPX accepted the Created Date export request. Locating its new feeder_assignment_task in the export task list…"
+    });
+    taskId = await findSubmittedAssignmentTaskId(range, submittedAtSec, job);
+  }
+
+  sendToPort(job.ownerPort, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+    message: "SPX created Assignment Task export " + taskId + ". Waiting for the CSV…"
+  });
+  const data = json?.data || json || {};
+  return {
+    taskId,
+    range,
+    apiResult: json,
+    directUrl: String(data.download_url || data.url || "").trim()
+  };
+}
+
+async function runAssignmentTaskExportJob(job) {
+  const port = job.ownerPort;
+  try {
+    job.startedAt = Date.now();
+    const submitted = await submitAssignmentTaskExport(job);
+    let csv = null;
+    const taskId = Number(submitted.taskId || 0);
+
+    if (submitted.directUrl) {
+      csv = await downloadCsv(submitted.directUrl);
+    } else if (taskId) {
+      const waitStartSec = Math.max(0, Math.floor((job.startedAt - 10 * 60 * 1000) / 1000));
+      let completedInfo = await waitForAssignedTodayExportTask(taskId, waitStartSec, job, "Assignment Task");
+      const completedTask = completedInfo.task || {};
+      if (completedTask.biz_name && String(completedTask.biz_name) !== ASSIGNMENT_TASK_EXPORT_BIZ_NAME) {
+        throw new Error("SPX returned a different export type for Assignment Task " + taskId + ".");
+      }
+      if (completedTask.export_name && String(completedTask.export_name) !== ASSIGNMENT_TASK_EXPORT_NAME) {
+        throw new Error("SPX returned a different export name for Assignment Task " + taskId + ".");
+      }
+      if (Number(completedTask.station_id || 0) && Number(completedTask.station_id) !== ASSIGNMENT_TASK_STATION_ID) {
+        throw new Error("SPX returned an Assignment Task export from a different station.");
+      }
+
+      let directFileError = "";
+      if (completedTask.file_name) {
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+          message: "Assignment Task " + taskId + " succeeded. Downloading its authenticated CSV file path…"
+        });
+        try {
+          csv = await downloadAssignmentTaskFile(completedTask, taskId);
+        } catch (error) {
+          directFileError = error?.message || String(error);
+          console.warn("SPX direct Assignment Task file download failed; checking media_id fallback:", directFileError);
+        }
+      }
+
+      if (!csv) {
+        let mediaId = completedInfo.mediaId || getExportMediaId(completedTask) || getExportMediaId(submitted.apiResult);
+        if (!mediaId) {
+          completedInfo = await waitForAssignmentTaskMediaId(taskId, completedInfo, job, "Assignment Task");
+          mediaId = completedInfo.mediaId || getExportMediaId(completedInfo.task) || getExportMediaId(submitted.apiResult);
+        }
+        if (!mediaId) {
+          const task = completedInfo.task || completedTask;
+          const taskFields = Object.keys(task).slice(0, 24).join(", ") || "none";
+          const diagnosticKeys = ["media_id", "is_mms_gray", "file_name", "export_source", "export_name", "biz_name", "export_status", "queue_position"];
+          const diagnosticValues = diagnosticKeys.map(key => {
+            const value = task[key];
+            const rendered = value === undefined ? "missing" : value === null || value === "" ? "empty" : JSON.stringify(value);
+            return key + "=" + rendered;
+          }).join(", ");
+          const lookupDetail = completedInfo.lookupErrors?.length
+            ? " Metadata lookup errors: " + [...new Set(completedInfo.lookupErrors)].slice(0, 3).join("; ") + "."
+            : "";
+          throw new Error(
+            "SPX completed Assignment Task " + taskId + ", but file_name and media_id remained unavailable after " +
+            Math.round(ASSIGNMENT_TASK_MEDIA_ID_WAIT_MS / 1000) + " seconds of post-completion full-record checks. " +
+            "Queue: " + (completedInfo.source || "default") + ". Task fields: " + taskFields +
+            ". Key values: " + diagnosticValues +
+            (directFileError ? ". Direct file download: " + directFileError : "") +
+            ". The signed-download request was not sent because SPX requires media_id (code 40902)." + lookupDetail
+          );
+        }
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+          message: "Assignment Task " + taskId + " completed. Media ID recovered; requesting the signed CSV download…"
+        });
+        const signedUrl = await getSignedDownloadUrl(taskId, completedInfo.source, mediaId);
+        csv = await downloadCsv(signedUrl);
+      }
+    } else {
+      throw new Error("SPX did not return a usable Assignment Task task ID or download URL.");
+    }
+
+    const rowCount = Math.max(0, String(csv.text || "").split(/\r?\n/).filter(Boolean).length - 1);
+    if (!rowCount) throw new Error("SPX Assignment Task export completed but contained no data rows.");
+    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_CSV", {
+      taskId: taskId || "direct",
+      selectedDate: submitted.range.date,
+      fileName: csv.fileName || "assignment_task.csv",
+      csvText: csv.text,
+      rowCount
+    });
+  } catch (error) {
+    console.error("BADOC SPX Assignment Task export failed:", error);
+    sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", {
+      message: error?.message || String(error),
+      selectedDate: job.selectedDate
+    });
   } finally {
     releaseActiveJob(job);
   }
@@ -2354,25 +2756,6 @@ extApi.runtime.onConnect.addListener(port => {
     const failBusy = (kind, text = "A BADOC SPX sync is already running.") =>
       sendToPort(port, "BADOC_SPX_ERROR", { message: text, ...(kind ? { kind } : {}) });
 
-    if (type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
-      const selectedDate = String(message?.selectedDate || "").trim();
-      const job = reserveActiveJob("assignment-task", port, {
-        selectedDate: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? selectedDate : new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),
-        startedAt: Date.now()
-      });
-      if (!job) {
-        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", {
-          message: "Another SPX export is already running. Retry Assignment Task after it finishes."
-        });
-        return;
-      }
-      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
-        message: "Extension accepted the Assignment Task export request…"
-      });
-      void runAssignmentTaskExportJob(job);
-      return;
-    }
-
     if (type === "BADOC_START_PARCEL_SECONDARY_SYNC") {
       const job = reserveActiveJob("parcel-secondary", port);
       if (!job) { failBusy("parcel-secondary"); return; }
@@ -2410,6 +2793,57 @@ extApi.runtime.onConnect.addListener(port => {
       });
       if (!job) { failBusy("linehaul"); return; }
       void runJob(job);
+      return;
+    }
+
+    if (type === "BADOC_START_ASSIGNMENT_TASK_EXPORT") {
+      const selectedDate = String(message?.selectedDate || "").trim();
+      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        stage: "command-received", selectedDate,
+        message: "Extension background received the Assignment Task command. Preparing the direct SPX export…"
+      });
+      const job = reserveActiveJob("assignment-task", port, {
+        selectedDate: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? selectedDate : phDateString(),
+        startedAt: Date.now()
+      });
+      if (!job) {
+        sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_ERROR", {
+          message: "Another SPX export is already running. Retry Assignment Task after it finishes."
+        });
+        return;
+      }
+      sendToPort(port, "BADOC_SPX_ASSIGNMENT_TASK_PROGRESS", {
+        stage: "job-accepted", selectedDate: job.selectedDate,
+        message: "Extension accepted the Assignment Task export request…"
+      });
+      void runAssignmentTaskExportJob(job);
+      return;
+    }
+
+    if (type === "BADOC_START_BATCH_SEARCH_EXPORT") {
+      const trackingNumbers = [...new Set((Array.isArray(message?.trackingNumbers) ? message.trackingNumbers : [])
+        .map(value => String(value ?? "").trim())
+        .filter(value => normalizeBatchSearchTn(value) && /^[A-Za-z0-9_-]{6,60}$/.test(value.replace(/\s+/g, ""))))];
+      if (!trackingNumbers.length) {
+        sendToPort(port, "BADOC_SPX_BATCH_SEARCH_ERROR", {
+          kind: "batch-search-result",
+          message: "No usable SPX Tracking Numbers were received from Reports. Run Assignment Task first and check its SPX Tracking Number column."
+        });
+        return;
+      }
+      const job = reserveActiveJob("batch-search-result", port, {
+        trackingNumbers,
+        selectedDate: String(message?.selectedDate || "").trim(),
+        sourceTaskId: String(message?.sourceTaskId || "").trim()
+      });
+      if (!job) {
+        sendToPort(port, "BADOC_SPX_BATCH_SEARCH_ERROR", {
+          kind: "batch-search-result",
+          message: "Another SPX export is currently running. Wait for it to finish, then retry Batch Search Result."
+        });
+        return;
+      }
+      void runBatchSearchExportJob(job);
       return;
     }
 
