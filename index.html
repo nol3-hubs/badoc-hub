@@ -2201,6 +2201,26 @@ html[data-theme="dark"] #dailyHistory .dh2-chart rect:not(.dh2-hit){fill:#397fbd
 html[data-theme="dark"] #dailyHistory .dh2-chart .dh2-pt.is-sel rect:not(.dh2-hit){fill:#60a5fa!important}
 </style>
 
+<style id="cfr1-card-fit-fix">
+/* Keep the CFR1 percentage fully inside the fifth Parcel Overview card. */
+#homeDashboard .dashboard-card-group.parcel-overview-group .dashboard-status-card.cfr1{
+  padding-left:7px!important;
+  padding-right:7px!important;
+}
+#homeDashboard .dashboard-card-group.parcel-overview-group .dashboard-status-card.cfr1 strong{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+  font-size:clamp(17px,1.05vw,19px)!important;
+  line-height:1.1!important;
+  letter-spacing:-.75px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:clip!important;
+}
+</style>
+
 </head>
 <body data-app-version="21">
 
