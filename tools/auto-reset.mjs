@@ -157,7 +157,7 @@ async function readCfr1CloudLedger() {
   });
 }
 
-async function repairCfr1ForCurrentDay(expectedDate, previousDate) {
+async function repairCfr1ForCurrentDay(expectedDate) {
   await page.waitForFunction(() =>
     !!window.__badocCfr1Details &&
     typeof window.__badocCfr1CloudSync?.resetCloud === 'function' &&
@@ -174,11 +174,6 @@ async function repairCfr1ForCurrentDay(expectedDate, previousDate) {
     }));
     if (live.date === expectedDate) return { alreadyCurrent: true, ledger: before, live };
   }
-
-  // Preserve the previous operational day's CFR summary before replacing a
-  // stale ledger. Do not capture a previous-day Daily History from today's
-  // already-updated operational uploads.
-  // Do not write a previous-day CFR summary from a dashboard that may already be using current-day parcel rows.
 
   await page.evaluate(async () => {
     await window.__badocCfr1CloudSync.resetCloud();
@@ -281,7 +276,7 @@ try {
       console.log('Reset marker exists, but current-day uploads are present. Preserving operational data and checking CFR1.');
       await waitForParcelData(90000);
       await page.waitForFunction(() => !!window.__badocCfr1Details, null, { timeout: 60000 });
-      const repaired = await repairCfr1ForCurrentDay(resetDate, operationalDate);
+      const repaired = await repairCfr1ForCurrentDay(resetDate);
       console.log('Current-day CFR1 verification: ' + JSON.stringify(repaired));
     } else {
       console.log('Reset marker already exists for ' + resetDate + '; verifying the completed reset.');
@@ -297,7 +292,7 @@ try {
     console.log('Current-day uploads detected (' + currentDayActivity.activeSources.join(', ') + '). Skipping destructive operational reset.');
     await waitForParcelData(90000);
     await page.waitForFunction(() => !!window.__badocCfr1Details, null, { timeout: 60000 });
-    const repaired = await repairCfr1ForCurrentDay(resetDate, operationalDate);
+    const repaired = await repairCfr1ForCurrentDay(resetDate);
     console.log('Safe CFR1-only catch-up completed: ' + JSON.stringify(repaired));
     process.exit(0);
   }
