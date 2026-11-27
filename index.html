@@ -10232,9 +10232,22 @@ window.DASHBOARD_V2_READY = true;
         await uploadLedger(merged);
         lastPublishedSourceSignature=sourceSig;
       }else{
-        // Do not upload a blank ledger before parcel batches have loaded.
-        // A later dashboard refresh will publish once the data is available.
-        if(!ledger.records||Object.keys(ledger.records).length===0) return;
+        // Do not retain yesterday's frozen membership when today's first
+        // calculation is still empty. Remove only the stale CFR1 ledger; never
+        // touch uploaded parcel files or other dashboard data.
+        const recordCount=ledger.records&&typeof ledger.records==="object"
+          ?Object.keys(ledger.records).length:0;
+        if(!recordCount){
+          if(cloud&&cloudToday&&cloudToday!==today){
+            const removed=await getClient().storage.from("exported-files").remove([PATH]);
+            if(removed.error)throw Error(removed.error.message||"Previous-day CFR1 ledger deletion failed");
+            lastCloudStamp="";
+            lastPublishedSourceSignature=sourceSig;
+            const status=document.getElementById("cfr1CloudSyncStatus");
+            if(status)status.textContent="Previous-day CFR1 ledger cleared; waiting for today's parcel data";
+          }
+          return;
+        }
         await uploadLedger(ledger);
         lastPublishedSourceSignature=sourceSig;
       }
@@ -10250,8 +10263,20 @@ window.DASHBOARD_V2_READY = true;
     let loaded=false;
     try{
       const cloud=await downloadLedger();
-      if(!cloud||!cloud.date)return true;
       const today=__badocTime.dayKey();
+      if(!cloud||!cloud.date){
+        // A missing cloud object after the Manila date changes is also a reset
+        // signal. Do not let an old in-memory ledger survive simply because the
+        // cloud delete has already completed.
+        const staleMemory=window.__badocCfr1LedgerMemory||null;
+        if(staleMemory&&String(staleMemory.date||"")!==today){
+          window.__badocCfr1LedgerMemory=null;
+          lastCloudStamp="";
+          lastPublishedSourceSignature="";
+          setTimeout(()=>{try{window.updateOperationProgress?.()}catch(e){console.warn("CFR1 refresh after missing-ledger cleanup:",e)}},0);
+        }
+        return true;
+      }
       const cloudDate=String(cloud.date||"");
       // Never restore yesterday's scanned/unscanned membership into today's
       // CFR1 ledger. Keep the existing eligibility, freeze, and status logic
@@ -10261,6 +10286,7 @@ window.DASHBOARD_V2_READY = true;
         if(staleMemory && String(staleMemory.date||"")!==today){
           window.__badocCfr1LedgerMemory=null;
           lastCloudStamp=String(cloud._cloudUpdatedAt||"");
+          lastPublishedSourceSignature="";
           // Re-run the existing CFR1 calculation after this poll releases its
           // lock, so today's ledger is rebuilt through the unchanged rules.
           setTimeout(()=>{try{window.updateOperationProgress?.()}catch(e){console.warn("CFR1 daily refresh after stale-ledger discard:",e)}},0);
@@ -10313,6 +10339,7 @@ window.DASHBOARD_V2_READY = true;
       const r=await getClient().storage.from("exported-files").remove([PATH]);
       if(r.error)throw Error(r.error.message||"CFR1 cloud ledger deletion failed");
       lastCloudStamp="";
+      lastPublishedSourceSignature="";
       window.__badocCfr1LedgerMemory=null;
       if(status)status.textContent="CFR1 cloud ledger reset; rebuilding from this device's available parcel data";
       return true;
