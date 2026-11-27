@@ -1,4 +1,4 @@
-// Badoc Hub — GitHub-only cloud refresh, Daily History capture, and guarded 12 AM reset.
+// Badoc Hub — GitHub-only cloud refresh, Daily History capture, and guarded Manila-day reset.
 // GitHub Actions has no authenticated SPX tab or local Chrome extension, so it cannot run SPX Sync All.
 // It refreshes only parcel/linehaul files that have already been uploaded to the shared cloud.
 import { chromium } from 'playwright';
@@ -34,12 +34,15 @@ const startedAt = manilaNow();
 const operationalDate = startedAt.hour === 23 ? startedAt.date : addDays(startedAt.date, -1);
 const resetDate = addDays(operationalDate, 1);
 function inResetWindow(t) {
+  // GitHub Actions scheduled runs can be delayed by several hours. Permit a
+  // guarded catch-up through 9:59 AM Manila; current-day uploads are protected
+  // below and will never be cleared by a late catch-up.
   return (t.date === operationalDate && t.hour === 23) ||
-    (t.date === resetDate && t.hour < 3);
+    (t.date === resetDate && t.hour < 10);
 }
 console.log('Manila time: ' + startedAt.date + ' ' + startedAt.hour + ':' + startedAt.minute + ':' + startedAt.second);
 if (IS_SCHEDULED && !inResetWindow(startedAt)) {
-  console.log('SAFE SKIP: scheduled run started outside the 11 PM–3 AM Manila reset window. Nothing was changed.');
+  console.log('SAFE SKIP: scheduled run started outside the 11 PM–10 AM Manila recovery window. Nothing was changed.');
   process.exit(0);
 }
 
@@ -107,6 +110,126 @@ async function verifyCloudReset(expectedDate) {
   return report;
 }
 
+
+
+async function readCurrentDayOperationalActivity(dayKey) {
+  const dayStart = Date.parse(dayKey + 'T00:00:00+08:00');
+  return page.evaluate(async dayStartMs => {
+    const cfg = window.BADOC_SHARED_CONFIG || {};
+    if (!cfg.url || !cfg.key || !window.BadocCloud) throw new Error('Shared cloud configuration is incomplete.');
+    const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    });
+    const result = await client.from('badoc_shared_state')
+      .select('upload_exists,upload_version,linehaul_exists,linehaul_version,pickup_orders_exists,pickup_orders_version,pickup_tasks_exists,pickup_tasks_version')
+      .eq('id', 1).maybeSingle();
+    if (result.error) throw new Error('Could not check current-day upload safety: ' + (result.error.message || 'unknown cloud error'));
+    const state = result.data || {};
+    const sources = [
+      { name: 'parcel upload', exists: state.upload_exists === true, version: Number(state.upload_version || 0) },
+      { name: 'linehaul upload', exists: state.linehaul_exists === true, version: Number(state.linehaul_version || 0) },
+      { name: 'pickup orders', exists: state.pickup_orders_exists === true, version: Number(state.pickup_orders_version || 0) },
+      { name: 'pickup tasks', exists: state.pickup_tasks_exists === true, version: Number(state.pickup_tasks_version || 0) }
+    ];
+    const active = sources.filter(item => item.exists && item.version >= dayStartMs);
+    return { currentDayActivity: active.length > 0, activeSources: active.map(item => item.name), state };
+  }, dayStart);
+}
+
+async function readCfr1CloudLedger() {
+  return page.evaluate(async () => {
+    const cfg = window.BADOC_SHARED_CONFIG || {};
+    if (!cfg.url || !cfg.key || !window.BadocCloud) throw new Error('Shared cloud configuration is incomplete.');
+    const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    });
+    const result = await client.storage.from('exported-files').download('current/cfr1-ledger.json');
+    if (result.error) {
+      if (/not found|404|object not found/i.test(result.error.message || '')) return null;
+      throw new Error('Could not read CFR1 cloud ledger: ' + (result.error.message || 'unknown cloud error'));
+    }
+    const ledger = JSON.parse(await result.data.text());
+    return {
+      date: String(ledger && ledger.date || ''),
+      recordCount: ledger && ledger.records && typeof ledger.records === 'object' ? Object.keys(ledger.records).length : 0,
+      updatedAt: Number(ledger && ledger._cloudUpdatedAt || 0)
+    };
+  });
+}
+
+async function repairCfr1ForCurrentDay(expectedDate, previousDate) {
+  await page.waitForFunction(() =>
+    !!window.__badocCfr1Details &&
+    typeof window.__badocCfr1CloudSync?.resetCloud === 'function' &&
+    typeof window.updateOperationProgress === 'function',
+    null, { timeout: 60000 }
+  );
+
+  const before = await readCfr1CloudLedger();
+  if (before && before.date === expectedDate) {
+    const live = await page.evaluate(() => ({
+      date: String(window.__badocCfr1Debug && window.__badocCfr1Debug.date || ''),
+      scanned: Number(window.__badocCfr1Details && window.__badocCfr1Details.scannedCount || 0),
+      total: Number(window.__badocCfr1Details && window.__badocCfr1Details.totalCount || 0)
+    }));
+    if (live.date === expectedDate) return { alreadyCurrent: true, ledger: before, live };
+  }
+
+  // Preserve the previous operational day's CFR summary before replacing a
+  // stale ledger. Do not capture a previous-day Daily History from today's
+  // already-updated operational uploads.
+  let previousSummarySaved = false;
+  if (before && before.date === previousDate) {
+    previousSummarySaved = await page.evaluate(async date => {
+      if (typeof window.__badocCaptureCfrSummary !== 'function') return false;
+      const saved = await window.__badocCaptureCfrSummary(date);
+      return !!(saved && saved.date === date);
+    }, previousDate);
+  }
+
+  await page.evaluate(async () => {
+    await window.__badocCfr1CloudSync.resetCloud();
+    window.__badocCfr1LedgerMemory = null;
+    window.updateOperationProgress();
+  });
+  await page.waitForFunction(date =>
+    String(window.__badocCfr1Debug && window.__badocCfr1Debug.date || '') === date,
+    expectedDate, { timeout: 30000, polling: 250 }
+  );
+
+  const live = await page.evaluate(() => ({
+    date: String(window.__badocCfr1Debug && window.__badocCfr1Debug.date || ''),
+    scanned: Number(window.__badocCfr1Details && window.__badocCfr1Details.scannedCount || 0),
+    unscanned: Array.isArray(window.__badocCfr1Details && window.__badocCfr1Details.unscanned)
+      ? window.__badocCfr1Details.unscanned.length : 0,
+    total: Number(window.__badocCfr1Details && window.__badocCfr1Details.totalCount || 0)
+  }));
+  if (live.date !== expectedDate) throw new Error('CFR1 rebuild date mismatch: ' + JSON.stringify(live));
+
+  let persisted = null;
+  if (live.total > 0) {
+    await page.waitForFunction(async date => {
+      try {
+        const cfg = window.BADOC_SHARED_CONFIG || {};
+        const client = window.BadocCloud.createClient(cfg.url, cfg.key, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        });
+        const result = await client.storage.from('exported-files').download('current/cfr1-ledger.json');
+        if (result.error) return false;
+        const ledger = JSON.parse(await result.data.text());
+        return String(ledger.date || '') === date && Object.keys(ledger.records || {}).length > 0;
+      } catch (_) { return false; }
+    }, expectedDate, { timeout: 45000, polling: 1000 });
+    persisted = await readCfr1CloudLedger();
+  } else {
+    persisted = await readCfr1CloudLedger();
+    if (persisted && persisted.date !== expectedDate) {
+      throw new Error('Previous-day CFR1 ledger remains after an empty rebuild: ' + JSON.stringify(persisted));
+    }
+  }
+  return { rebuilt: true, previousSummarySaved, before, live, persisted };
+}
+
 try {
   // Hold the dashboard's own reset timer until this job explicitly releases it.
   await page.addInitScript(() => { window.__BADOC_GITHUB_AUTOMATION_HOLD_RESET = true; });
@@ -135,13 +258,6 @@ try {
     return String(saved && saved.date || '') || null;
   });
 
-  if (IS_SCHEDULED && markerDate === resetDate) {
-    console.log('Reset marker already exists for ' + resetDate + '; verifying the shared cloud before skipping.');
-    await verifyCloudReset(resetDate);
-    console.log('Already reset for ' + resetDate + '; leaving data untouched.');
-    process.exit(0);
-  }
-
   const waitForParcelData = async timeout => page.waitForFunction(() => {
     try {
       const count = (Array.isArray(current && current.valid) ? current.valid.length : 0) +
@@ -152,6 +268,36 @@ try {
 
   console.log('Refreshing data already saved in the shared cloud. This does not import fresh SPX data.');
   await page.evaluate(async () => { await window.__badocSharedPullNow(); });
+  const currentDayActivity = IS_SCHEDULED
+    ? await readCurrentDayOperationalActivity(resetDate)
+    : { currentDayActivity: false, activeSources: [] };
+
+  if (IS_SCHEDULED && markerDate === resetDate) {
+    if (currentDayActivity.currentDayActivity) {
+      console.log('Reset marker exists, but current-day uploads are present. Preserving operational data and checking CFR1.');
+      await waitForParcelData(90000);
+      await page.waitForFunction(() => !!window.__badocCfr1Details, null, { timeout: 60000 });
+      const repaired = await repairCfr1ForCurrentDay(resetDate, operationalDate);
+      console.log('Current-day CFR1 verification: ' + JSON.stringify(repaired));
+    } else {
+      console.log('Reset marker already exists for ' + resetDate + '; verifying the completed reset.');
+      await verifyCloudReset(resetDate);
+    }
+    console.log('Daily reset already handled for ' + resetDate + '; leaving operational data untouched.');
+    process.exit(0);
+  }
+
+  if (IS_SCHEDULED && currentDayActivity.currentDayActivity) {
+    // A late workflow must never erase files uploaded after today's Manila
+    // midnight. Repair only a stale CFR1 ledger, preserving current-day work.
+    console.log('Current-day uploads detected (' + currentDayActivity.activeSources.join(', ') + '). Skipping destructive operational reset.');
+    await waitForParcelData(90000);
+    await page.waitForFunction(() => !!window.__badocCfr1Details, null, { timeout: 60000 });
+    const repaired = await repairCfr1ForCurrentDay(resetDate, operationalDate);
+    console.log('Safe CFR1-only catch-up completed: ' + JSON.stringify(repaired));
+    process.exit(0);
+  }
+
   await waitForParcelData(90000);
   await page.waitForFunction(() => {
     const e = window.__badocEodDashboard;
@@ -171,21 +317,21 @@ try {
     process.exit(0);
   }
 
-  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: cloud preflight finished outside the midnight reset window.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: cloud preflight finished outside the 11 PM–10 AM Manila recovery window.');
 
   // Refresh and capture close to midnight. When a scheduled run starts before
   // midnight, wait until 11:58 PM; if GitHub starts it just after midnight,
   // recover the previous calendar day's still-uncleared data immediately.
-  console.log('Holding reset until 11:58 PM Manila for final cloud and EOD refresh.');
+  console.log('Holding reset until 11:58 PM Manila when the run starts before midnight; delayed runs recover the previous day immediately.');
   const waitStarted = Date.now();
   while (true) {
     const t = manilaNow();
     if (t.date !== operationalDate || (t.hour === 23 && t.minute >= 58)) break;
-    if (!inResetWindow(t)) throw new Error('SAFE STOP: outside the midnight refresh window.');
+    if (!inResetWindow(t)) throw new Error('SAFE STOP: outside the 11 PM–10 AM Manila recovery window.');
     if (Date.now() - waitStarted > WAIT_TIMEOUT_MS) throw new Error('Timed out before final refresh. Reset was not released.');
     await sleep(POLL_MS);
   }
-  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: missed the midnight refresh window.');
+  if (!inResetWindow(manilaNow())) throw new Error('SAFE STOP: missed the 11 PM–10 AM Manila recovery window.');
 
   await page.evaluate(async () => { await window.__badocSharedPullNow(); });
   await waitForParcelData(60000);
