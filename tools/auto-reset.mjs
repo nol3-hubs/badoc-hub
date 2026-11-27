@@ -178,14 +178,7 @@ async function repairCfr1ForCurrentDay(expectedDate, previousDate) {
   // Preserve the previous operational day's CFR summary before replacing a
   // stale ledger. Do not capture a previous-day Daily History from today's
   // already-updated operational uploads.
-  let previousSummarySaved = false;
-  if (before && before.date === previousDate) {
-    previousSummarySaved = await page.evaluate(async date => {
-      if (typeof window.__badocCaptureCfrSummary !== 'function') return false;
-      const saved = await window.__badocCaptureCfrSummary(date);
-      return !!(saved && saved.date === date);
-    }, previousDate);
-  }
+  // Do not write a previous-day CFR summary from a dashboard that may already be using current-day parcel rows.
 
   await page.evaluate(async () => {
     await window.__badocCfr1CloudSync.resetCloud();
@@ -227,7 +220,7 @@ async function repairCfr1ForCurrentDay(expectedDate, previousDate) {
       throw new Error('Previous-day CFR1 ledger remains after an empty rebuild: ' + JSON.stringify(persisted));
     }
   }
-  return { rebuilt: true, previousSummarySaved, before, live, persisted };
+  return { rebuilt: true, before, live, persisted };
 }
 
 try {
