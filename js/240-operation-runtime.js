@@ -846,7 +846,7 @@ window.updateOperationProgress=function(){
   window.__badocCfr1LedgerMemory=cfr1Ledger;
   // Cloud-sync the daily CFR1 ledger separately from uploaded parcel data.
   // Do not sync the reset operation by deleting parcel data.
-  if(window.__badocCfr1MaintenanceInProgress!==true){try{window.__badocCfr1CloudSync?.publish?.(CFR1_KEY,cfr1Ledger)}catch(e){console.warn("CFR1 cloud publish queue failed",e)}}
+  try{window.__badocCfr1CloudSync?.publish?.(CFR1_KEY,cfr1Ledger)}catch(e){console.warn("CFR1 cloud publish queue failed",e)}
 
   let cfr1Total=0,cfr1Scanned=0;
   const cfr1ScannedRows=[], cfr1UnscannedRows=[];

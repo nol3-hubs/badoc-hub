@@ -45,7 +45,11 @@ function activityDate(row,status){
   const names=[];
   if(status.includes("DELIVERED"))names.push("Delivered Time","Delivered Date","Delivery Time");
   else if(status.includes("DELIVERING"))names.push("Delivering Time","Delivering Date","Delivery Start Time");
-  else if(status.includes("ONHOLD")||status.includes("ON HOLD"))names.push("OnHold Time","On Hold Time");
+  else if(status.includes("ONHOLD")||status.includes("ON HOLD"))names.push(
+    "OnHold Time","On Hold Time","Pick Up Time","Pickup Time","First Pick Up Time",
+    "First Pickup Time","First Pickup DateTime","At Pick Up Time","Pickup Date Time",
+    "Pickup Datetime","Pickup Timestamp","Assigned Time","Assignment Time"
+  );
   else if(status.includes("RECEIVED"))names.push("Received Time","Current Station Received Time");
   names.push("Scan Time","Scanned Time","Scan Date","Last Scan Time","Date","Received Time","Delivering Time","Delivered Time","OnHold Time","On Hold Time");
   const raw=value(row,names);if(!raw)return "";
@@ -89,9 +93,9 @@ function build(){
   const source=typeof getParcelCountRows==="function"?getParcelCountRows():(typeof current!=="undefined"&&Array.isArray(current?.rows)?current.rows:[]);
   const sourceRows=Array.isArray(source)?source:[];
   const roster=rosterIndexes(),assignments=assignmentMap(roster);
-  // Use the exact same OnHold population as Dashboard / Planning Board:
-  // status + Pick Up Time cutoff, current export precedence, exceptions and TN dedup.
-  // Do not infer OnHold from raw status text in this rider view.
+  // Start with the shared Dashboard / Planning Board OnHold population so
+  // its 3 PM cutoff and export precedence stay aligned. Explicit current SPX
+  // OnHold statuses are added below for this rider-attribution view.
   const sharedOnholdRows=typeof window.__badocGetOnholdRows==="function"
     ?window.__badocGetOnholdRows(sourceRows,false):[];
   const onholdRowsByTn=new Map();
@@ -99,6 +103,23 @@ function build(){
     const tn=trackingNumber(row);
     const tnKey=key(tn);
     if(tnKey&&!onholdRowsByTn.has(tnKey))onholdRowsByTn.set(tnKey,row);
+  });
+  // Actual Scanned must also recognize a parcel whose current SPX status is
+  // explicitly OnHold. The shared Planning Board classifier additionally
+  // requires Pick Up Time today before 3 PM; that remains unchanged there.
+  // This page uses the explicit current status as current-OnHold evidence.
+  const onholdStatusAliases=[
+    "Parcel Status To","Status To","TO Status","To Status","Status To (Current)",
+    "Status","Parcel Status","Delivery Status","Current Status"
+  ];
+  sourceRows.forEach(row=>{
+    const tnKey=key(trackingNumber(row));
+    if(!tnKey)return;
+    const currentStatus=norm(value(row,onholdStatusAliases))
+      .replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+    if(["ONHOLD","ON HOLD","LMHUB ONHOLD","LMHUB ON HOLD"].includes(currentStatus)){
+      onholdRowsByTn.set(tnKey,row);
+    }
   });
   const seen=new Set(),records=[];
   sourceRows.forEach(row=>{

@@ -2336,8 +2336,7 @@ async function parseDownloadedBatchSearchFile(file, requestedTns) {
   }));
   if(headerRowIndex<0)throw new Error("SPX downloaded file has no recognizable tracking-number/status header. File: "+String(file.fileName||"unknown"));
   const headers=rows[headerRowIndex].map(value=>String(value??"").trim());
-  const rawDataRows=rows.slice(headerRowIndex+1);
-  const dataRows=rawDataRows.filter(row=>!isBatchSearchRepeatedHeaderRow(headers,row));
+  const dataRows=rows.slice(headerRowIndex+1);
   const wanted=new Set((requestedTns||[]).map(normalizeBatchSearchTn).filter(Boolean));
   const findHeader=(aliases,pattern)=>{
     const exact=batchHeaderIndex(headers,aliases);
@@ -2879,7 +2878,7 @@ async function executeSpxBatchSearch(tabId, trackingNumbers, job = null) {
     exportAction=await clickBatchSearchDownloadControl(tabId);
     if(!exportAction?.clicked||!exportAction?.menuItem){
       throw new Error(
-        "SPX Batch Search finished, but Badoc Hub could not select Export Batch-Search Results. "+
+        "SPX Batch Search finished, but Test2 could not select Export Batch-Search Results. "+
         String(exportAction?.reason||exportAction?.menuText||"The SPX export option was not found.")+
         (exportAction?.menuText?" Menu: "+exportAction.menuText:"")+
         (Array.isArray(exportAction?.menuCandidates)&&exportAction.menuCandidates.length?" Dropdowns: "+exportAction.menuCandidates.join(" | "):"")+
@@ -3060,109 +3059,23 @@ function normalizeBatchSearchTn(value) {
   return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, "").toUpperCase();
 }
 
-
-const BATCH_SEARCH_RESULT_HEADERS = Object.freeze(["Order ID","SLS Tracking Number","Shopee Order SN","Sort Code Name","Town Name","Location Type","Driver ID","Driver Name","Driver Phone","Received Time","Current Station Received Time","Delivering Time","Delivered Time","OnHold Time","OnHoldReason","Reschedule Date","Status","Reject remark","COD Amount","Manifest Number","Order Account","Original ASF","Rounding ASF","Total of On Hold Times","Reschedule Time","Delivery Attempts","Bulky Type","SLA Target Date","Time to SLA","Payment Method","Current Station","Shop ID","Shop Category","Zone ID","Zone","Destination Station","Next Station","Pickup Station","Ros","Driver Contract Type","Pick Up Time","Collected Time","Transported to sp time","SLA Tag","High Value","Specical Dg Type","Damaged Tag","Return Destination","Chargeable Weight","Cache Type","Size Type"]);
-function normalizeBatchSearchHeader(value) {
-  return String(value ?? "").normalize("NFKC").trim()
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-const BATCH_SEARCH_HEADER_MAP = new Map();
-for (const header of BATCH_SEARCH_RESULT_HEADERS) {
-  BATCH_SEARCH_HEADER_MAP.set(normalizeBatchSearchHeader(header), header);
-}
-// Small, explicit aliases for SPX label variations. Extra Batch Search,
-// Assignment Task, Search Result and Error columns are intentionally ignored.
-for (const [alias, target] of [
-  ["oid", "Order ID"],
-  ["order no", "Order ID"],
-  ["order number", "Order ID"],
-  ["sls tn", "SLS Tracking Number"],
-  ["sls tracking no", "SLS Tracking Number"],
-  ["shopee order serial number", "Shopee Order SN"],
-  ["special dg type", "Specical Dg Type"]
-]) {
-  BATCH_SEARCH_HEADER_MAP.set(normalizeBatchSearchHeader(alias), target);
-}
-const BATCH_SEARCH_RESULT_HEADER_KEYS = new Set(
-  BATCH_SEARCH_RESULT_HEADERS.map(normalizeBatchSearchHeader)
-);
-const BATCH_SEARCH_DATE_HEADER_KEYS = new Set([
-  "receivedtime", "currentstationreceivedtime", "deliveringtime",
-  "deliveredtime", "onholdtime", "rescheduledate", "rescheduletime",
-  "slatargetdate", "pickuptime", "collectedtime", "transportedtosp time".replace(/[^a-z0-9]/g, "")
-]);
-function batchSearchFormatDateValue(value, header) {
-  const text = String(value ?? "").trim();
-  if (!text || !BATCH_SEARCH_DATE_HEADER_KEYS.has(normalizeBatchSearchHeader(header))) return text;
-  const serial = Number(text);
-  if (/^\d{4,6}(?:\.\d+)?$/.test(text) && Number.isFinite(serial) && serial >= 20000 && serial <= 80000) {
-    const date = new Date(Date.UTC(1899, 11, 30) + Math.round(serial * 86400000));
-    if (!Number.isNaN(date.getTime())) {
-      const pad = number => String(number).padStart(2, "0");
-      const dateText = pad(date.getUTCMonth() + 1) + "/" + pad(date.getUTCDate()) + "/" + date.getUTCFullYear();
-      const hasTime = Math.abs(serial - Math.floor(serial)) > 0.0000001;
-      return hasTime ? dateText + " " + pad(date.getUTCHours()) + ":" + pad(date.getUTCMinutes()) : dateText;
-    }
-  }
-  const formatParts = (year, month, day, hour, minute, hasTime) => {
-    const pad = number => String(number).padStart(2, "0");
-    const dateText = pad(month) + "/" + pad(day) + "/" + year;
-    return hasTime ? dateText + " " + pad(hour) + ":" + pad(minute) : dateText;
+function batchSearchCsv(rows, headers) {
+  const columns=Array.isArray(headers)&&headers.length
+    ?headers
+    :["Input Tracking Number","Matched Tracking Number","SPX TN","SLS TN","Third TN","Status","Search Result","Error"];
+  const cell=value=>{
+    const text=String(value??"");
+    return /[",\r\n]/.test(text)?'"'+text.replace(/"/g,'""')+'"':text;
   };
-  let match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?$/);
-  if (match) return formatParts(Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4] || 0), Number(match[5] || 0), match[4] != null);
-  match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?$/);
-  if (match) return formatParts(Number(match[3]), Number(match[1]), Number(match[2]), Number(match[4] || 0), Number(match[5] || 0), match[4] != null);
-  return text;
-}
-function batchSearchCanonicalSourceFields(sourceFields) {
-  const source = sourceFields && typeof sourceFields === "object" ? sourceFields : {};
-  const output = Object.fromEntries(BATCH_SEARCH_RESULT_HEADERS.map(header => [header, ""]));
-  const entries = Object.entries(source);
-  // Exact canonical SPX headings take precedence over aliases, independent of
-  // the order in which source columns arrive in each 3,000-TN chunk.
-  for (const exactPass of [true, false]) {
-    for (const [sourceHeader, rawValue] of entries) {
-      const normalized = normalizeBatchSearchHeader(sourceHeader);
-      const target = BATCH_SEARCH_HEADER_MAP.get(normalized);
-      if (!target) continue;
-      const isExact = normalized === normalizeBatchSearchHeader(target);
-      if (isExact !== exactPass) continue;
-      const value = String(rawValue ?? "").trim();
-      if (!value) continue;
-      if (exactPass || !output[target]) {
-        output[target] = batchSearchFormatDateValue(value, target);
-      }
-    }
-  }
-  return output;
-}
-function isBatchSearchRepeatedHeaderRow(headers, row) {
-  if (!Array.isArray(row)) return false;
-  const known = new Set([
-    ...BATCH_SEARCH_RESULT_HEADERS.map(normalizeBatchSearchHeader),
-    ...(Array.isArray(headers) ? headers.map(normalizeBatchSearchHeader) : [])
-  ]);
-  const values = row.map(value => normalizeBatchSearchHeader(value)).filter(Boolean);
-  if (values.length < 8) return false;
-  const hits = values.reduce((count, value) => count + (known.has(value) ? 1 : 0), 0);
-  return hits >= 8 && hits / values.length >= 0.45;
-}
-function batchSearchCsv(rows) {
-  const columns = BATCH_SEARCH_RESULT_HEADERS;
-  const cell = value => {
-    const text = String(value ?? "");
-    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
-  };
-  return [columns, ...(Array.isArray(rows) ? rows : []).map(row => columns.map(header => row?.[header] ?? ""))]
-    .map(row => row.map(cell).join(",")).join("\r\n");
+  return [columns,...rows.map(row=>columns.map(header=>row[header]??""))]
+    .map(row=>row.map(cell).join(",")).join("\r\n");
 }
 async function runBatchSearchExportJob(job) {
   let tabId=null;
   const failedByTn=new Map();
   const downloadedFileNames=[];
   const downloadedRecords=[];
+  const sourceHeaders=[];
   let downloadedFileRows=0;
   const rawTns=Array.isArray(job.trackingNumbers)?job.trackingNumbers:[];
   // Master list: preserve every Assignment Task TN row, including duplicates.
@@ -3219,6 +3132,9 @@ async function runBatchSearchExportJob(job) {
           }
           if(response.fileName)downloadedFileNames.push(String(response.fileName));
           downloadedFileRows+=Math.max(0,Number(response.fileRowCount||0));
+          for(const header of (Array.isArray(response.sourceHeaders)?response.sourceHeaders:[])) {
+            if(!sourceHeaders.includes(String(header)))sourceHeaders.push(String(header));
+          }
           for(const row of response.sourceRows) {
             downloadedRecords.push({
               sourceFields:row?.sourceFields&&typeof row.sourceFields==="object"?row.sourceFields:{},
@@ -3260,27 +3176,44 @@ async function runBatchSearchExportJob(job) {
       }
     }
 
-    const outputHeaders=BATCH_SEARCH_RESULT_HEADERS;
+    const inputHeader="Assignment Task Tracking Number";
+    const resultHeader=sourceHeaders.some(header=>normalizeBatchSearchTn(header)==="SEARCHRESULT")
+      ?"Badoc Search Result":"Search Result";
+    const errorHeader=sourceHeaders.some(header=>normalizeBatchSearchTn(header)==="ERROR")
+      ?"Badoc Error":"Error";
+    const outputHeaders=[inputHeader,...sourceHeaders,resultHeader,errorHeader];
     const outputRows=[];
     let matchedCount=0,notFoundCount=0,failedCount=0;
 
-    // Copy only real parcel records. Not Found and Search Failed totals are
-    // reported separately by Badoc Hub; they must not create fake parcel rows
-    // or add non-SPX columns to the canonical 51-column export.
+    // Exactly one output row for each non-empty Assignment Task source row.
+    // Duplicate tracking numbers remain duplicated and in the same order.
     for(const inputTn of inputRows) {
       const key=normalizeBatchSearchTn(inputTn);
-      const error=failedByTn.get(key)||"";
-      if(error) { failedCount++; continue; }
       const record=recordByKey.get(key)||null;
-      if(!record||record.explicitlyNotFound) { notFoundCount++; continue; }
-      outputRows.push(batchSearchCanonicalSourceFields(record.sourceFields));
-      matchedCount++;
+      const row={};
+      row[inputHeader]=inputTn;
+      for(const header of sourceHeaders)row[header]=String(record?.sourceFields?.[header]??"");
+      const error=failedByTn.get(key)||"";
+      const explicitNotFound=record?.explicitlyNotFound===true;
+      let result="Not Found";
+      if(error) { result="Search Failed"; failedCount++; }
+      else if(record&&!explicitNotFound) { result="Found"; matchedCount++; }
+      else { notFoundCount++; }
+      row[resultHeader]=result;
+      row[errorHeader]=error;
+      outputRows.push(row);
+    }
+
+    if(!sourceHeaders.length) {
+      sourceHeaders.push("SPX Tracking Number","SLS Tracking Number","3PL Tracking Number","Status");
+      const insertAt=1;
+      outputHeaders.splice(insertAt,0,...sourceHeaders);
     }
     sendProgress("SPX export read successfully · "+downloadedFileRows.toLocaleString()+" downloaded row(s) checked · preparing "+outputRows.length.toLocaleString()+" Assignment Task rows.","success");
     sendToPort(job.ownerPort,"BADOC_SPX_BATCH_SEARCH_CSV",{
       selectedDate:String(job.selectedDate||""),
       sourceTaskId:String(job.sourceTaskId||""),
-      csvText:batchSearchCsv(outputRows),
+      csvText:batchSearchCsv(outputRows,outputHeaders),
       fileName:"batch_search_result.csv",
       inputCount:inputRows.length,
       uniqueInputCount:tns.length,
@@ -3322,7 +3255,7 @@ async function runBatchSearchExportJob(job) {
           if(dashboardWindowId)await chrome.windows.update(dashboardWindowId,{focused:true});
           await chrome.tabs.update(dashboardTabId,{active:true});
         } catch(error) {
-          console.warn("Could not return to the Badoc Hub dashboard tab after Batch Search:",error);
+          console.warn("Could not return to the Test2 dashboard tab after Batch Search:",error);
         }
       }
     }
@@ -4527,7 +4460,7 @@ chrome.runtime.onConnect.addListener(port => {
         trackingNumbers,
         selectedDate: String(message?.selectedDate || "").trim(),
         sourceTaskId: String(message?.sourceTaskId || "").trim(),
-        // Remember the exact Badoc Hub tab that requested this search so cleanup
+        // Remember the exact Test2 tab that requested this search so cleanup
         // can return the user there after the foreground SPX tab is closed.
         dashboardTabId: Number(port.sender?.tab?.id) || null,
         dashboardWindowId: Number(port.sender?.tab?.windowId) || null

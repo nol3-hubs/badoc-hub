@@ -210,9 +210,8 @@
         if(data.type==="BADOC_SPX_BATCH_SEARCH_CSV"){
           clearBatchSearchReportWatchdog();
           try{
-            const csvText=String(data.csvText||"");
-            if(!csvText.trim()||!String(csvText.split(/\r?\n/,1)[0]||"").trim())throw new Error("SPX returned an empty Batch-Search Results file.");
-            const rows=typeof parseCsvText==="function"?parseCsvText(csvText):[];
+            const rows=typeof parseCsvText==="function"?parseCsvText(String(data.csvText||"")):[];
+            if(!rows.length)throw new Error("SPX returned an empty Batch-Search Results file.");
             window.__badocBatchSearchResultRows=rows;
             window.__badocBatchSearchResultMeta={
               selectedDate:String(data.selectedDate||assignmentTaskReportDate()),
@@ -399,7 +398,7 @@
       // getParcelCountRows() merges the uploaded Parcel Count records with the
       // latest Forward/Return status snapshots and applies Planning Board rules.
       const lmInventoryHeaders=[
-        "Order ID","SLS Tracking Number","Shopee Order SN",
+        "Order ID","SLS Tracking Number","Shopee Order SN","Longitude","Latitude",
         "Sort Code Name","Town Name","Location Type","Driver ID","Driver Name",
         "Driver Phone","Received Time","Current Station Received Time","Delivering Time",
         "Delivered Time","OnHold Time","OnHoldReason","Reschedule Date","Status",
@@ -518,7 +517,7 @@
               if(typeof postBadocSpxMessage!=="function"){
                 finishAssignmentTaskReportError("SPX bridge is not available on this dashboard page.");
               }else{
-                armAssignmentTaskReportWatchdog(15000,"The Assignment Task request was not acknowledged by the extension within 15 seconds. Reload Badoc Hub Extension v1.5.34, refresh Badoc Hub, and retry. If this repeats, inspect the extension service worker for errors.");
+                armAssignmentTaskReportWatchdog(15000,"The Assignment Task request was not acknowledged by the extension within 15 seconds. Reload Badoc Hub Extension v1.5.34, refresh Test2, and retry. If this repeats, inspect the extension service worker for errors.");
                 postBadocSpxMessage("BADOC_START_ASSIGNMENT_TASK_EXPORT",{selectedDate:today});
               }
             }

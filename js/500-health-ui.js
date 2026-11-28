@@ -91,15 +91,12 @@
       if(rs){var rst=rs.state==="done"||rs.state==="already-done"?"ok":(rs.state==="failed"?"fail":"idle");
         rows.push(["Daily records",row(rst,"12 AM reset (this device)",rs.date+" · "+rs.state+(rs.reason?" — "+rs.reason:""),ago(rs.at))])}
     }catch(e){}
-    // Recent warnings are available on demand, but stay collapsed so raw
-    // diagnostic messages do not spill into the normal page view.
-    const ignoredExpected=/Another device is updating the CFR1 ledger|12:00 AM reset: another device owns the reset lock|CFR1 publish skipped: this device still has the previous daily ledger/i;
-    const recentIssues=(H.issues||[]).filter(function(i){return !ignoredExpected.test(String(i.msg||""))});
-    var issues=recentIssues.slice(0,12).map(function(i){return '<li class="sh-'+(i.kind==="error"?"fail":"warn")+'"><i></i><div><strong>'+esc(i.msg)+'</strong>'+(i.n>1?'<small>×'+i.n+'</small>':'')+'</div><span>'+esc(ago(i.at))+'</span></li>'}).join("");
+    // issues
+    var issues=(H.issues||[]).slice(0,12).map(function(i){return '<li class="sh-'+(i.kind==="error"?"fail":"warn")+'"><i></i><div><strong>'+esc(i.msg)+'</strong>'+(i.n>1?'<small>×'+i.n+'</small>':'')+'</div><span>'+esc(ago(i.at))+'</span></li>'}).join("");
     var groups={};rows.forEach(function(r){(groups[r[0]]=groups[r[0]]||[]).push(r[1])});
     var out=Object.keys(groups).map(function(g){return '<h4>'+esc(g)+'</h4><ul class="sh-list">'+groups[g].join("")+'</ul>'}).join("");
     out+='<h4>Local recovery</h4><p class="sh-none">Export a local Parcel Count backup before clearing browser data or changing devices.</p><p><button type="button" id="shExportParcelBackup">Export Parcel Count backup</button></p>';
-    out+='<details class="sh-recent-errors"><summary>Recent warnings &amp; errors ('+recentIssues.length+')</summary><div class="sh-recent-errors-content"><button type="button" class="sh-clear" id="shClear">Clear warnings</button>'+(issues?'<ul class="sh-list">'+issues+'</ul>':'<p class="sh-none">Nothing reported on this device. ✓</p>')+'</div></details>';
+    out+='<h4>Recent warnings &amp; errors <button type="button" class="sh-clear" id="shClear">Clear</button></h4>'+(issues?'<ul class="sh-list">'+issues+'</ul>':'<p class="sh-none">Nothing reported on this device. ✓</p>');
     return out;
   }
   function ensureModal(){
