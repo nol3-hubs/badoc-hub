@@ -360,7 +360,7 @@ test('CFR1 runtime publishing is paused during the locked operational clear',()=
   const runtime=readFileSync(resolve(root,'js/240-operation-runtime.js'),'utf8');
   assert.ok(runtime.includes('if(window.__badocCfr1MaintenanceInProgress!==true){try{window.__badocCfr1CloudSync?.publish?.(CFR1_KEY,cfr1Ledger)}'));
   const coreHandlerStart=core.indexOf('$("clearData").onclick=async()=>{');
-  const coreHandlerEnd=core.indexOf('/*\\n V1.10 KPI CONNECTION',coreHandlerStart);
+  const coreHandlerEnd=core.indexOf('/*\n V1.10 KPI CONNECTION',coreHandlerStart);
   const handler=core.slice(coreHandlerStart,coreHandlerEnd);
   assert.ok(handler.includes('await resetCfr1Cloud(async()=>{'));
   assert.ok(handler.indexOf('await window.__badocClearAllSharedData({includePickupNames:true})')>handler.indexOf('await resetCfr1Cloud(async()=>{'));
