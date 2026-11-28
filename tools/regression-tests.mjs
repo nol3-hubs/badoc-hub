@@ -293,7 +293,7 @@ test('LM Hub Inventory uses the updated 51-column header without Longitude or La
   const arrayStart=reports.indexOf('[',headerStart);
   const arrayEnd=reports.indexOf('];',arrayStart);
   assert.notEqual(arrayEnd,-1,'LM Hub Inventory header array closes');
-  const headers=vm.runInNewContext(reports.slice(arrayStart,arrayEnd+1));
+  const headers=Array.from(vm.runInNewContext(reports.slice(arrayStart,arrayEnd+1)));
   const expected=[
     'Order ID','SLS Tracking Number','Shopee Order SN','Sort Code Name','Town Name','Location Type',
     'Driver ID','Driver Name','Driver Phone','Received Time','Current Station Received Time',
