@@ -216,7 +216,7 @@
       if(typeof window.BadocCloud.claim!=="function")throw Error("Atomic daily reset lock is unavailable");
       const won=await window.BadocCloud.claim(lockName,owner,RESET_LOCK_TTL_MS);
       if(!won){
-        console.warn("12:00 AM reset: another device owns the reset lock.");
+        console.info("12:00 AM reset is being coordinated by another device; this device will use the shared completion marker.");
         setResetStatus("other-device");
         return;
       }
