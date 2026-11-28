@@ -4123,90 +4123,83 @@ $("exportValid").onclick=exportValidFiltered;$("exportMis").onclick=()=>current&
 $("addBadoc").onclick=()=>addTown("badoc");$("addPinili").onclick=()=>addTown("pinili");
 $("backup").onclick=()=>download("parcel-dashboard-backup.json",JSON.stringify({towns,batches},null,2),"application/json");
 $("restoreBtn").onclick=()=>$("restoreFile").click();$("restoreFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);towns=x.towns;batches=x.batches;current=batches[0]||null;saveTownSettings();render();alert("Backup restored.")}catch(err){alert("Invalid backup file.")}};r.readAsText(f)};
-$("clearData").onclick=async()=>{
-  if(!confirm("Clear operational data and reset CFR1 for this device and shared cloud?\n\nThis removes Upload Exported parcel batches, Linehaul Task data, First Mile Pickup Orders/Tasks and the Pickup Point ID/name directory, plus Exemptions. Their current shared cloud copies are also cleared, affecting other devices. The shared CFR1 ledger and count freeze will also be reset for all devices.\n\nTown/station settings, Riders Data, Daily History, dashboard preferences and historical cloud First Mile baseline files are kept.\n\nContinue?"))return;
-  const clearBtn=$("clearData");
-  if(clearBtn){clearBtn.disabled=true;clearBtn.textContent="Waiting for CFR1 sync lock…";}
-  let clearStarted=false;
+$("resetCfr1").onclick=async()=>{
+  if(!confirm("Reset the shared CFR1 daily ledger and 7:00 AM count freeze for all devices?\n\nThis does not delete Parcel Count uploads, Linehaul data, Pickup data, or Exemptions. CFR1 will rebuild from parcel data currently available on this device.\n\nContinue?"))return;
+  const button=$("resetCfr1"),status=$("cfr1CloudSyncStatus");
+  if(button){button.disabled=true;button.textContent="Resetting CFR1…";}
   try{
-    const resetCfr1Cloud=window.__badocCfr1CloudSync?.resetCloud;
-    if(typeof resetCfr1Cloud!=="function")throw new Error("CFR1 cloud reset service is unavailable.");
+    const reset=window.__badocCfr1CloudSync&&window.__badocCfr1CloudSync.resetCloud;
+    if(typeof reset!=="function")throw new Error("CFR1 cloud reset service is unavailable.");
+    await reset();
+    window.__badocCfr1LedgerMemory=null;
+    if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
+    if(status)status.textContent="CFR1 reset completed; rebuilding from available parcel data.";
+    alert("The shared CFR1 ledger and count freeze have been reset. Operational uploads were retained.");
+  }catch(error){
+    console.error("Reset CFR1 failed:",error);
+    if(status)status.textContent=("CFR1 reset failed — "+String(error&&error.message||error)).slice(0,260);
+    alert("CFR1 was not reset. Operational uploads were retained.\n\n"+String(error&&error.message||error));
+  }finally{
+    if(button){button.disabled=false;button.textContent="Reset CFR1";}
+  }
+};
 
-    // The callback runs while the shared CFR1 writer lease is held and
-    // resetPending blocks every other device from publishing an old ledger.
-    await resetCfr1Cloud(async()=>{
-      clearStarted=true;
-      if(clearBtn)clearBtn.textContent="Clearing shared operational data…";
-
-      // Clear the authoritative cloud copies first. A failure stops the
-      // operation and leaves CFR1 resetPending, protecting against stale writes.
-      if(typeof window.__badocCloudClearOnholdToday!=="function")throw new Error("Shared OnHold export clear service is unavailable.");
-      await window.__badocCloudClearOnholdToday();
-
-      if(typeof window.__badocClearAllSharedData!=="function")throw new Error("Shared parcel/linehaul/Pickup clear service is unavailable.");
-      await window.__badocClearAllSharedData({includePickupNames:true});
-
-      if(typeof cloudExceptionWrite!=="function")throw new Error("Shared Exemptions clear service is unavailable.");
-      await cloudExceptionWrite("clear","");
-
-      if(clearBtn)clearBtn.textContent="Clearing this device’s operational data…";
-      const db=await openDB();
-      if(window.indexedDB&&!db)throw new Error("Could not open local Parcel Count storage; local data was not cleared.");
-      if(db)await new Promise((resolve,reject)=>{
-        let tx;
-        try{tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).clear()}
-        catch(error){reject(error);return}
-        tx.oncomplete=resolve;
-        tx.onerror=()=>reject(tx.error||new Error("Parcel Count clear failed"));
-        tx.onabort=()=>reject(tx.error||new Error("Parcel Count clear was aborted"));
-      });
-      batches=[];
-      current=null;
-
-      // First Mile Pickup Orders/Tasks are stored separately from Parcel Count.
-      if(typeof window.__badocClearLocalPickupData==="function")await window.__badocClearLocalPickupData();
-      else{
-        ["badoc_first_mile_orders_csv_local_v1","badoc_first_mile_tasks_csv_local_v1",
-         "badoc_first_mile_orders_baseline_v1","badoc_first_mile_tasks_baseline_v1"].forEach(key=>localStorage.removeItem(key));
-        window.__badocRenderFirstMileCombined?.();
-      }
-      localStorage.removeItem("badoc_first_mile_point_names_v1");
-      window.__badocRenderFirstMileCombined?.();
-
-      // Linehaul Task data is localStorage-backed, not part of Parcel Count IndexedDB.
-      ["badoc_linehaul_tasks_town_v1","badoc_linehaul_packed_rows_v1",
-       "badoc_linehaul_blank_packed_rows_v1","badoc_linehaul_export_total_v1",
-       "badoc_linehaul_export_unique_v1"].forEach(key=>localStorage.removeItem(key));
-      if(typeof linehaulTasks!=="undefined")linehaulTasks=[];
-      const lhFile=document.getElementById("linehaulCsvFile");if(lhFile)lhFile.value="";
-      const lhBody=document.getElementById("linehaulBody");
-      if(lhBody)lhBody.innerHTML='<tr><td colspan="5" class="empty">No linehaul task and town data.</td></tr>';
-      const lhStatus=document.getElementById("linehaulStatus");if(lhStatus)lhStatus.textContent="0 tasks";
-      const lhTotal=document.getElementById("lhKpiTotal");if(lhTotal)lhTotal.textContent="0";
-      const lhDoid=document.getElementById("lhKpiDoid");if(lhDoid)lhDoid.textContent="0";
-      if(typeof renderLinehaul==="function")renderLinehaul();
-      if(typeof renderLinehaulKpis==="function")renderLinehaulKpis();
-
-      // Clear the local Exemptions view and Dispatch mirror after the shared copy.
-      exceptionTrackingNumbers=[];
-      saveExceptionTrackingNumbers();
-      renderExceptionTracking();
-      syncExemptionsToReceivedChecking();
-      if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
-      if(typeof updateRecordExportButton==="function")updateRecordExportButton();
-      render();
+$("clearData").onclick=async()=>{
+  if(!confirm("Clear operational uploads and working data from this device and their shared cloud copies?\n\nThis removes Upload Exported parcel batches, Linehaul Task data, First Mile Pickup Orders/Tasks and the Pickup Point ID/name directory, plus Exemptions.\n\nCFR1 is retained and is NOT reset by this action. Town/station settings, Riders Data, Daily History, and dashboard preferences are also retained.\n\nContinue?"))return;
+  const clearBtn=$("clearData");
+  if(clearBtn){clearBtn.disabled=true;clearBtn.textContent="Clearing data…";}
+  try{
+    const db=await openDB();
+    if(db)await new Promise((resolve,reject)=>{
+      const tx=db.transaction(STORE,"readwrite");
+      tx.objectStore(STORE).clear();
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error);
+      tx.onabort=()=>reject(tx.error||new Error("aborted"));
     });
+    if(typeof window.__badocCloudClearOnholdToday==="function")await window.__badocCloudClearOnholdToday();
+    else await badocClearOnholdExportRows();
+    batches=[];
+    current=null;
 
-    alert("Operational parcel uploads, OnHold exports, Linehaul Task data, Pickup Orders/Tasks, Pickup Point names, Exemptions, and the shared CFR1 ledger/count freeze have been cleared. Town/station settings, Riders Data, Daily History, and dashboard preferences were kept.");
+    // Remove the Pickup menu's separately stored Orders and Tasks exports.
+    if(typeof window.__badocClearLocalPickupData==="function")window.__badocClearLocalPickupData();
+    else{
+      ["badoc_first_mile_orders_csv_local_v1","badoc_first_mile_tasks_csv_local_v1"].forEach(k=>localStorage.removeItem(k));
+      window.__badocRenderFirstMileCombined?.();
+    }
+    // Settings > Clear all data also clears the saved Pickup Point ID/name directory.
+    localStorage.removeItem("badoc_first_mile_point_names_v1");
+    window.__badocRenderFirstMileCombined?.();
+
+    /* Linehaul Task uses localStorage, not the parcel IndexedDB store. */
+    ["badoc_linehaul_tasks_town_v1","badoc_linehaul_packed_rows_v1","badoc_linehaul_blank_packed_rows_v1","badoc_linehaul_export_total_v1","badoc_linehaul_export_unique_v1"].forEach(k=>localStorage.removeItem(k));
+    if(typeof linehaulTasks!=="undefined")linehaulTasks=[];
+    const lhFile=document.getElementById("linehaulCsvFile");if(lhFile)lhFile.value="";
+    const lhBody=document.getElementById("linehaulBody");if(lhBody)lhBody.innerHTML='<tr><td colspan="5" class="empty">No linehaul task and town data.</td></tr>';
+    const lhStatus=document.getElementById("linehaulStatus");if(lhStatus)lhStatus.textContent="0 tasks";
+    const lhTotal=document.getElementById("lhKpiTotal");if(lhTotal)lhTotal.textContent="0";
+    const lhDoid=document.getElementById("lhKpiDoid");if(lhDoid)lhDoid.textContent="0";
+    if(typeof renderLinehaul==="function")renderLinehaul();
+
+    // Clear exemption local state and synchronize the empty list to Dispatch/cloud.
+    exceptionTrackingNumbers=[];
+    saveExceptionTrackingNumbers();
+    renderExceptionTracking();
+    syncExemptionsToReceivedChecking();
+    if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
+    if(typeof updateRecordExportButton==="function")updateRecordExportButton();
+
+    if(typeof window.__badocClearAllSharedData==="function")await window.__badocClearAllSharedData({includePickupNames:true});
+    if(typeof cloudExceptionWrite==="function")await cloudExceptionWrite("clear","");
+    render();
+    alert("Operational uploads, Linehaul Task data, Exemptions, and saved Pickup Orders/Tasks have been cleared. CFR1, Town/station settings, Riders Data, Daily History, and dashboard preferences were kept.");
     window.location.reload();
   }catch(err){
-    console.error("Clear Data + Reset CFR1 failed:",err);
-    const detail=String(err?.message||err);
-    alert(clearStarted
-      ? "The clear operation stopped partway through. Some data may already have been cleared, but CFR1 remains protected from stale writes. Check the error and retry the combined clear after the cloud connection is stable.\n\n"+detail
-      : "No operational data was cleared. CFR1 could not acquire or complete its shared reset lock. Close other Badoc Hub tabs/devices that are actively syncing, then retry.\n\n"+detail);
+    console.error("Clear data + CFR1 reset failed:",err);
+    alert("Operational data could not be cleared completely. Check the shared cloud connection and retry.\n\n"+(err?.message||err));
   }finally{
-    if(clearBtn){clearBtn.disabled=false;clearBtn.textContent="Clear Data + Reset CFR1";}
+    if(clearBtn){clearBtn.disabled=false;clearBtn.textContent="Clear all data";}
   }
 };
 
