@@ -4196,7 +4196,7 @@ $("clearData").onclick=async()=>{
     alert("Operational uploads, Linehaul Task data, Exemptions, and saved Pickup Orders/Tasks have been cleared. CFR1, Town/station settings, Riders Data, Daily History, and dashboard preferences were kept.");
     window.location.reload();
   }catch(err){
-    console.error("Clear data + CFR1 reset failed:",err);
+    console.error("Clear all data failed:",err);
     alert("Operational data could not be cleared completely. Check the shared cloud connection and retry.\n\n"+(err?.message||err));
   }finally{
     if(clearBtn){clearBtn.disabled=false;clearBtn.textContent="Clear all data";}
