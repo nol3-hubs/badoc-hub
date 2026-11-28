@@ -5,10 +5,12 @@
   const KEY="badoc_cfr1_ledger_v5_cagayan_lh_total";
   const PATH="current/cfr1-ledger.json";
   let client=null, busy=false, lastCloudStamp="";
-  const WRITE_LOCK_TTL=90000;
-  const WRITE_LOCK_RENEW=20000;
+  // The writer token is deliberately per page instance, not a shared device ID.
+  // Two open tabs on one workstation must not be mistaken for the same lock owner.
+  const WRITE_LOCK_TTL=300000;
+  const WRITE_LOCK_RENEW=30000;
   const RESET_LOCK_WAIT_MS=150000;
-  const writeOwner=window.__badocDeviceId||(window.__badocDeviceId="cfr1-"+Math.random().toString(36).slice(2,10));
+  const writeOwner="cfr1-tab-"+(window.crypto&&typeof window.crypto.randomUUID==="function"?window.crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,14));
   // Remember the last local ledger snapshot successfully published. CFR1 is
   // recalculated often, so skip cloud reads/writes when its data did not change.
   let lastPublishedSourceSignature="";
@@ -77,7 +79,14 @@
       await new Promise(resolve=>setTimeout(resolve,500));
     }while(!lease);
     let lost=false,renewing=false;
-    const assertLease=()=>{if(lost)throw Error("CFR1 cloud-write lease was lost; refusing to overwrite the ledger")};
+    let leaseUntil=Number(lease.until||0);
+    const assertLease=()=>{
+      const now=window.__badocTime?.nowMs?.()??Date.now();
+      if(lost||(leaseUntil>0&&now>=leaseUntil)){
+        lost=true;
+        throw Error("CFR1 cloud-write lease expired or ownership changed; refusing to overwrite the ledger");
+      }
+    };
     assertLease.fence=lease.fence;
     const timer=setInterval(async()=>{
       if(renewing||lost)return;
@@ -85,6 +94,12 @@
       try{
         const renewed=await api.claimCfr1Lease(writeOwner,WRITE_LOCK_TTL);
         if(!renewed||Number(renewed.fence)!==Number(lease.fence))lost=true;
+        else{
+          const nextUntil=Number(renewed.until||0);
+          const now=window.__badocTime?.nowMs?.()??Date.now();
+          if(!nextUntil||nextUntil<=now)lost=true;
+          else leaseUntil=nextUntil;
+        }
       }catch(e){lost=true;console.warn("CFR1 cloud-write lease renewal failed:",e)}
       finally{renewing=false}
     },WRITE_LOCK_RENEW);
