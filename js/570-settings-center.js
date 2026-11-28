@@ -170,7 +170,7 @@
       clearWord.addEventListener("input",update);
       update();
     }
-    // The combined Clear Data + Reset CFR1 action uses one explicit confirmation dialog.
+    // Clear all data remains gated by the explicit CLEAR DATA phrase.
     refreshConnection();
     refreshAppInfo();
     refreshAlertPermission();
