@@ -462,7 +462,8 @@
     });
   }
   function resetCfr1Ledger(owner, fence, resetDate) {
-    return getDb().then(function (db) {
+    return getDb().then(async function (db) {
+      await ensureServerClockReady(10000);
       var r = ref(db, "cfr1LedgerState"), committed = false;
       return r.transaction(function (cur) {
         var now = cfr1Now();
