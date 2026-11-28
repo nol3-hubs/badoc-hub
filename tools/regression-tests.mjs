@@ -246,13 +246,13 @@ test('Batch Search Result export is fixed to the canonical 51 parcel columns',()
   assert.deepEqual(Object.keys(row),headers);
   assert.equal(row['Order ID'],'SPEPH06562202607B');
   assert.equal(row['SLS Tracking Number'],'PH262656732858K');
-  assert.match(row['Received Time'],/^\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}$/);
+  assert.match(row['Received Time'],/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
   assert.equal(row['Specical Dg Type'],'Non-DG');
   assert.equal(Object.hasOwn(row,'Assignment Task Tracking Number'),false);
   assert.equal(Object.hasOwn(row,'Search Result'),false);
   assert.equal(Object.hasOwn(row,'Error'),false);
   const csv=sandbox.batchSearchCsv([row]);
-  assert.deepEqual(csv.split('\\r\\n',1)[0].split(','),headers);
+  assert.deepEqual(csv.split('\r\n',1)[0].split(','),headers);
 });
 
 test('Batch Search parser identifies repeated parcel header rows without dropping data rows',()=>{
@@ -270,7 +270,7 @@ test('Batch Search parser identifies repeated parcel header rows without droppin
     return '';
   });
   assert.equal(sandbox.isBatchSearchRepeatedHeaderRow(headers,parcel),false);
-  assert.match(background,/rawDataRows\\.filter\\(row=>!isBatchSearchRepeatedHeaderRow\\(headers,row\\)\\)/);
+  assert.match(background,/rawDataRows\.filter\(row=>!isBatchSearchRepeatedHeaderRow\(headers,row\)\)/);
 });
 
 test('Batch Search output keeps Not Found and Failed as counts, not extra columns',()=>{
@@ -279,7 +279,8 @@ test('Batch Search output keeps Not Found and Failed as counts, not extra column
   const end=background.indexOf('function getExportMediaId(',start);
   const block=background.slice(start,end);
   assert.match(block,/const outputHeaders=BATCH_SEARCH_RESULT_HEADERS/);
-  assert.match(block,/if\\(error\\) \\{ failedCount\\+\\+; continue; \\}/);
-  assert.match(block,/if\\(!record\\|\\|record\\.explicitlyNotFound\\) \\{ notFoundCount\\+\\+; continue; \\}/);
-  assert.doesNotMatch(block,/Assignment Task Tracking Number|Search Result|Badoc Search Result|row\\[errorHeader\\]/);
+  assert.match(block,/if\(error\) \{ failedCount\+\+; continue; \}/);
+  assert.match(block,/if\(!record\|\|record\.explicitlyNotFound\) \{ notFoundCount\+\+; continue; \}/);
+  assert.doesNotMatch(block,/Assignment Task Tracking Number|Search Result|Badoc Search Result/);
+  assert.equal(block.includes('row[errorHeader]'),false);
 });
