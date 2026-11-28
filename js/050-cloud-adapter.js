@@ -12,10 +12,40 @@
   "use strict";
   var ROOT = "badoc";
   var dbp = null;
-  var health = { connected: null, lastOkAt: 0, lastError: "", lastErrorAt: 0, errors: 0 };
+  var health = { connected: null, lastOkAt: 0, lastError: "", lastErrorAt: 0, errors: 0, serverClockReady: false };
+  var resolveServerClockReady = null;
+  var serverClockReadyPromise = new Promise(function (resolve) { resolveServerClockReady = resolve; });
   function watchClock(db) {
-    try { db.ref(".info/serverTimeOffset").on("value", function (s) { var v = s.val(); if (typeof v === "number" && window.__badocTime) window.__badocTime.setOffset(v); }); } catch (e) {}
+    try {
+      db.ref(".info/serverTimeOffset").on("value", function (s) {
+        var v = s.val();
+        if (typeof v === "number" && isFinite(v)) {
+          if (window.__badocTime) window.__badocTime.setOffset(v);
+          health.serverClockReady = true;
+          if (resolveServerClockReady) { resolveServerClockReady(v); resolveServerClockReady = null; }
+        }
+      }, function (e) {
+        health.serverClockReady = false;
+        health.lastError = String(e && e.message || e || "Firebase server clock unavailable");
+        health.lastErrorAt = Date.now();
+      });
+    } catch (e) {
+      health.lastError = String(e && e.message || e || "Firebase server clock listener failed");
+      health.lastErrorAt = Date.now();
+    }
     try { db.ref(".info/connected").on("value", function (s) { health.connected = s.val() === true; if (health.connected) health.lastOkAt = Date.now(); }); } catch (e) {}
+  }
+  async function ensureServerClockReady(timeoutMs) {
+    if (health.serverClockReady) return true;
+    var timeout = Math.max(1000, Number(timeoutMs) || 10000);
+    var ready = await Promise.race([
+      serverClockReadyPromise.then(function () { return true; }),
+      new Promise(function (resolve) { setTimeout(function () { resolve(false); }, timeout); })
+    ]);
+    if (!ready || !health.serverClockReady) {
+      throw new Error("Firebase server clock is not synchronized; CFR1 did not acquire a write lock. Check cloud connectivity and retry.");
+    }
+    return true;
   }
 
   function getDb() {
@@ -382,7 +412,8 @@
      owner whose lease expired cannot commit a late write after a new owner wins. */
   function cfr1Now() { return Date.now() + (window.__badocTime ? window.__badocTime.offset() : 0); }
   function claimCfr1Lease(owner, ttlMs) {
-    return getDb().then(function (db) {
+    return getDb().then(async function (db) {
+      await ensureServerClockReady(10000);
       var r = ref(db, "cfr1LedgerState"), result = null;
       return r.transaction(function (cur) {
         var now = cfr1Now();
@@ -415,7 +446,8 @@
       .then(function (snap) { return snap.val() || {}; });
   }
   function writeCfr1Ledger(owner, fence, ledger) {
-    return getDb().then(function (db) {
+    return getDb().then(async function (db) {
+      await ensureServerClockReady(10000);
       var r = ref(db, "cfr1LedgerState"), committed = false;
       return r.transaction(function (cur) {
         var now = cfr1Now();
@@ -444,7 +476,8 @@
     });
   }
   function completeCfr1Reset(owner, fence) {
-    return getDb().then(function (db) {
+    return getDb().then(async function (db) {
+      await ensureServerClockReady(10000);
       var r = ref(db, "cfr1LedgerState"), committed = false;
       return r.transaction(function (cur) {
         var now = cfr1Now();
@@ -461,7 +494,8 @@
   // before clearing resetPending. A peer may recover only after that owner's
   // fenced lease is absent or expired; an active owner is never bypassed.
   function recoverCfr1Reset() {
-    return getDb().then(function (db) {
+    return getDb().then(async function (db) {
+      await ensureServerClockReady(10000);
       var r = ref(db, "cfr1LedgerState"), recovered = false;
       return r.transaction(function (cur) {
         var now = cfr1Now();
@@ -477,7 +511,7 @@
   }
 
   window.BadocCloud = {
-    health: function () { return Object.assign({}, health, { offset: window.__badocTime ? window.__badocTime.offset() : 0 }); },
+    health: function () { return Object.assign({}, health, { offset: window.__badocTime ? window.__badocTime.offset() : 0, serverClockReady: health.serverClockReady === true }); },
     claim: claim,
     release: release,
     claimCfr1Lease: claimCfr1Lease,
