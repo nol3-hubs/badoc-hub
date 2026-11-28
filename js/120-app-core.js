@@ -1622,10 +1622,14 @@ function badocGetOnholdRows(baseRows,restrictToBase=false){
   const rows=Array.isArray(baseRows)?baseRows:(typeof getParcelCountRows==="function"?getParcelCountRows():[]);
   const byTn=new Map();
   const baseKeys=new Set();
+  const latestRowsByTn=new Map();
   rows.forEach(row=>{
     if(!row)return;
     const key=badocOnholdKey(spxTN(row));
-    if(key)baseKeys.add(key);
+    if(key){
+      baseKeys.add(key);
+      latestRowsByTn.set(key,row);
+    }
     if(isExceptionRow(row)||!badocOnholdStatus(row))return;
     if(key)byTn.set(key,row);
   });
@@ -1633,7 +1637,14 @@ function badocGetOnholdRows(baseRows,restrictToBase=false){
   exports.forEach(row=>{
     const key=badocOnholdKey(spxTN(row));
     if(!key||isExceptionRow(row)||(restrictToBase&&!baseKeys.has(key)))return;
-    if(badocOnholdStatus(row))byTn.set(key,row);
+    // Reconcile the latest status export against its already-merged Parcel Count
+    // row. SPX Forward/Return status snapshots often leave Pick Up Time blank;
+    // that blank must not erase the original pickup timestamp used by the
+    // fixed 3:00 PM Manila OnHold cutoff. Empty status fields are preserved too.
+    const previous=latestRowsByTn.get(key)||byTn.get(key)||{};
+    const effective=mergeParcelRowsPreservingPickup(previous,row);
+    latestRowsByTn.set(key,effective);
+    if(badocOnholdStatus(effective))byTn.set(key,effective);
     else byTn.delete(key);
   });
   return [...byTn.values()];
