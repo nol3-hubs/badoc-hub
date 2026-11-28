@@ -219,3 +219,67 @@ test('Light mode recolors the entire sidebar footer and theme switch row',()=>{
   assert.match(css,/html\[data-theme="light"\] \.side > \.sidebar-footer > \.theme-switch-row\{[\s\S]*?background:#edf4fa!important;/);
   assert.match(css,/html\[data-theme="light"\] \.side > \.sidebar-footer \.theme-switch-label,[\s\S]*?color:#40566b!important;/);
 });
+
+
+test('Batch Search Result export is fixed to the canonical 51 parcel columns',()=>{
+  const background=readFileSync(resolve(root,'extension/background.js'),'utf8');
+  const start=background.indexOf('const BATCH_SEARCH_RESULT_HEADERS = Object.freeze(');
+  const end=background.indexOf('async function runBatchSearchExportJob(job)',start);
+  assert.notEqual(start,-1);assert.notEqual(end,-1);
+  const sandbox={};vm.createContext(sandbox);
+  vm.runInContext(background.slice(start,end),sandbox);
+  const headers=Array.from(sandbox.BATCH_SEARCH_RESULT_HEADERS);
+  assert.equal(headers.length,51);
+  assert.equal(headers[0],'Order ID');
+  assert.equal(headers[1],'SLS Tracking Number');
+  assert.equal(headers[50],'Size Type');
+  const row=sandbox.batchSearchCanonicalSourceFields({
+    'Assignment Task Tracking Number':'SPEPH06562202607B',
+    'Search Result':'Found',
+    'Error':'',
+    'Size Type':'Non-Cache',
+    'Received Time':'46352.85241',
+    'SLS Tracking Number':'PH262656732858K',
+    'Order ID':'SPEPH06562202607B',
+    'Specical Dg Type':'Non-DG'
+  });
+  assert.deepEqual(Object.keys(row),headers);
+  assert.equal(row['Order ID'],'SPEPH06562202607B');
+  assert.equal(row['SLS Tracking Number'],'PH262656732858K');
+  assert.match(row['Received Time'],/^\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}$/);
+  assert.equal(row['Specical Dg Type'],'Non-DG');
+  assert.equal(Object.hasOwn(row,'Assignment Task Tracking Number'),false);
+  assert.equal(Object.hasOwn(row,'Search Result'),false);
+  assert.equal(Object.hasOwn(row,'Error'),false);
+  const csv=sandbox.batchSearchCsv([row]);
+  assert.deepEqual(csv.split('\\r\\n',1)[0].split(','),headers);
+});
+
+test('Batch Search parser identifies repeated parcel header rows without dropping data rows',()=>{
+  const background=readFileSync(resolve(root,'extension/background.js'),'utf8');
+  const start=background.indexOf('const BATCH_SEARCH_RESULT_HEADERS = Object.freeze(');
+  const end=background.indexOf('async function runBatchSearchExportJob(job)',start);
+  const sandbox={};vm.createContext(sandbox);
+  vm.runInContext(background.slice(start,end),sandbox);
+  const headers=Array.from(sandbox.BATCH_SEARCH_RESULT_HEADERS);
+  assert.equal(sandbox.isBatchSearchRepeatedHeaderRow(headers,headers),true);
+  const parcel=headers.map(header=>{
+    if(header==='Order ID')return 'SPEPH06562202607B';
+    if(header==='SLS Tracking Number')return 'PH262656732858K';
+    if(header==='Status')return 'Delivered';
+    return '';
+  });
+  assert.equal(sandbox.isBatchSearchRepeatedHeaderRow(headers,parcel),false);
+  assert.match(background,/rawDataRows\\.filter\\(row=>!isBatchSearchRepeatedHeaderRow\\(headers,row\\)\\)/);
+});
+
+test('Batch Search output keeps Not Found and Failed as counts, not extra columns',()=>{
+  const background=readFileSync(resolve(root,'extension/background.js'),'utf8');
+  const start=background.indexOf('async function runBatchSearchExportJob(job)');
+  const end=background.indexOf('function getExportMediaId(',start);
+  const block=background.slice(start,end);
+  assert.match(block,/const outputHeaders=BATCH_SEARCH_RESULT_HEADERS/);
+  assert.match(block,/if\\(error\\) \\{ failedCount\\+\\+; continue; \\}/);
+  assert.match(block,/if\\(!record\\|\\|record\\.explicitlyNotFound\\) \\{ notFoundCount\\+\\+; continue; \\}/);
+  assert.doesNotMatch(block,/Assignment Task Tracking Number|Search Result|Badoc Search Result|row\\[errorHeader\\]/);
+});
