@@ -49,7 +49,7 @@
   function refreshAppInfo(){
     const version=document.querySelector('meta[name="badoc-app-version"]')?.content||"Unknown";
     const firefox=/Firefox\//i.test(navigator.userAgent||"");
-    const required=firefox?"Firefox 69.5.17":"Chrome 1.6.7";
+    const required=firefox?"Firefox 69.5.17":"Chrome 1.6.8";
     const bridgeText=text("#badocExtensionVersionStatus","");
     let detected="Not detected";try{if(window.__badocSpxBridgeReady?.())detected=bridgeText||"Connected";else if(bridgeText)detected=bridgeText;}catch(e){}
     if($("settingsDashboardVersion"))$("settingsDashboardVersion").textContent=version;
