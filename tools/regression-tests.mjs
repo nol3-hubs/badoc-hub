@@ -321,9 +321,48 @@ test('Settings combines Clear Data and Reset CFR1 behind one confirmation',()=>{
   assert.notEqual(start,-1);assert.notEqual(end,-1);
   const handler=core.slice(start,end);
   assert.ok(handler.includes('if(!confirm("Clear operational data and reset CFR1'));
-  assert.ok(handler.includes('await resetCfr1Cloud();'));
-  assert.ok(handler.indexOf('await resetCfr1Cloud();')<handler.indexOf('const db=await openDB();'));
+  assert.ok(handler.includes('await resetCfr1Cloud(async()=>{'));
+  assert.ok(handler.indexOf('await resetCfr1Cloud(async()=>{')<handler.indexOf('await window.__badocClearAllSharedData({includePickupNames:true})'));
+  assert.ok(handler.indexOf('await window.__badocClearAllSharedData({includePickupNames:true})')<handler.indexOf('const db=await openDB()'));
   assert.equal(core.includes('$("resetCfr1")'),false);
   const settings=readFileSync(resolve(root,'js/570-settings-center.js'),'utf8');
   assert.equal(settings.includes('settingsClearDataWord'),false);
+});
+
+test('Actual Scanned history declares rider aliases before task rider aliases',()=>{
+  const history=readFileSync(resolve(root,'js/580-actual-scanned-onhold-history.js'),'utf8');
+  const riderId=history.indexOf('const RIDER_ID_ALIASES');
+  const riderName=history.indexOf('const RIDER_NAME_ALIASES');
+  const taskId=history.indexOf('const TASK_RIDER_ID_ALIASES');
+  const taskName=history.indexOf('const TASK_RIDER_NAME_ALIASES');
+  assert.ok(riderId>=0&&riderName>=0&&taskId>riderId&&taskName>riderName);
+  assert.equal(history.indexOf('const RIDER_ID_ALIASES',riderId+1),-1);
+  assert.equal(history.indexOf('const RIDER_NAME_ALIASES',riderName+1),-1);
+});
+
+test('Sync Health keeps raw warning and error details collapsed by default',()=>{
+  const health=readFileSync(resolve(root,'js/500-health-ui.js'),'utf8');
+  assert.ok(health.includes('<details class="sh-recent-errors">'));
+  assert.ok(health.includes('<summary>Recent warnings &amp; errors ('));
+  assert.ok(health.includes('ignoredExpected'));
+});
+
+test('CFR1 reset waits for other writers and prevents renewal-after-release races',()=>{
+  const cloud=readFileSync(resolve(root,'js/200-cfr1-cloud-sync.js'),'utf8');
+  assert.ok(cloud.includes('async function withLedgerWriteLease(task,waitMs=0)'));
+  assert.ok(cloud.includes('while(renewing)await new Promise(resolve=>setTimeout(resolve,25))'));
+  assert.ok(cloud.includes('},RESET_LOCK_WAIT_MS);'));
+  assert.ok(cloud.includes('window.__badocCfr1MaintenanceInProgress=true'));
+  assert.ok(cloud.includes('window.__badocCfr1ResetPending=true'));
+});
+
+test('CFR1 runtime publishing is paused during the locked operational clear',()=>{
+  const runtime=readFileSync(resolve(root,'js/240-operation-runtime.js'),'utf8');
+  assert.ok(runtime.includes('if(window.__badocCfr1MaintenanceInProgress!==true){try{window.__badocCfr1CloudSync?.publish?.(CFR1_KEY,cfr1Ledger)}'));
+  const coreHandlerStart=core.indexOf('$("clearData").onclick=async()=>{');
+  const coreHandlerEnd=core.indexOf('/*\\n V1.10 KPI CONNECTION',coreHandlerStart);
+  const handler=core.slice(coreHandlerStart,coreHandlerEnd);
+  assert.ok(handler.includes('await resetCfr1Cloud(async()=>{'));
+  assert.ok(handler.indexOf('await window.__badocClearAllSharedData({includePickupNames:true})')>handler.indexOf('await resetCfr1Cloud(async()=>{'));
+  assert.ok(handler.indexOf('await cloudExceptionWrite("clear","")')>handler.indexOf('await resetCfr1Cloud(async()=>{'));
 });
