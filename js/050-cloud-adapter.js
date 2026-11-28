@@ -383,8 +383,9 @@
   function cfr1Now() { return Date.now() + (window.__badocTime ? window.__badocTime.offset() : 0); }
   function claimCfr1Lease(owner, ttlMs) {
     return getDb().then(function (db) {
-      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), result = null;
+      var r = ref(db, "cfr1LedgerState"), result = null;
       return r.transaction(function (cur) {
+        var now = cfr1Now();
         cur = cur || {};
         var lease = cur.lease || null;
         if (lease && Number(lease.until || 0) > now && lease.owner !== owner) return;
@@ -415,8 +416,9 @@
   }
   function writeCfr1Ledger(owner, fence, ledger) {
     return getDb().then(function (db) {
-      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), committed = false;
+      var r = ref(db, "cfr1LedgerState"), committed = false;
       return r.transaction(function (cur) {
+        var now = cfr1Now();
         if (!cur || !cur.lease || cur.lease.owner !== owner || Number(cur.lease.fence) !== Number(fence) || Number(cur.lease.until || 0) <= now) return;
         if (cur.resetPending === true || Number(ledger && ledger._resetGeneration || 0) !== Number(cur.resetGeneration || 0)) return;
         committed = true;
@@ -429,8 +431,9 @@
   }
   function resetCfr1Ledger(owner, fence, resetDate) {
     return getDb().then(function (db) {
-      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), committed = false;
+      var r = ref(db, "cfr1LedgerState"), committed = false;
       return r.transaction(function (cur) {
+        var now = cfr1Now();
         if (!cur || !cur.lease || cur.lease.owner !== owner || Number(cur.lease.fence) !== Number(fence) || Number(cur.lease.until || 0) <= now) return;
         committed = true;
         return Object.assign({}, cur, { ledger: null, resetPending: true, resetGeneration: Number(cur.resetGeneration || 0) + 1, resetDate: String(resetDate || ""), resetAt: now, ledgerRevision: Number(cur.ledgerRevision || 0) + 1 });
@@ -442,8 +445,9 @@
   }
   function completeCfr1Reset(owner, fence) {
     return getDb().then(function (db) {
-      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), committed = false;
+      var r = ref(db, "cfr1LedgerState"), committed = false;
       return r.transaction(function (cur) {
+        var now = cfr1Now();
         if (!cur || !cur.lease || cur.lease.owner !== owner || Number(cur.lease.fence) !== Number(fence) || Number(cur.lease.until || 0) <= now || cur.resetPending !== true) return;
         committed = true;
         return Object.assign({}, cur, { resetPending: false, resetCompletedAt: now });
@@ -458,8 +462,9 @@
   // fenced lease is absent or expired; an active owner is never bypassed.
   function recoverCfr1Reset() {
     return getDb().then(function (db) {
-      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), recovered = false;
+      var r = ref(db, "cfr1LedgerState"), recovered = false;
       return r.transaction(function (cur) {
+        var now = cfr1Now();
         if (!cur || cur.resetPending !== true) return cur;
         if (cur.lease && Number(cur.lease.until || 0) > now) return;
         var next = Object.assign({}, cur, { resetPending: false, resetRecoveredAt: now });
