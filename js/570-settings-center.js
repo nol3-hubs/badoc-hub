@@ -164,6 +164,12 @@
     $("settingsRefreshStatus")?.addEventListener("click",refreshConnection);
     $("settingsRefreshAppInfo")?.addEventListener("click",refreshAppInfo);
     $("settingsStorageRefresh")?.addEventListener("click",refreshStorage);
+    const clearWord=$("settingsClearDataWord"),clearButton=$("clearData");
+    if(clearWord&&clearButton){
+      const update=()=>{clearButton.disabled=clearWord.value.trim().toUpperCase()!=="CLEAR DATA";};
+      clearWord.addEventListener("input",update);
+      update();
+    }
     // The combined Clear Data + Reset CFR1 action uses one explicit confirmation dialog.
     refreshConnection();
     refreshAppInfo();
