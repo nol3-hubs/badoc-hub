@@ -18,6 +18,9 @@
   const TASK_MAP_STORAGE_KEY = "badoc_actual_scanned_assignment_tasks_v1";
   const AT_NUMBER_ALIASES = ["AT Number", "AT No", "Assignment Task Number", "Assignment Task No", "Assignment Task ID", "assignment_task_number", "assignment_task_id", "Task Number", "Task No"];
   const TASK_TN_ALIASES = ["SPX Tracking Number", "SPX TN", "SLS Tracking Number", "Tracking Number", "Tracking No", "SPX Tracking No", "Waybill Number", "AWB"];
+  // Declare the shared rider aliases before composing task-specific aliases (avoid TDZ).
+  const RIDER_ID_ALIASES = ["Driver ID", "Rider ID", "Delivery Driver ID", "Delivery Rider ID", "Last Mile Driver ID", "LM Driver ID", "Scan Driver ID", "Actual Driver ID", "Courier ID"];
+  const RIDER_NAME_ALIASES = ["Driver Name", "Rider Name", "Delivery Driver Name", "Delivery Rider Name", "Last Mile Driver Name", "LM Driver Name", "Scan Driver Name", "Actual Driver Name", "Courier Name", "Driver", "Rider"];
   const TASK_RIDER_ID_ALIASES = [...RIDER_ID_ALIASES, "Assigned Rider ID", "Assigned Driver ID", "Task Rider ID"];
   const TASK_RIDER_NAME_ALIASES = [...RIDER_NAME_ALIASES, "Assigned Rider", "Assigned Driver Name", "Assigned Driver", "Task Rider Name"];
   const INVALID_DRIVER = /^(?:0+|N\/?A|NONE|NULL|UNKNOWN|UNASSIGNED|-)$/i;
@@ -28,9 +31,6 @@
   // so historical capture uses the same fixed 3:00 PM Manila classifier.
   const PICKUP_ALIASES = ["Pick Up Time", "Pickup Time", "First Pick Up Time", "First Pickup Time", "First Pickup DateTime", "At Pick Up Time", "Pickup Date Time", "Pickup Datetime", "Pickup Timestamp", "Scanned Time"];
   const ONHOLD_TIME_ALIASES = ["OnHold Time", "On Hold Time", "OnHold Date Time", "On Hold Date Time", "OnHold Timestamp"];
-  const RIDER_ID_ALIASES = ["Driver ID", "Rider ID", "Delivery Driver ID", "Delivery Rider ID", "Last Mile Driver ID", "LM Driver ID", "Scan Driver ID", "Actual Driver ID", "Courier ID"];
-  const RIDER_NAME_ALIASES = ["Driver Name", "Rider Name", "Delivery Driver Name", "Delivery Rider Name", "Last Mile Driver Name", "LM Driver Name", "Scan Driver Name", "Actual Driver Name", "Courier Name", "Driver", "Rider"];
-
   let dbPromise = null;
   let historyReady = false;
   let historyByKey = new Map();
