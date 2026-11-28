@@ -747,57 +747,8 @@
 </section>
 
 <section id="settings" class="page settings-center">
-  <div class="section settings-panel" id="localOnlyModeNotice">
-    <h2>1. Connection &amp; Sync</h2>
-    <p class="hint">Live status for the dashboard cloud, First Mile shared data, and the SPX extension.</p>
-    <div class="settings-status-grid">
-      <div class="settings-status-item"><span>Dashboard Cloud</span><strong id="settingsDashboardCloudStatus">Checking…</strong><small id="settingsDashboardCloudDetail">Reading current cloud connection</small></div>
-      <div class="settings-status-item"><span>First Mile Sync</span><strong id="settingsPickupCloudStatus">Checking…</strong><small id="settingsPickupCloudDetail">Reading Orders and Tasks sync state</small></div>
-      <div class="settings-status-item"><span>SPX Extension</span><strong id="settingsExtensionStatus">Checking…</strong><small id="settingsExtensionDetail">Checking this browser's extension bridge</small></div>
-      <div class="settings-status-item"><span>Last successful sync</span><strong id="settingsLastSync">—</strong><small id="settingsLastSyncDetail">This device</small></div>
-    </div>
-    <div class="settings-actions-row">
-      <div id="cloudTestCard"><button id="cloudTestBtn" type="button">Test Cloud Connection</button><span id="cloudTestResult">Not tested</span></div>
-      <button class="btn" id="settingsRefreshStatus" type="button">Refresh Status</button>
-      <button type="button" class="syncall-health" id="syncHealthOpen" title="See recent sync activity, stale data, and errors">Open Sync Health</button>
-    </div>
-  </div>
-
-  <div class="section settings-panel" id="settingsStoragePanel">
-    <div class="settings-panel-head">
-      <div><h2>2. Storage Information</h2><p class="hint">Storage used by Badoc Hub in this browser. Cloud storage usage is reported separately when the provider exposes it.</p></div>
-      <button class="btn" id="settingsStorageRefresh" type="button">↻ Refresh</button>
-    </div>
-    <div class="settings-storage-grid">
-      <div class="settings-storage-item"><span>Browser storage used</span><strong id="settingsStorageUsage">Not checked</strong><small id="settingsStorageUsageDetail">Origin-wide usage</small></div>
-      <div class="settings-storage-item"><span>Browser storage quota</span><strong id="settingsStorageQuota">—</strong><small id="settingsStorageQuotaDetail">Available browser quota</small></div>
-      <div class="settings-storage-item"><span>Parcel uploads</span><strong id="settingsParcelStorage">Not checked</strong><small id="settingsParcelStorageDetail">IndexedDB batches</small></div>
-      <div class="settings-storage-item"><span>First Mile files</span><strong id="settingsPickupStorage">Not checked</strong><small id="settingsPickupStorageDetail">Orders, Tasks, and point names</small></div>
-      <div class="settings-storage-item"><span>Browser app settings</span><strong id="settingsLocalStorage">Not checked</strong><small id="settingsLocalStorageDetail">Local storage size</small></div>
-      <div class="settings-storage-item"><span>Storage persistence</span><strong id="settingsStoragePersistence">Not checked</strong><small id="settingsStoragePersistenceDetail">Browser eviction protection</small></div>
-      <div class="settings-storage-item"><span>Shared cloud storage</span><strong id="settingsCloudStorage">Not checked</strong><small id="settingsCloudStorageDetail">Shared exported-files bucket</small></div>
-    </div>
-    <p class="hint settings-storage-footnote" id="settingsStorageStatus" aria-live="polite">Select Refresh to measure this browser's stored data.</p>
-  </div>
-
-  <div class="section settings-panel" id="settingsAlertsPanel">
-    <h2>3. Notifications &amp; Alerts</h2>
-    <p class="hint">Control new-unassigned alerts in the Pickup menu. Browser permission is separate from the dashboard's notification preference.</p>
-    <div class="settings-toggle-list">
-      <label class="settings-toggle-row" for="settingsAlarmEnabled"><span><strong>Unassigned Pickup Alarm</strong><small>Detect and alert when new unassigned pickup groups appear.</small></span><input type="checkbox" id="settingsAlarmEnabled" checked></label>
-      <label class="settings-toggle-row" for="settingsSoundEnabled"><span><strong>Alarm Sound</strong><small>Play the repeating sound while an unassigned alarm is active.</small></span><input type="checkbox" id="settingsSoundEnabled" checked></label>
-      <label class="settings-toggle-row" for="settingsBrowserNotifications"><span><strong>Browser Notifications</strong><small>Show a desktop notification when a new unassigned pickup group is detected.</small></span><input type="checkbox" id="settingsBrowserNotifications" checked></label>
-    </div>
-    <div class="settings-actions-row">
-      <span class="hint" id="settingsNotificationPermission" aria-live="polite">Checking browser notification permission…</span>
-      <button class="btn" id="settingsRequestNotificationPermission" type="button">Allow Notifications</button>
-      <button class="btn" id="settingsTestSound" type="button">Test Sound</button>
-      <button class="btn" id="settingsTestNotification" type="button">Test Notification</button>
-    </div>
-  </div>
-
   <div class="section settings-panel" id="settingsMaintenancePanel">
-    <h2>4. Maintenance &amp; Reset</h2>
+    <h2>1. Maintenance &amp; Reset</h2>
     <!-- One confirmed action clears operational data and resets the CFR1 ledger. -->
     <div class="settings-maintenance-group">
       <div><strong>Clear Data + Reset CFR1</strong><p class="hint">Use one action to clear the operational working data listed below and reset the shared CFR1 daily ledger and count freeze for all devices.</p></div>
@@ -817,6 +768,55 @@
       <p class="hint">Town/station settings, Riders Data, Daily History, dashboard preferences, and historical cloud First Mile baseline files are retained. CFR1 rebuilds after reload from parcel data available after the clear.</p>
     </div>
     <span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none">
+  </div>
+
+  <div class="section settings-panel" id="localOnlyModeNotice">
+    <h2>2. Connection &amp; Sync</h2>
+    <p class="hint">Live status for the dashboard cloud, First Mile shared data, and the SPX extension.</p>
+    <div class="settings-status-grid">
+      <div class="settings-status-item"><span>Dashboard Cloud</span><strong id="settingsDashboardCloudStatus">Checking…</strong><small id="settingsDashboardCloudDetail">Reading current cloud connection</small></div>
+      <div class="settings-status-item"><span>First Mile Sync</span><strong id="settingsPickupCloudStatus">Checking…</strong><small id="settingsPickupCloudDetail">Reading Orders and Tasks sync state</small></div>
+      <div class="settings-status-item"><span>SPX Extension</span><strong id="settingsExtensionStatus">Checking…</strong><small id="settingsExtensionDetail">Checking this browser's extension bridge</small></div>
+      <div class="settings-status-item"><span>Last successful sync</span><strong id="settingsLastSync">—</strong><small id="settingsLastSyncDetail">This device</small></div>
+    </div>
+    <div class="settings-actions-row">
+      <div id="cloudTestCard"><button id="cloudTestBtn" type="button">Test Cloud Connection</button><span id="cloudTestResult">Not tested</span></div>
+      <button class="btn" id="settingsRefreshStatus" type="button">Refresh Status</button>
+      <button type="button" class="syncall-health" id="syncHealthOpen" title="See recent sync activity, stale data, and errors">Open Sync Health</button>
+    </div>
+  </div>
+
+  <div class="section settings-panel" id="settingsStoragePanel">
+    <div class="settings-panel-head">
+      <div><h2>3. Storage Information</h2><p class="hint">Storage used by Badoc Hub in this browser. Cloud storage usage is reported separately when the provider exposes it.</p></div>
+      <button class="btn" id="settingsStorageRefresh" type="button">↻ Refresh</button>
+    </div>
+    <div class="settings-storage-grid">
+      <div class="settings-storage-item"><span>Browser storage used</span><strong id="settingsStorageUsage">Not checked</strong><small id="settingsStorageUsageDetail">Origin-wide usage</small></div>
+      <div class="settings-storage-item"><span>Browser storage quota</span><strong id="settingsStorageQuota">—</strong><small id="settingsStorageQuotaDetail">Available browser quota</small></div>
+      <div class="settings-storage-item"><span>Parcel uploads</span><strong id="settingsParcelStorage">Not checked</strong><small id="settingsParcelStorageDetail">IndexedDB batches</small></div>
+      <div class="settings-storage-item"><span>First Mile files</span><strong id="settingsPickupStorage">Not checked</strong><small id="settingsPickupStorageDetail">Orders, Tasks, and point names</small></div>
+      <div class="settings-storage-item"><span>Browser app settings</span><strong id="settingsLocalStorage">Not checked</strong><small id="settingsLocalStorageDetail">Local storage size</small></div>
+      <div class="settings-storage-item"><span>Storage persistence</span><strong id="settingsStoragePersistence">Not checked</strong><small id="settingsStoragePersistenceDetail">Browser eviction protection</small></div>
+      <div class="settings-storage-item"><span>Shared cloud storage</span><strong id="settingsCloudStorage">Not checked</strong><small id="settingsCloudStorageDetail">Shared exported-files bucket</small></div>
+    </div>
+    <p class="hint settings-storage-footnote" id="settingsStorageStatus" aria-live="polite">Select Refresh to measure this browser's stored data.</p>
+  </div>
+
+  <div class="section settings-panel" id="settingsAlertsPanel">
+    <h2>4. Notifications &amp; Alerts</h2>
+    <p class="hint">Control new-unassigned alerts in the Pickup menu. Browser permission is separate from the dashboard's notification preference.</p>
+    <div class="settings-toggle-list">
+      <label class="settings-toggle-row" for="settingsAlarmEnabled"><span><strong>Unassigned Pickup Alarm</strong><small>Detect and alert when new unassigned pickup groups appear.</small></span><input type="checkbox" id="settingsAlarmEnabled" checked></label>
+      <label class="settings-toggle-row" for="settingsSoundEnabled"><span><strong>Alarm Sound</strong><small>Play the repeating sound while an unassigned alarm is active.</small></span><input type="checkbox" id="settingsSoundEnabled" checked></label>
+      <label class="settings-toggle-row" for="settingsBrowserNotifications"><span><strong>Browser Notifications</strong><small>Show a desktop notification when a new unassigned pickup group is detected.</small></span><input type="checkbox" id="settingsBrowserNotifications" checked></label>
+    </div>
+    <div class="settings-actions-row">
+      <span class="hint" id="settingsNotificationPermission" aria-live="polite">Checking browser notification permission…</span>
+      <button class="btn" id="settingsRequestNotificationPermission" type="button">Allow Notifications</button>
+      <button class="btn" id="settingsTestSound" type="button">Test Sound</button>
+      <button class="btn" id="settingsTestNotification" type="button">Test Notification</button>
+    </div>
   </div>
 
   <div class="section settings-panel" id="settingsAppInfoPanel">
