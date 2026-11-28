@@ -288,9 +288,12 @@ test('Batch Search output keeps Not Found and Failed as counts, not extra column
 
 test('LM Hub Inventory uses the updated 51-column header without Longitude or Latitude',()=>{
   const reports=readFileSync(resolve(root,'js/090-reports-tabs.js'),'utf8');
-  const match=reports.match(/const lmInventoryHeaders=\\[([\\s\\S]*?)\\n\\s*\\];/);
-  assert.ok(match,'LM Hub Inventory header array exists');
-  const headers=vm.runInNewContext('['+match[1]+']');
+  const headerStart=reports.indexOf('const lmInventoryHeaders=[');
+  assert.notEqual(headerStart,-1,'LM Hub Inventory header array exists');
+  const arrayStart=reports.indexOf('[',headerStart);
+  const arrayEnd=reports.indexOf('];',arrayStart);
+  assert.notEqual(arrayEnd,-1,'LM Hub Inventory header array closes');
+  const headers=vm.runInNewContext(reports.slice(arrayStart,arrayEnd+1));
   const expected=[
     'Order ID','SLS Tracking Number','Shopee Order SN','Sort Code Name','Town Name','Location Type',
     'Driver ID','Driver Name','Driver Phone','Received Time','Current Station Received Time',
@@ -310,16 +313,17 @@ test('LM Hub Inventory uses the updated 51-column header without Longitude or La
 
 test('Settings combines Clear Data and Reset CFR1 behind one confirmation',()=>{
   const html=readFileSync(resolve(root,'index.html'),'utf8');
-  assert.match(html,/id="clearData"[^>]*>Clear Data \\+ Reset CFR1/);
-  assert.doesNotMatch(html,/id="resetCfr1"|settingsClearDataWord/);
+  assert.ok(html.includes('id="clearData" type="button">Clear Data + Reset CFR1'));
+  assert.equal(html.includes('id="resetCfr1"'),false);
+  assert.equal(html.includes('settingsClearDataWord'),false);
   const start=core.indexOf('$("clearData").onclick=async()=>{');
   const end=core.indexOf('/*\\n V1.10 KPI CONNECTION',start);
   assert.notEqual(start,-1);assert.notEqual(end,-1);
   const handler=core.slice(start,end);
-  assert.match(handler,/confirm\\("Clear operational data and reset CFR1/);
-  assert.match(handler,/await resetCfr1Cloud\\(\\)/);
-  assert.ok(handler.indexOf('await resetCfr1Cloud()')<handler.indexOf('const db=await openDB()'));
-  assert.doesNotMatch(core,/\\$\\("resetCfr1"\\)/);
+  assert.ok(handler.includes('if(!confirm("Clear operational data and reset CFR1'));
+  assert.ok(handler.includes('await resetCfr1Cloud();'));
+  assert.ok(handler.indexOf('await resetCfr1Cloud();')<handler.indexOf('const db=await openDB();'));
+  assert.equal(core.includes('$("resetCfr1")'),false);
   const settings=readFileSync(resolve(root,'js/570-settings-center.js'),'utf8');
-  assert.doesNotMatch(settings,/settingsClearDataWord/);
+  assert.equal(settings.includes('settingsClearDataWord'),false);
 });
