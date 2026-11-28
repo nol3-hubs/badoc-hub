@@ -210,8 +210,9 @@
         if(data.type==="BADOC_SPX_BATCH_SEARCH_CSV"){
           clearBatchSearchReportWatchdog();
           try{
-            const rows=typeof parseCsvText==="function"?parseCsvText(String(data.csvText||"")):[];
-            if(!rows.length)throw new Error("SPX returned an empty Batch-Search Results file.");
+            const csvText=String(data.csvText||"");
+            if(!csvText.trim()||!String(csvText.split(/\\r?\\n/,1)[0]||"").trim())throw new Error("SPX returned an empty Batch-Search Results file.");
+            const rows=typeof parseCsvText==="function"?parseCsvText(csvText):[];
             window.__badocBatchSearchResultRows=rows;
             window.__badocBatchSearchResultMeta={
               selectedDate:String(data.selectedDate||assignmentTaskReportDate()),
