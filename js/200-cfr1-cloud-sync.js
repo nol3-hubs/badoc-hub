@@ -9,7 +9,8 @@
   // Two open tabs on one workstation must not be mistaken for the same lock owner.
   const WRITE_LOCK_TTL=300000;
   const WRITE_LOCK_RENEW=30000;
-  const RESET_LOCK_WAIT_MS=150000;
+  // Must exceed the five-minute lease TTL so an abandoned writer can expire before we give up.
+  const RESET_LOCK_WAIT_MS=360000;
   const writeOwner="cfr1-tab-"+(window.crypto&&typeof window.crypto.randomUUID==="function"?window.crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,14));
   // Remember the last local ledger snapshot successfully published. CFR1 is
   // recalculated often, so skip cloud reads/writes when its data did not change.
