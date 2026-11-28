@@ -3153,10 +3153,10 @@ function batchSearchCsv(rows) {
   const columns = BATCH_SEARCH_RESULT_HEADERS;
   const cell = value => {
     const text = String(value ?? "");
-    return /[",\\r\\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
   };
   return [columns, ...(Array.isArray(rows) ? rows : []).map(row => columns.map(header => row?.[header] ?? ""))]
-    .map(row => row.map(cell).join(",")).join("\\r\\n");
+    .map(row => row.map(cell).join(",")).join("\r\n");
 }
 async function runBatchSearchExportJob(job) {
   let tabId=null;
