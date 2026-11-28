@@ -7,7 +7,6 @@
   let client=null, busy=false, lastCloudStamp="";
   const WRITE_LOCK_TTL=90000;
   const WRITE_LOCK_RENEW=20000;
-  const RESET_LOCK_WAIT_MS=150000;
   const writeOwner=window.__badocDeviceId||(window.__badocDeviceId="cfr1-"+Math.random().toString(36).slice(2,10));
   // Remember the last local ledger snapshot successfully published. CFR1 is
   // recalculated often, so skip cloud reads/writes when its data did not change.
@@ -58,24 +57,12 @@
     });
     return client;
   }
-  async function withLedgerWriteLease(task,waitMs=0){
+  async function withLedgerWriteLease(task){
     const api=window.BadocCloud||{};
     if(typeof api.claimCfr1Lease!=="function"||typeof api.releaseCfr1Lease!=="function")
       throw Error("Fenced CFR1 cloud-write lock is unavailable; ledger write was stopped");
-    const waitUntil=Date.now()+Math.max(0,Number(waitMs)||0);
-    let lease=null,waiting=false;
-    do{
-      lease=await api.claimCfr1Lease(writeOwner,WRITE_LOCK_TTL);
-      if(lease)break;
-      if(Date.now()>=waitUntil)
-        throw Error("Another device is updating the CFR1 ledger; the reset could not acquire the shared writer lock.");
-      if(!waiting){
-        waiting=true;
-        const status=document.getElementById("cfr1CloudSyncStatus");
-        if(status)status.textContent="Waiting for the active CFR1 writer to finish before resetting…";
-      }
-      await new Promise(resolve=>setTimeout(resolve,500));
-    }while(!lease);
+    const lease=await api.claimCfr1Lease(writeOwner,WRITE_LOCK_TTL);
+    if(!lease)throw Error("Another device is updating the CFR1 ledger; this write will retry on the next sync");
     let lost=false,renewing=false;
     const assertLease=()=>{if(lost)throw Error("CFR1 cloud-write lease was lost; refusing to overwrite the ledger")};
     assertLease.fence=lease.fence;
@@ -94,20 +81,13 @@
       return result;
     }finally{
       clearInterval(timer);
-      // Do not release while a renewal transaction is still in flight. Otherwise
-      // a late renewal could recreate the lease after release and block every tab.
-      while(renewing)await new Promise(resolve=>setTimeout(resolve,25));
       try{await api.releaseCfr1Lease(writeOwner,lease.fence)}catch(e){console.warn("CFR1 cloud-write lease release failed:",e)}
     }
-  }
-  function isExpectedCfr1Contention(error){
-    return /Another device is updating the CFR1 ledger|pre-reset CFR1 ledger|reset generation is stale|CFR1 fenced write rejected: lease expired|ownership changed/i.test(String(error?.message||error||""));
   }
   async function downloadLedger(){
     const state=await window.BadocCloud.readCfr1LedgerState();
     const generation=Number(state?.resetGeneration||0);
     window.__badocCfr1ResetGeneration=generation;
-    window.__badocCfr1ResetPending=state?.resetPending===true;
     if(state?.resetPending===true)return null;
     if(state?.ledger&&typeof state.ledger==="object")return {...state.ledger,_resetGeneration:generation,_ledgerRevision:Number(state.ledgerRevision||0)};
     // A fresh page can render an empty local ledger before this async cloud
@@ -137,7 +117,7 @@
     if(status)status.textContent="CFR1 cloud synced";
   }
   async function publish(key,ledger){
-    if(key!==KEY||busy||window.__badocCfr1MaintenanceInProgress===true||window.__badocCfr1ResetPending===true)return;
+    if(key!==KEY||busy)return;
     const sourceSig=sourceSignature(ledger);
     if(sourceSig && sourceSig===lastPublishedSourceSignature)return;
     busy=true;
@@ -147,12 +127,7 @@
         assertLease();
         const generation=Number(window.__badocCfr1ResetGeneration||0);
         const localGeneration=Number(ledger?._resetGeneration??generation);
-        if(localGeneration!==generation){
-          // This is expected while another device finishes a reset. Never re-stamp
-          // a populated old ledger with the new generation or restore cleared data.
-          console.info("CFR1 publish skipped: this device still has the previous daily ledger; stale membership was not restored.");
-          return;
-        }
+        if(localGeneration!==generation)throw Error("This device has a pre-reset CFR1 ledger; refresh the parcel data before publishing");
         const publishLedger={...ledger,_resetGeneration:generation};
         const today=String(publishLedger?.date||"");
         const cloudToday=String(cloud?.date||"");
@@ -177,13 +152,9 @@
         }
       });
     }catch(e){
-      if(isExpectedCfr1Contention(e)){
-        console.info("CFR1 cloud write deferred:",String(e?.message||e));
-      }else{
-        console.warn("CFR1 cloud write failed:",e);
-        const status=document.getElementById("cfr1CloudSyncStatus");
-        if(status)status.textContent=("CFR1 cloud write failed — "+String(e?.message||e)).slice(0,260);
-      }
+      console.warn("CFR1 cloud sync failed:",e);
+      const status=document.getElementById("cfr1CloudSyncStatus");
+      if(status)status.textContent="CFR1 cloud sync failed — cloud not updated";
     }finally{busy=false}
   }
   async function poll(){
@@ -192,13 +163,7 @@
     let loaded=false;
     try{
       const cloud=await downloadLedger();
-      if(!cloud||!cloud.date){
-        const status=document.getElementById("cfr1CloudSyncStatus");
-        if(status)status.textContent=window.__badocCfr1ResetPending===true
-          ?"CFR1 reset is in progress on another device; publishing is paused"
-          :"CFR1 cloud connected — no shared ledger saved yet";
-        return true;
-      }
+      if(!cloud||!cloud.date)return true;
       const memory=window.__badocCfr1LedgerMemory||null;
       const cloudStamp=String(cloud._cloudUpdatedAt||"");
       if(!memory||memory.date!==cloud.date){
@@ -229,20 +194,11 @@
       if(loaded&&cloud.date===__badocTime.dayKey()){
         window.dispatchEvent(new CustomEvent("badoc-cfr1-cloud-ledger-updated",{detail:{date:cloud.date}}));
       }
-      // A successful read must clear any old error left by an earlier failed poll.
-      const status=document.getElementById("cfr1CloudSyncStatus");
-      if(status)status.textContent="CFR1 cloud connected · shared ledger verified for "+cloud.date;
       return true;
     }catch(e){
-      if(isExpectedCfr1Contention(e)){
-        console.info("CFR1 cloud refresh deferred:",String(e?.message||e));
-        const status=document.getElementById("cfr1CloudSyncStatus");
-        if(status)status.textContent="CFR1 ledger is being updated on another device; this refresh will retry.";
-      }else{
-        console.warn("CFR1 cloud poll failed:",e);
-        const status=document.getElementById("cfr1CloudSyncStatus");
-        if(status)status.textContent=("CFR1 cloud read failed — "+String(e?.message||e)).slice(0,260);
-      }
+      console.warn("CFR1 cloud poll failed:",e);
+      const status=document.getElementById("cfr1CloudSyncStatus");
+      if(status)status.textContent="CFR1 cloud sync failed — cloud not updated";
       return false;
     }finally{busy=false}
   }
@@ -253,48 +209,33 @@
     return await poll();
   }
   async function resetCloud(afterDelete){
-    // Wait for the local poll and any other device's writer lease. The old code
-    // failed immediately on ordinary contention, so Settings could not clear.
-    const waitUntil=Date.now()+RESET_LOCK_WAIT_MS;
-    while(busy&&Date.now()<waitUntil)await new Promise(resolve=>setTimeout(resolve,100));
-    if(busy)throw Error("CFR1 sync on this tab did not finish; close other Badoc Hub tabs and retry.");
+    // Serialize reset with any in-flight poll/publish so an older ledger is not
+    // accidentally uploaded while the shared object is being removed.
+    while(busy) await new Promise(resolve=>setTimeout(resolve,100));
     busy=true;
-    window.__badocCfr1MaintenanceInProgress=true;
     const status=document.getElementById("cfr1CloudSyncStatus");
     try{
-      const api=window.BadocCloud||{};
-      // Recover an interrupted reset only when its previous writer lease is
-      // absent/expired. The adapter never bypasses a live owner.
-      if(typeof api.recoverCfr1Reset==="function")await api.recoverCfr1Reset();
       await withLedgerWriteLease(async assertLease=>{
         assertLease();
-        const resetState=await api.resetCfr1Ledger(writeOwner,assertLease.fence,__badocTime.dayKey());
+        const resetState=await window.BadocCloud.resetCfr1Ledger(writeOwner,assertLease.fence,__badocTime.dayKey());
         window.__badocCfr1ResetGeneration=Number(resetState?.resetGeneration||0);
-        window.__badocCfr1ResetPending=true;
         // Remove the legacy object as a migration cleanup. New versions never
         // read it after resetGeneration becomes non-zero.
         const r=await getClient().storage.from("exported-files").remove([PATH]);
-        if(r.error)console.info("Legacy CFR1 object cleanup deferred; fenced RTDB reset remains authoritative:",r.error.message||r.error);
+        if(r.error)console.warn("Legacy CFR1 object cleanup deferred; fenced ledger reset is already authoritative:",r.error.message||r.error);
         assertLease();
         lastCloudStamp="";
         lastPublishedSourceSignature="";
         window.__badocCfr1LedgerMemory=null;
-        // Keep resetPending + the writer lease through every operational-data
-        // clear. Other tabs/devices cannot restore their old CFR1 membership.
         if(typeof afterDelete==="function")await afterDelete();
-        assertLease();
-        await api.completeCfr1Reset(writeOwner,assertLease.fence);
-        window.__badocCfr1ResetPending=false;
-      },RESET_LOCK_WAIT_MS);
-      if(status)status.textContent="CFR1 cloud ledger reset; operational data clear completed";
+        await window.BadocCloud.completeCfr1Reset(writeOwner,assertLease.fence);
+      });
+      if(status)status.textContent="CFR1 cloud ledger reset; rebuilding from this device's available parcel data";
       return true;
     }catch(e){
-      if(status)status.textContent=("CFR1 reset/clear failed — "+String(e?.message||e)).slice(0,260);
+      if(status)status.textContent="CFR1 cloud reset did not complete; check the daily reset status";
       throw e;
-    }finally{
-      busy=false;
-      window.__badocCfr1MaintenanceInProgress=false;
-    }
+    }finally{busy=false}
   }
   window.__badocCfr1CloudSync={publish,resetCloud,ensureLoaded};
   window.addEventListener("load",()=>{poll();__badocEvery(poll,15000)});
