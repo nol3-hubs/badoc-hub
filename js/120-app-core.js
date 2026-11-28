@@ -4112,24 +4112,16 @@ $("exportValid").onclick=exportValidFiltered;$("exportMis").onclick=()=>current&
 $("addBadoc").onclick=()=>addTown("badoc");$("addPinili").onclick=()=>addTown("pinili");
 $("backup").onclick=()=>download("parcel-dashboard-backup.json",JSON.stringify({towns,batches},null,2),"application/json");
 $("restoreBtn").onclick=()=>$("restoreFile").click();$("restoreFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);towns=x.towns;batches=x.batches;current=batches[0]||null;saveTownSettings();render();alert("Backup restored.")}catch(err){alert("Invalid backup file.")}};r.readAsText(f)};
-$("resetCfr1").onclick=async()=>{
-  if(!confirm("Reset today's CFR1 ledger and shared count freeze?\n\nThis clears the shared CFR1 ledger for all devices. CFR1 will rebuild from parcel data available in this browser. It does NOT delete uploaded files, change parcel statuses, reset other KPIs, or change town settings."))return;
-  try{
-    await window.__badocCfr1CloudSync?.resetCloud?.();
-    window.__badocCfr1LedgerMemory=null;
-    // Remove any legacy cache from older versions; current versions never write it.
-  }catch(e){
-    alert("CFR1 cloud reset failed. The local ledger was kept. Check cloud connectivity and try again.\n\n"+(e?.message||e));
-    return;
-  }
-  alert("Shared CFR1 ledger reset. The page will reload and rebuild today's eligible parcel list from the data currently available in this browser.");
-  window.location.reload();
-};
 $("clearData").onclick=async()=>{
-  if(!confirm("Clear operational data from this device and shared cloud?\\n\\nThis removes Upload Exported parcel batches, Linehaul Task data, First Mile Pickup Orders/Tasks and the Pickup Point ID/name directory, plus Exemptions. Their current shared cloud copies are also cleared, affecting other devices.\\n\\nTown/station settings, Riders Data, Daily History, dashboard preferences and CFR1 are kept. Historical cloud First Mile baseline files are retained.\\n\\nContinue?"))return;
+  if(!confirm("Clear operational data and reset CFR1 for this device and shared cloud?\n\nThis removes Upload Exported parcel batches, Linehaul Task data, First Mile Pickup Orders/Tasks and the Pickup Point ID/name directory, plus Exemptions. Their current shared cloud copies are also cleared, affecting other devices. The shared CFR1 ledger and count freeze will also be reset for all devices.\n\nTown/station settings, Riders Data, Daily History, dashboard preferences and historical cloud First Mile baseline files are kept. CFR1 will rebuild after reload from parcel data available after clearing.\n\nContinue?"))return;
   const clearBtn=$("clearData");
-  if(clearBtn)clearBtn.disabled=true;
+  if(clearBtn){clearBtn.disabled=true;clearBtn.textContent="Clearing data + resetting CFR1…";}
+  let cfr1ResetComplete=false;
   try{
+    const resetCfr1Cloud=window.__badocCfr1CloudSync?.resetCloud;
+    if(typeof resetCfr1Cloud!=="function")throw new Error("CFR1 cloud reset service is unavailable; no operational data was cleared.");
+    await resetCfr1Cloud();
+    cfr1ResetComplete=true;
     const db=await openDB();
     if(db)await new Promise((resolve,reject)=>{
       const tx=db.transaction(STORE,"readwrite");
@@ -4174,14 +4166,15 @@ $("clearData").onclick=async()=>{
     if(typeof window.__badocClearAllSharedData==="function")await window.__badocClearAllSharedData({includePickupNames:true});
     if(typeof cloudExceptionWrite==="function")await cloudExceptionWrite("clear","");
     render();
-    alert("All uploaded parcel and linehaul data, Exemptions, and saved Pickup Orders/Tasks have been cleared. Town/station settings were kept.");
+    alert("Operational uploads, Linehaul Task data, Exemptions, and saved Pickup Orders/Tasks have been cleared. The shared CFR1 ledger and count freeze were reset for all devices. Town/station settings, Riders Data, Daily History, and dashboard preferences were kept.");
+    window.location.reload();
   }catch(err){
-    console.error("Clear local data failed:",err);
-    alert("Some data could not be cleared completely. Check the console, reconnect shared cloud storage, and try again.");
+    console.error("Clear data + CFR1 reset failed:",err);
+    alert(cfr1ResetComplete
+      ? "CFR1 was reset, but some operational data could not be cleared completely. Check the console and shared cloud connection, then retry.\n\n"+(err?.message||err)
+      : "CFR1 reset could not be completed, so operational data was not cleared. Check the shared cloud connection and retry.\n\n"+(err?.message||err));
   }finally{
-    const confirmWord=document.getElementById("settingsClearDataWord");
-    if(confirmWord)confirmWord.value="";
-    if(clearBtn)clearBtn.disabled=true;
+    if(clearBtn){clearBtn.disabled=false;clearBtn.textContent="Clear Data + Reset CFR1";}
   }
 };
 
