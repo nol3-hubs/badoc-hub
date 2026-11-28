@@ -152,9 +152,9 @@
         }
       });
     }catch(e){
-      console.warn("CFR1 cloud sync failed:",e);
+      console.warn("CFR1 cloud write failed:",e);
       const status=document.getElementById("cfr1CloudSyncStatus");
-      if(status)status.textContent="CFR1 cloud sync failed — cloud not updated";
+      if(status)status.textContent=("CFR1 cloud write failed — "+String(e?.message||e)).slice(0,260);
     }finally{busy=false}
   }
   async function poll(){
@@ -163,7 +163,11 @@
     let loaded=false;
     try{
       const cloud=await downloadLedger();
-      if(!cloud||!cloud.date)return true;
+      if(!cloud||!cloud.date){
+        const status=document.getElementById("cfr1CloudSyncStatus");
+        if(status)status.textContent="CFR1 cloud connected — no shared ledger saved yet";
+        return true;
+      }
       const memory=window.__badocCfr1LedgerMemory||null;
       const cloudStamp=String(cloud._cloudUpdatedAt||"");
       if(!memory||memory.date!==cloud.date){
@@ -194,11 +198,14 @@
       if(loaded&&cloud.date===__badocTime.dayKey()){
         window.dispatchEvent(new CustomEvent("badoc-cfr1-cloud-ledger-updated",{detail:{date:cloud.date}}));
       }
+      // A successful read must clear any old error left by an earlier failed poll.
+      const status=document.getElementById("cfr1CloudSyncStatus");
+      if(status)status.textContent="CFR1 cloud connected · shared ledger verified for "+cloud.date;
       return true;
     }catch(e){
       console.warn("CFR1 cloud poll failed:",e);
       const status=document.getElementById("cfr1CloudSyncStatus");
-      if(status)status.textContent="CFR1 cloud sync failed — cloud not updated";
+      if(status)status.textContent=("CFR1 cloud read failed — "+String(e?.message||e)).slice(0,260);
       return false;
     }finally{busy=false}
   }
@@ -233,7 +240,7 @@
       if(status)status.textContent="CFR1 cloud ledger reset; rebuilding from this device's available parcel data";
       return true;
     }catch(e){
-      if(status)status.textContent="CFR1 cloud reset did not complete; check the daily reset status";
+      if(status)status.textContent=("CFR1 reset failed — "+String(e?.message||e)).slice(0,260);
       throw e;
     }finally{busy=false}
   }
