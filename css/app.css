@@ -3797,3 +3797,8 @@ html[data-theme="light"] .side > .sidebar-footer #themeToggleBtn .theme-switch-t
 .badoc-op-backdrop.is-batch-search #badocOpCopy{flex:1;min-height:42px;font-size:14px}
 .badoc-op-backdrop.is-batch-search #badocOpClose{min-width:76px}
 @media(max-height:600px){.badoc-op-backdrop.is-batch-search .badoc-op-dialog{max-height:86vh;overflow:auto}.badoc-op-backdrop.is-batch-search .badoc-op-actions{position:sticky;bottom:0}}
+
+/* Keep diagnostic details available without crowding normal Sync Health view. */
+.sh-recent-errors{margin-top:14px;padding-top:10px;border-top:1px solid var(--line,#e3e7ec)}
+.sh-recent-errors>summary{cursor:pointer;color:var(--muted,#667085);font-size:12px;font-weight:700;list-style-position:inside}
+.sh-recent-errors-content{padding-top:8px}
