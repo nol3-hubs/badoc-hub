@@ -470,8 +470,22 @@
         if (!cur || !cur.lease || cur.lease.owner !== owner || Number(cur.lease.fence) !== Number(fence) || Number(cur.lease.until || 0) <= now) return;
         committed = true;
         return Object.assign({}, cur, { ledger: null, resetPending: true, resetGeneration: Number(cur.resetGeneration || 0) + 1, resetDate: String(resetDate || ""), resetAt: now, ledgerRevision: Number(cur.ledgerRevision || 0) + 1 });
-      }, undefined, false).then(function (res) {
-        if (!res.committed || !committed) throw new Error("CFR1 reset rejected: write lease expired or ownership changed");
+      }, undefined, false).then(async function (res) {
+        if (!res.committed || !committed) {
+          // Read the final shared state after a rejected transaction so the UI
+          // can distinguish an expired lease, a competing owner, and a retry
+          // race rather than reporting the same generic failure every time.
+          var latestSnap = await r.once("value");
+          var latest = latestSnap.val() || {};
+          var lease = latest.lease || null;
+          var now = cfr1Now();
+          var reason = !lease ? "writer lease is missing" :
+            lease.owner !== owner ? "another tab/device owns the writer lease" :
+            Number(lease.fence) !== Number(fence) ? "writer fencing token changed" :
+            Number(lease.until || 0) <= now ? "writer lease expired before the reset transaction committed" :
+            "Firebase rejected the reset transaction while the writer lease was still valid";
+          throw new Error("CFR1 reset rejected: " + reason);
+        }
         return res.snapshot && res.snapshot.val() || null;
       });
     });
