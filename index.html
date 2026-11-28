@@ -799,25 +799,21 @@
   <div class="section settings-panel" id="settingsMaintenancePanel">
     <h2>4. Maintenance &amp; Reset</h2>
     <div class="settings-maintenance-group">
-      <div><strong>CFR1</strong><p class="hint">Rebuild today's CFR1 eligible-parcel list and 7:00 AM count freeze from the parcel data currently available on this device.</p></div>
-      <button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button>
+      <div><strong>Clear Data + Reset CFR1</strong><p class="hint">Use one action to clear the operational working data listed below and reset the shared CFR1 daily ledger and count freeze for all devices.</p></div>
+      <button class="btn danger" id="clearData" type="button">Clear Data + Reset CFR1</button>
     </div>
     <div id="cfr1CloudSyncStatus" class="hint settings-cfr1-status">CFR1 cloud sync initializes when cloud storage is available.</div>
     <div class="settings-danger-zone">
-      <strong>Clear all data</strong>
+      <strong>Data cleared by this action</strong>
       <p>This clears operational uploads and working data from this device and their current shared cloud copies:</p>
       <ul>
         <li>Upload Exported parcel batches and shared parcel upload.</li>
         <li>Linehaul Task records, town/packed-row/export data, and shared linehaul data.</li>
         <li>First Mile Pickup Orders, Pickup Tasks, saved Pickup Point ID/name directory, and local first-sync baselines.</li>
         <li>Exemptions from this device and shared cloud.</li>
+        <li>The shared CFR1 daily ledger and 7:00 AM count freeze for all devices.</li>
       </ul>
-      <p class="hint">It keeps town/station settings, Riders Data, Daily History, dashboard preferences, and CFR1. Historical cloud First Mile baseline files are retained.</p>
-      <div class="settings-clear-confirm">
-        <label for="settingsClearDataWord">Type <strong>CLEAR DATA</strong> to enable this action.</label>
-        <input id="settingsClearDataWord" type="text" autocomplete="off" spellcheck="false" placeholder="Type CLEAR DATA">
-        <button class="btn danger" id="clearData" type="button" disabled>Clear all data</button>
-      </div>
+      <p class="hint">Town/station settings, Riders Data, Daily History, dashboard preferences, and historical cloud First Mile baseline files are retained. CFR1 rebuilds after reload from parcel data available after the clear.</p>
     </div>
     <span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none">
   </div>
