@@ -12,40 +12,10 @@
   "use strict";
   var ROOT = "badoc";
   var dbp = null;
-  var health = { connected: null, lastOkAt: 0, lastError: "", lastErrorAt: 0, errors: 0, serverClockReady: false };
-  var resolveServerClockReady = null;
-  var serverClockReadyPromise = new Promise(function (resolve) { resolveServerClockReady = resolve; });
+  var health = { connected: null, lastOkAt: 0, lastError: "", lastErrorAt: 0, errors: 0 };
   function watchClock(db) {
-    try {
-      db.ref(".info/serverTimeOffset").on("value", function (s) {
-        var v = s.val();
-        if (typeof v === "number" && isFinite(v)) {
-          if (window.__badocTime) window.__badocTime.setOffset(v);
-          health.serverClockReady = true;
-          if (resolveServerClockReady) { resolveServerClockReady(v); resolveServerClockReady = null; }
-        }
-      }, function (e) {
-        health.serverClockReady = false;
-        health.lastError = String(e && e.message || e || "Firebase server clock unavailable");
-        health.lastErrorAt = Date.now();
-      });
-    } catch (e) {
-      health.lastError = String(e && e.message || e || "Firebase server clock listener failed");
-      health.lastErrorAt = Date.now();
-    }
+    try { db.ref(".info/serverTimeOffset").on("value", function (s) { var v = s.val(); if (typeof v === "number" && window.__badocTime) window.__badocTime.setOffset(v); }); } catch (e) {}
     try { db.ref(".info/connected").on("value", function (s) { health.connected = s.val() === true; if (health.connected) health.lastOkAt = Date.now(); }); } catch (e) {}
-  }
-  async function ensureServerClockReady(timeoutMs) {
-    if (health.serverClockReady) return true;
-    var timeout = Math.max(1000, Number(timeoutMs) || 10000);
-    var ready = await Promise.race([
-      serverClockReadyPromise.then(function () { return true; }),
-      new Promise(function (resolve) { setTimeout(function () { resolve(false); }, timeout); })
-    ]);
-    if (!ready || !health.serverClockReady) {
-      throw new Error("Firebase server clock is not synchronized; CFR1 did not acquire a write lock. Check cloud connectivity and retry.");
-    }
-    return true;
   }
 
   function getDb() {
@@ -412,11 +382,9 @@
      owner whose lease expired cannot commit a late write after a new owner wins. */
   function cfr1Now() { return Date.now() + (window.__badocTime ? window.__badocTime.offset() : 0); }
   function claimCfr1Lease(owner, ttlMs) {
-    return getDb().then(async function (db) {
-      await ensureServerClockReady(10000);
-      var r = ref(db, "cfr1LedgerState"), result = null;
+    return getDb().then(function (db) {
+      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), result = null;
       return r.transaction(function (cur) {
-        var now = cfr1Now();
         cur = cur || {};
         var lease = cur.lease || null;
         if (lease && Number(lease.until || 0) > now && lease.owner !== owner) return;
@@ -446,11 +414,9 @@
       .then(function (snap) { return snap.val() || {}; });
   }
   function writeCfr1Ledger(owner, fence, ledger) {
-    return getDb().then(async function (db) {
-      await ensureServerClockReady(10000);
-      var r = ref(db, "cfr1LedgerState"), committed = false;
+    return getDb().then(function (db) {
+      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), committed = false;
       return r.transaction(function (cur) {
-        var now = cfr1Now();
         if (!cur || !cur.lease || cur.lease.owner !== owner || Number(cur.lease.fence) !== Number(fence) || Number(cur.lease.until || 0) <= now) return;
         if (cur.resetPending === true || Number(ledger && ledger._resetGeneration || 0) !== Number(cur.resetGeneration || 0)) return;
         committed = true;
@@ -462,40 +428,22 @@
     });
   }
   function resetCfr1Ledger(owner, fence, resetDate) {
-    return getDb().then(async function (db) {
-      await ensureServerClockReady(10000);
-      var r = ref(db, "cfr1LedgerState"), committed = false;
+    return getDb().then(function (db) {
+      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), committed = false;
       return r.transaction(function (cur) {
-        var now = cfr1Now();
         if (!cur || !cur.lease || cur.lease.owner !== owner || Number(cur.lease.fence) !== Number(fence) || Number(cur.lease.until || 0) <= now) return;
         committed = true;
         return Object.assign({}, cur, { ledger: null, resetPending: true, resetGeneration: Number(cur.resetGeneration || 0) + 1, resetDate: String(resetDate || ""), resetAt: now, ledgerRevision: Number(cur.ledgerRevision || 0) + 1 });
-      }, undefined, false).then(async function (res) {
-        if (!res.committed || !committed) {
-          // Read the final shared state after a rejected transaction so the UI
-          // can distinguish an expired lease, a competing owner, and a retry
-          // race rather than reporting the same generic failure every time.
-          var latestSnap = await r.once("value");
-          var latest = latestSnap.val() || {};
-          var lease = latest.lease || null;
-          var now = cfr1Now();
-          var reason = !lease ? "writer lease is missing" :
-            lease.owner !== owner ? "another tab/device owns the writer lease" :
-            Number(lease.fence) !== Number(fence) ? "writer fencing token changed" :
-            Number(lease.until || 0) <= now ? "writer lease expired before the reset transaction committed" :
-            "Firebase rejected the reset transaction while the writer lease was still valid";
-          throw new Error("CFR1 reset rejected: " + reason);
-        }
+      }, undefined, false).then(function (res) {
+        if (!res.committed || !committed) throw new Error("CFR1 reset rejected: write lease expired or ownership changed");
         return res.snapshot && res.snapshot.val() || null;
       });
     });
   }
   function completeCfr1Reset(owner, fence) {
-    return getDb().then(async function (db) {
-      await ensureServerClockReady(10000);
-      var r = ref(db, "cfr1LedgerState"), committed = false;
+    return getDb().then(function (db) {
+      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), committed = false;
       return r.transaction(function (cur) {
-        var now = cfr1Now();
         if (!cur || !cur.lease || cur.lease.owner !== owner || Number(cur.lease.fence) !== Number(fence) || Number(cur.lease.until || 0) <= now || cur.resetPending !== true) return;
         committed = true;
         return Object.assign({}, cur, { resetPending: false, resetCompletedAt: now });
@@ -509,11 +457,9 @@
   // before clearing resetPending. A peer may recover only after that owner's
   // fenced lease is absent or expired; an active owner is never bypassed.
   function recoverCfr1Reset() {
-    return getDb().then(async function (db) {
-      await ensureServerClockReady(10000);
-      var r = ref(db, "cfr1LedgerState"), recovered = false;
+    return getDb().then(function (db) {
+      var r = ref(db, "cfr1LedgerState"), now = cfr1Now(), recovered = false;
       return r.transaction(function (cur) {
-        var now = cfr1Now();
         if (!cur || cur.resetPending !== true) return cur;
         if (cur.lease && Number(cur.lease.until || 0) > now) return;
         var next = Object.assign({}, cur, { resetPending: false, resetRecoveredAt: now });
@@ -526,7 +472,7 @@
   }
 
   window.BadocCloud = {
-    health: function () { return Object.assign({}, health, { offset: window.__badocTime ? window.__badocTime.offset() : 0, serverClockReady: health.serverClockReady === true }); },
+    health: function () { return Object.assign({}, health, { offset: window.__badocTime ? window.__badocTime.offset() : 0 }); },
     claim: claim,
     release: release,
     claimCfr1Lease: claimCfr1Lease,
