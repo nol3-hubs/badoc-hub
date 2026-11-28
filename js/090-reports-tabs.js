@@ -211,7 +211,7 @@
           clearBatchSearchReportWatchdog();
           try{
             const csvText=String(data.csvText||"");
-            if(!csvText.trim()||!String(csvText.split(/\\r?\\n/,1)[0]||"").trim())throw new Error("SPX returned an empty Batch-Search Results file.");
+            if(!csvText.trim()||!String(csvText.split(/\r?\n/,1)[0]||"").trim())throw new Error("SPX returned an empty Batch-Search Results file.");
             const rows=typeof parseCsvText==="function"?parseCsvText(csvText):[];
             window.__badocBatchSearchResultRows=rows;
             window.__badocBatchSearchResultMeta={
