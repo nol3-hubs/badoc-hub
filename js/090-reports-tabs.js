@@ -399,7 +399,7 @@
       // getParcelCountRows() merges the uploaded Parcel Count records with the
       // latest Forward/Return status snapshots and applies Planning Board rules.
       const lmInventoryHeaders=[
-        "Order ID","SLS Tracking Number","Shopee Order SN","Longitude","Latitude",
+        "Order ID","SLS Tracking Number","Shopee Order SN",
         "Sort Code Name","Town Name","Location Type","Driver ID","Driver Name",
         "Driver Phone","Received Time","Current Station Received Time","Delivering Time",
         "Delivered Time","OnHold Time","OnHoldReason","Reschedule Date","Status",
