@@ -317,7 +317,7 @@ test('Settings combines Clear Data and Reset CFR1 behind one confirmation',()=>{
   assert.equal(html.includes('id="resetCfr1"'),false);
   assert.equal(html.includes('settingsClearDataWord'),false);
   const start=core.indexOf('$("clearData").onclick=async()=>{');
-  const end=core.indexOf('/*\\n V1.10 KPI CONNECTION',start);
+  const end=core.indexOf('/*\n V1.10 KPI CONNECTION',start);
   assert.notEqual(start,-1);assert.notEqual(end,-1);
   const handler=core.slice(start,end);
   assert.ok(handler.includes('if(!confirm("Clear operational data and reset CFR1'));
