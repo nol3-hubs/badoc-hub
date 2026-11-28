@@ -284,3 +284,42 @@ test('Batch Search output keeps Not Found and Failed as counts, not extra column
   assert.doesNotMatch(block,/Assignment Task Tracking Number|Search Result|Badoc Search Result/);
   assert.equal(block.includes('row[errorHeader]'),false);
 });
+
+
+test('LM Hub Inventory uses the updated 51-column header without Longitude or Latitude',()=>{
+  const reports=readFileSync(resolve(root,'js/090-reports-tabs.js'),'utf8');
+  const match=reports.match(/const lmInventoryHeaders=\\[([\\s\\S]*?)\\n\\s*\\];/);
+  assert.ok(match,'LM Hub Inventory header array exists');
+  const headers=vm.runInNewContext('['+match[1]+']');
+  const expected=[
+    'Order ID','SLS Tracking Number','Shopee Order SN','Sort Code Name','Town Name','Location Type',
+    'Driver ID','Driver Name','Driver Phone','Received Time','Current Station Received Time',
+    'Delivering Time','Delivered Time','OnHold Time','OnHoldReason','Reschedule Date','Status',
+    'Reject remark','COD Amount','Manifest Number','Order Account','Original ASF','Rounding ASF',
+    'Total of On Hold Times','Reschedule Time','Delivery Attempts','Bulky Type','SLA Target Date',
+    'Time to SLA','Payment Method','Current Station','Shop ID','Shop Category','Zone ID','Zone',
+    'Destination Station','Next Station','Pickup Station','Ros','Driver Contract Type','Pick Up Time',
+    'Collected Time','Transported to sp time','SLA Tag','High Value','Specical Dg Type','Damaged Tag',
+    'Return Destination','Chargeable Weight','Cache Type','Size Type'
+  ];
+  assert.deepEqual(headers,expected);
+  assert.equal(headers.length,51);
+  assert.equal(headers.includes('Longitude'),false);
+  assert.equal(headers.includes('Latitude'),false);
+});
+
+test('Settings combines Clear Data and Reset CFR1 behind one confirmation',()=>{
+  const html=readFileSync(resolve(root,'index.html'),'utf8');
+  assert.match(html,/id="clearData"[^>]*>Clear Data \\+ Reset CFR1/);
+  assert.doesNotMatch(html,/id="resetCfr1"|settingsClearDataWord/);
+  const start=core.indexOf('$("clearData").onclick=async()=>{');
+  const end=core.indexOf('/*\\n V1.10 KPI CONNECTION',start);
+  assert.notEqual(start,-1);assert.notEqual(end,-1);
+  const handler=core.slice(start,end);
+  assert.match(handler,/confirm\\("Clear operational data and reset CFR1/);
+  assert.match(handler,/await resetCfr1Cloud\\(\\)/);
+  assert.ok(handler.indexOf('await resetCfr1Cloud()')<handler.indexOf('const db=await openDB()'));
+  assert.doesNotMatch(core,/\\$\\("resetCfr1"\\)/);
+  const settings=readFileSync(resolve(root,'js/570-settings-center.js'),'utf8');
+  assert.doesNotMatch(settings,/settingsClearDataWord/);
+});
