@@ -311,22 +311,24 @@ test('LM Hub Inventory uses the updated 51-column header without Longitude or La
   assert.equal(headers.includes('Latitude'),false);
 });
 
-test('Settings combines Clear Data and Reset CFR1 behind one confirmation',()=>{
+test('Settings keeps CFR1 reset separate from typed Clear all data',()=>{
   const html=readFileSync(resolve(root,'index.html'),'utf8');
-  assert.ok(html.includes('id="clearData" type="button">Clear Data + Reset CFR1'));
-  assert.equal(html.includes('id="resetCfr1"'),false);
-  assert.equal(html.includes('settingsClearDataWord'),false);
-  const start=core.indexOf('$("clearData").onclick=async()=>{');
-  const end=core.indexOf('/*\n V1.10 KPI CONNECTION',start);
-  assert.notEqual(start,-1);assert.notEqual(end,-1);
-  const handler=core.slice(start,end);
-  assert.ok(handler.includes('if(!confirm("Clear operational data and reset CFR1'));
-  assert.ok(handler.includes('await resetCfr1Cloud(async()=>{'));
-  assert.ok(handler.indexOf('await resetCfr1Cloud(async()=>{')<handler.indexOf('await window.__badocClearAllSharedData({includePickupNames:true})'));
-  assert.ok(handler.indexOf('await window.__badocClearAllSharedData({includePickupNames:true})')<handler.indexOf('const db=await openDB()'));
-  assert.equal(core.includes('$("resetCfr1")'),false);
+  assert.ok(html.includes('id="resetCfr1" type="button">Reset CFR1'));
+  assert.ok(html.includes('id="clearData" type="button" disabled>Clear all data'));
+  assert.ok(html.includes('id="settingsClearDataWord"'));
+  const resetStart=core.indexOf('$("resetCfr1").onclick=async()=>{');
+  const clearStart=core.indexOf('$("clearData").onclick=async()=>{');
+  const clearEnd=core.indexOf('/*\n V1.10 KPI CONNECTION',clearStart);
+  assert.notEqual(resetStart,-1);assert.notEqual(clearStart,-1);assert.notEqual(clearEnd,-1);
+  const resetHandler=core.slice(resetStart,clearStart);
+  const clearHandler=core.slice(clearStart,clearEnd);
+  assert.ok(resetHandler.includes('await reset()'));
+  assert.equal(resetHandler.includes('__badocClearAllSharedData'),false);
+  assert.equal(clearHandler.includes('resetCloud'),false);
+  assert.equal(clearHandler.includes('resetCfr1'),false);
+  assert.ok(clearHandler.includes('await window.__badocClearAllSharedData({includePickupNames:true})'));
   const settings=readFileSync(resolve(root,'js/570-settings-center.js'),'utf8');
-  assert.equal(settings.includes('settingsClearDataWord'),false);
+  assert.ok(settings.includes('clearWord.value.trim().toUpperCase()!=="CLEAR DATA"'));
 });
 
 test('Actual Scanned history declares rider aliases before task rider aliases',()=>{
@@ -347,22 +349,21 @@ test('Sync Health keeps raw warning and error details collapsed by default',()=>
   assert.ok(health.includes('ignoredExpected'));
 });
 
-test('CFR1 reset waits for other writers and prevents renewal-after-release races',()=>{
+test('CFR1 reset is back on the pre-combined writer-lock implementation',()=>{
   const cloud=readFileSync(resolve(root,'js/200-cfr1-cloud-sync.js'),'utf8');
-  assert.ok(cloud.includes('async function withLedgerWriteLease(task,waitMs=0)'));
-  assert.ok(cloud.includes('while(renewing)await new Promise(resolve=>setTimeout(resolve,25))'));
-  assert.ok(cloud.includes('},RESET_LOCK_WAIT_MS);'));
-  assert.ok(cloud.includes('window.__badocCfr1MaintenanceInProgress=true'));
-  assert.ok(cloud.includes('window.__badocCfr1ResetPending=true'));
+  assert.ok(cloud.includes('async function withLedgerWriteLease(task)'));
+  assert.ok(cloud.includes('async function resetCloud(afterDelete)'));
+  assert.ok(cloud.includes('await window.BadocCloud.resetCfr1Ledger(writeOwner,assertLease.fence'));
+  assert.ok(cloud.includes('await window.BadocCloud.completeCfr1Reset(writeOwner,assertLease.fence)'));
+  assert.equal(cloud.includes('RESET_LOCK_WAIT_MS'),false);
 });
 
-test('CFR1 runtime publishing is paused during the locked operational clear',()=>{
+test('CFR1 runtime maintenance guard remains while Clear all data stays independent',()=>{
   const runtime=readFileSync(resolve(root,'js/240-operation-runtime.js'),'utf8');
   assert.ok(runtime.includes('if(window.__badocCfr1MaintenanceInProgress!==true){try{window.__badocCfr1CloudSync?.publish?.(CFR1_KEY,cfr1Ledger)}'));
   const coreHandlerStart=core.indexOf('$("clearData").onclick=async()=>{');
   const coreHandlerEnd=core.indexOf('/*\n V1.10 KPI CONNECTION',coreHandlerStart);
   const handler=core.slice(coreHandlerStart,coreHandlerEnd);
-  assert.ok(handler.includes('await resetCfr1Cloud(async()=>{'));
-  assert.ok(handler.indexOf('await window.__badocClearAllSharedData({includePickupNames:true})')>handler.indexOf('await resetCfr1Cloud(async()=>{'));
-  assert.ok(handler.indexOf('await cloudExceptionWrite("clear","")')>handler.indexOf('await resetCfr1Cloud(async()=>{'));
+  assert.equal(handler.includes('resetCloud'),false);
+  assert.ok(handler.includes('await window.__badocClearAllSharedData({includePickupNames:true})'));
 });
